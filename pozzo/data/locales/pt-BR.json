@@ -4364,5 +4364,22 @@
  "s.switch.badUpdate": "Esta atualização não é deste jogo",
  "s.switch.badExtra": "O arquivo adicionado não existe ou não é um pacote de Switch (.nsp, .nsz, .xci, .xcz)",
  "s.switch.badMod": "Mod não encontrado",
- "s.switch.modRejected": "Mod não importado: {msg}"
+ "s.switch.modRejected": "Mod não importado: {msg}",
+ "f.sw.heading": "Conteúdo do Switch",
+ "f.sw.update": "Atualização",
+ "f.sw.latest": "A mais recente",
+ "f.sw.none": "Nenhuma (jogo base)",
+ "f.sw.version": "Versão {v}",
+ "f.sw.dlc": "DLC",
+ "f.sw.noDlc": "Nenhum DLC encontrado junto ao jogo.",
+ "f.sw.addFile": "Adicionar atualização ou DLC…",
+ "f.sw.noMods": "Nenhum mod.",
+ "f.sw.modFile": "Importar mod de arquivo compactado…",
+ "f.sw.modDir": "Importar mod de pasta…",
+ "f.sw.note": "Valem para Ryujinx e Eden quando você inicia o jogo pelo Pozzo, sem instalar nada. No Eden os DLC só ligam ou desligam todos juntos.",
+ "f.sw.rmConfirm": "Remover o mod {name}?",
+ "f.sw.err.xci": "DLC em formato XCI: o Ryujinx não o carrega",
+ "f.sw.err.ambiguous": "pacote com vários DLC: não pode ser vinculado",
+ "f.sw.err.keys": "Title ID fora do nome: precisa do prod.keys",
+ "f.sw.err.other": "ilegível: {msg}"
 }

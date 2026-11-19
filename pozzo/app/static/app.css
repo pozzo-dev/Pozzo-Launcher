@@ -2448,3 +2448,8 @@ tr[data-open] + tr.xe-row { display: table-row; }
 .d-mod-row > div { flex: 1; min-width: 0; }
 .d-gm-ic { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
 .d-gm-q { width: 100%; margin: 8px 0; }
+
+/* Switch: aggiornamento, DLC e mod nella scheda del gioco */
+.d-sw-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.d-sw-up { display: grid; gap: 4px; max-width: 420px; margin-bottom: 8px; }
+#d-switch .chk:focus-within, #d-switch select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

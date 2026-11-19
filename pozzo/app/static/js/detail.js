@@ -90,7 +90,7 @@ function wireModalInteractions(body) {
   const slot = body.querySelector("#d-slot-mods");
   if (slot && typeof MutationObserver !== "undefined") {
     const adopt = (n) => {
-      if (n.nodeType === 1 && n.parentElement === body && ["d-mod-sites", "d-mods", "d-noclient", "d-emucfg", "d-retroarch"].includes(n.id)) slot.append(n);
+      if (n.nodeType === 1 && n.parentElement === body && ["d-mod-sites", "d-mods", "d-noclient", "d-emucfg", "d-retroarch", "d-switch"].includes(n.id)) slot.append(n);
     };
     modalSlotObs = new MutationObserver((list) => list.forEach((m) => m.addedNodes.forEach(adopt)));
     modalSlotObs.observe(body, { childList: true });
@@ -434,7 +434,7 @@ async function openDetail(id) {
   loadSaves(d);
   loadSimilar(d);
   if (online || storePages.length) loadGameLinks(d);
-  if (d.platform === "switch") loadSwitchContents(d);
+  if (d.platform === "switch") { loadSwitchContents(d); loadSwitchPanel(d); }
   if (!pc) loadRA(d); else loadAch(d);
   if ((GS.experience.detail === "modal" && !online && !d.hltb) || (modalLayout !== "classic" && !online && !d.hltb)) loadHltb(d);
   GS.emit("gameOpened", d);

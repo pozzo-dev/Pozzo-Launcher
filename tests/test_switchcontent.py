@@ -14,6 +14,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pozzo import switchcontent as SC  # noqa: E402
 
+try:  # con pytest (packaging/run_tests.py) la cartella temporanea arriva dalla fixture «d»
+    import pytest
+
+    @pytest.fixture
+    def d(tmp_path):
+        return tmp_path
+except ImportError:
+    pass
+
 BASE = "Gioco [0100AAAA00000000][v0].nsp"
 DLC_TID = 0x0100AAAA00001001
 

@@ -294,6 +294,21 @@ all'host.
 - Con il client Discord aperto e la presenza attiva (**Impostazioni › 🧩 Integrazioni**) il tuo profilo mostra la partita
   come «(1 di 2)», perché RetroArch in rete gestisce due giocatori.
 
+### Aggiornamenti, DLC e mod dei giochi Switch
+
+Con **Ryujinx** ed **Eden** (anche Eglantine) il gioco parte già aggiornato, con i DLC e le mod, senza installare nulla
+nella memoria dell'emulatore e senza copiare i file:
+
+- **Dove metterli**: aggiornamenti e DLC accanto al gioco base (stessa cartella o una sottocartella). Pozzo li
+  riconosce dal Title ID nel nome del file, per esempio `Gioco [0100…800][v131072].nsp`.
+- **Cosa scegliere**: nella scheda del gioco, sezione «Contenuti Switch», scegli l'aggiornamento (il più recente,
+  nessuno o una versione precisa), spegni i DLC che non vuoi e aggiungi file che stanno altrove.
+- **Mod**: «Importa mod da archivio…» o «da cartella…». La mod deve contenere `romfs`, `exefs` o `cheats`. Pozzo la
+  tiene nella sua cartella e all'avvio la collega a quella dell'emulatore; puoi spegnerla o rimuoverla dalla scheda.
+  Le mod che hai messo tu a mano nelle cartelle dell'emulatore non vengono toccate.
+- **Limiti**: su Eden i DLC si accendono e si spengono tutti insieme. Un DLC senza Title ID nel nome serve `prod.keys`
+  per essere riconosciuto; i pacchetti con più DLC insieme e i DLC in formato XCI non si collegano a Ryujinx.
+
 ### Stanza multiplayer con Eden (Nintendo Switch)
 
 Per i giochi Nintendo Switch che supportano il multigiocatore wireless o locale:
