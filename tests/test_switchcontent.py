@@ -94,8 +94,64 @@ def test_mods_json(d: Path):
     assert got == {"mods": []}, got
 
 
+INI = r"""[UI]
+theme=default
+Paths\external_content_dirs\1\path=E:/old
+Paths\external_content_dirs\size=1
+
+[DisabledAddOns]
+1\title_id=42
+1\disabled\1\d=DLC
+1\disabled\size=1
+size=1
+"""
+
+
+def _lines(text: str) -> list[str]:
+    return text.splitlines()
+
+
+def test_eden_cartelle_merge(d: Path):
+    files = _files(d)
+    info = SC.gather(d / BASE, files, SC.choices(None))
+    out = SC.eden_ini(INI, [d], info, SC.choices(None), [])
+    lines = _lines(out)
+    assert "theme=default" in lines
+    assert r"Paths\external_content_dirs\1\path=E:/old" in lines
+    assert rf"Paths\external_content_dirs\2\path={d.as_posix()}" in lines
+    assert r"Paths\external_content_dirs\size=2" in lines
+    assert SC.eden_ini(out, [d], info, SC.choices(None), []) == out, "seconda volta: nessun cambio"
+
+
+def test_eden_disabled(d: Path):
+    files = _files(d)
+    ch = SC.choices({"switch": {"update": "none"}})
+    lines = _lines(SC.eden_ini(INI, [d], SC.gather(d / BASE, files, ch), ch, ["MiaMod"]))
+    tid = 0x0100AAAA00000000
+    assert r"1\title_id=42" in lines and r"1\disabled\1\d=DLC" in lines, "l'altro gioco resta"
+    assert rf"2\title_id={tid}" in lines
+    assert r"2\disabled\1\d=Update" in lines and r"2\disabled\2\d=MiaMod" in lines
+    assert r"2\disabled\size=2" in lines and "size=2" in lines
+
+
+def test_eden_niente_da_spegnere(d: Path):
+    files = _files(d)
+    ch = SC.choices(None)
+    out = SC.eden_ini(INI, [d], SC.gather(d / BASE, files, ch), ch, [])
+    assert str(0x0100AAAA00000000) not in out and "size=1" in _lines(out)
+
+
+def test_write_eden(d: Path):
+    files = _files(d)
+    user = d / "eden"
+    ch = SC.choices(None)
+    assert SC.write_eden(user, [d], SC.gather(d / BASE, files, ch), ch, []) is True
+    assert "external_content_dirs" in (user / "config" / "qt-config.ini").read_text("utf-8")
+    assert SC.write_eden(user, [d], SC.gather(d / BASE, files, ch), ch, []) is False
+
+
 TESTS = [test_dlc_ncas_da_nome, test_dlc_senza_id_non_collegabile, test_scelta_update, test_write_ryujinx_merge,
-         test_mods_json]
+         test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden]
 
 if __name__ == "__main__":
     for fn in TESTS:

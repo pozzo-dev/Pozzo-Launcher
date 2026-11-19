@@ -125,3 +125,123 @@ def write_ryujinx(data_dir: Path, info: dict, mods_off: list[Path] = (), mods_al
     if cur or new_mods:
         wrote |= _save(gdir / "mods.json", cur, {**cur, "mods": new_mods})
     return wrote
+
+
+# ---------------------------------------------------------------- Eden / Eglantine (qt-config.ini)
+B = "\\"  # separatore delle chiavi di QSettings
+EXT = f"Paths{B}external_content_dirs{B}"  # [UI], elenco 1-based di QSettings: N\path e size
+
+
+def _blocks(text: str) -> list[list]:
+    out: list[list] = [[None, []]]
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("[") and s.endswith("]"):
+            out.append([s[1:-1], [line]])
+        else:
+            out[-1][1].append(line)
+    return out
+
+
+def _unq(v: str) -> str:
+    v = v.strip()
+    return v[1:-1] if len(v) > 1 and v[0] == v[-1] == '"' else v
+
+
+def _q(v: str) -> str:
+    return f'"{v}"' if "," in v or v != v.strip() else v  # come QSettings: virgole e spazi ai bordi tra virgolette
+
+
+def _section(blocks: list[list], name: str) -> list:
+    b = next((b for b in blocks if b[0] == name), None)
+    if b is None:
+        if blocks[-1][1] and blocks[-1][1][-1].strip():
+            blocks[-1][1].append("")
+        b = [name, [f"[{name}]"]]
+        blocks.append(b)
+    return b
+
+
+def _set_body(b: list, body: list[str]):
+    while body and not body[-1].strip():
+        body.pop()
+    b[1] = [b[1][0], *body, ""]
+
+
+def _disabled(body: list[str]) -> list[tuple[str, list[str]]]:
+    """[DisabledAddOns] -> [(title_id, [nomi disattivati])] nell'ordine del file."""
+    ent: dict[str, dict] = {}
+    for line in body:
+        if "=" not in line:
+            continue
+        k, v = (x.strip() for x in line.split("=", 1))
+        p = k.split(B)
+        if len(p) == 2 and p[1] == "title_id":
+            ent.setdefault(p[0], {"d": {}})["tid"] = _unq(v)
+        elif len(p) == 4 and p[1] == "disabled" and p[3] == "d":
+            ent.setdefault(p[0], {"d": {}})["d"][int(p[2]) if p[2].isdigit() else 0] = _unq(v)
+    order = sorted(ent, key=lambda n: int(n) if n.isdigit() else 0)
+    return [(ent[n]["tid"], [ent[n]["d"][i] for i in sorted(ent[n]["d"])]) for n in order if ent[n].get("tid")]
+
+
+def _eden_off(info: dict, ch: dict, mod_names_off: list[str]) -> list[str]:
+    off = []
+    if ch.get("update") == "none":
+        off.append("Update")
+    elif ch.get("update") not in (None, "", "latest"):
+        # shortcut: «Update@<versione>» dal sorgente di Eden, non provato su Eden reale; se non va resta l'aggiornamento piu' nuovo
+        off += [f"Update@{SF.version(u.name)}" for u in info["updates"] if u != info["update"]]
+    if info["dlcs"] and all(str(d["path"]) in set(ch.get("dlc_off") or []) for d in info["dlcs"]):
+        off.append("DLC")  # Eden accende e spegne i DLC solo tutti insieme
+    return off + list(mod_names_off)
+
+
+def eden_ini(text: str, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str]) -> str:
+    """qt-config.ini con le cartelle ROM tra i contenuti esterni e gli add-on spenti del gioco; il resto com'era."""
+    blocks = _blocks(text)
+    ui = _section(blocks, "UI")
+    body = ui[1][1:]
+    old = []
+    for line in body:
+        k = line.split("=", 1)[0].strip()
+        if k.startswith(EXT) and k.endswith(f"{B}path") and "=" in line:
+            old.append(_unq(line.split("=", 1)[1]))
+    dirs = old + [r.as_posix() for r in roots if r.as_posix() not in old]
+    if dirs != old:
+        keep = [x for x in body if not x.split("=", 1)[0].strip().startswith(EXT)]
+        while keep and not keep[-1].strip():
+            keep.pop()
+        _set_body(ui, [*keep, *(f"{EXT}{i}{B}path={_q(v)}" for i, v in enumerate(dirs, 1)), f"{EXT}size={len(dirs)}"])
+
+    if info.get("tid") is not None:
+        tid = str(info["tid"])
+        b = next((b for b in blocks if b[0] == "DisabledAddOns"), None)
+        cur = _disabled(b[1][1:]) if b else []
+        want = _eden_off(info, ch, mod_names_off)
+        if dict(cur).get(tid, []) != want:
+            new = [(t, ds) for t, ds in cur if t != tid] + ([(tid, want)] if want else [])
+            b = b or _section(blocks, "DisabledAddOns")
+            lines = []
+            for i, (t, ds) in enumerate(new, 1):
+                lines += [f"{i}{B}title_id={t}", f"{i}{B}title_id{B}default=false"]
+                for j, dname in enumerate(ds, 1):
+                    lines += [f"{i}{B}disabled{B}{j}{B}d={_q(dname)}", f"{i}{B}disabled{B}{j}{B}d{B}default=false"]
+                lines.append(f"{i}{B}disabled{B}size={len(ds)}")
+            _set_body(b, [*lines, f"size={len(new)}"])
+    out = "\n".join(line for blk in blocks for line in blk[1])
+    return out if out.endswith("\n") or not out else out + "\n"
+
+
+def write_eden(user_dir: Path, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str]) -> bool:
+    """Scrive config/qt-config.ini di Eden (cartella utente) solo se cambia. Da chiamare a Eden chiuso."""
+    f = Path(user_dir) / "config" / "qt-config.ini"
+    try:
+        cur = f.read_text("utf-8")
+    except OSError:
+        cur = ""
+    new = eden_ini(cur, roots, info, ch, mod_names_off)
+    if new == cur:
+        return False
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(new, "utf-8")
+    return True
