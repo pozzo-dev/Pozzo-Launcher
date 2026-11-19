@@ -216,9 +216,47 @@ def test_link_ripiego_copia(d: Path):
     assert not (dest / "MiaMod").exists()
 
 
+def test_prepare_ryujinx(d: Path):
+    files = _files(d)
+    exe = d / "ryu" / "Ryujinx.exe"
+    (exe.parent / "portable").mkdir(parents=True)
+    exe.write_bytes(b"")
+    msg = SC.prepare_launch("ryujinx", str(exe), d / "cache", d / BASE, files, [d], None, running=False)
+    gdir = exe.parent / "portable" / "games" / "0100aaaa00000000"
+    assert (gdir / "updates.json").is_file() and (gdir / "dlc.json").is_file()
+    assert "v131072" in msg and "1 DLC" in msg, msg
+
+
+def test_prepare_eden_aperto(d: Path):
+    files = _files(d)
+    exe = d / "eden" / "eden.exe"
+    (exe.parent / "user").mkdir(parents=True)
+    exe.write_bytes(b"")
+    SC.import_mod(d / "cache", TID, _zip_mod(d))
+    SC.prepare_launch("eden", str(exe), d / "cache", d / BASE, files, [d], None, running=True)
+    assert not (exe.parent / "user" / "config" / "qt-config.ini").exists(), "Eden aperto: ini non toccato"
+    assert (exe.parent / "user" / "load" / f"{TID:016X}" / "MiaMod" / "romfs").is_dir(), "le mod si collegano comunque"
+    SC.prepare_launch("eden", str(exe), d / "cache", d / BASE, files, [d], None, running=False)
+    assert "external_content_dirs" in (exe.parent / "user" / "config" / "qt-config.ini").read_text("utf-8")
+    assert SC.prepare_launch("dolphin", str(exe), d / "cache", d / BASE, files, [d], None) == ""
+
+
+def test_switch_roots_ripiego(d: Path):
+    from pozzo import config as C
+    from pozzo.library import launcher as L
+    cfg = C.Config() if hasattr(C, "Config") else None
+    if cfg is None:
+        return
+    cfg.roms = str(d / "non-esiste")
+    game = d / "Gioco"
+    game.mkdir()
+    assert L.switch_roots(cfg, game) == [game], "cartelle ROM non trovate: almeno quella del gioco"
+
+
 TESTS = [test_dlc_ncas_da_nome, test_dlc_senza_id_non_collegabile, test_scelta_update, test_write_ryujinx_merge,
          test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden,
-         test_import_zip_appiattito, test_import_senza_romfs, test_link_e_spegni, test_link_ripiego_copia]
+         test_import_zip_appiattito, test_import_senza_romfs, test_link_e_spegni, test_link_ripiego_copia,
+         test_prepare_ryujinx, test_prepare_eden_aperto, test_switch_roots_ripiego]
 
 if __name__ == "__main__":
     for fn in TESTS:

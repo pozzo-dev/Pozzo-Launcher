@@ -453,6 +453,17 @@ def register_switch_update(exe: str | Path, base: Path, siblings: list[Path]) ->
     return info["update"]
 
 
+def switch_roots(cfg, path: Path) -> list[Path]:
+    """Cartelle Switch da dare a Eden come contenuti esterni: quelle della console nelle cartelle ROM;
+    se non si trovano (disco scollegato, config strana) almeno quella del gioco."""
+    try:
+        from ..scanner import find_platform_dirs
+        roots = [d for p, d in find_platform_dirs(cfg) if p.id == "switch"]
+    except (OSError, ValueError):
+        roots = []
+    return roots or [path if path.is_dir() else path.parent]
+
+
 def _needs_extract(pl: dict, platform: P.Platform, target: Path) -> bool:
     # RetroArch apre da solo gli ZIP di cartucce; i dischi e gli emulatori standalone no
     return target.suffix.lower() == ".zip" and (pl["emulator"] != RA or platform.cd)
@@ -1560,14 +1571,16 @@ class Launcher:
                 self._set(status="extracting")
                 target = _extract(self.cfg, target, key.replace("/", "_").replace(":", "_"),
                                   lambda m: self._set(message=m))
-            if platform.id == "switch" and pl["emulator"] == "ryujinx":
-                try:  # il gioco base parte con il suo aggiornamento piu' nuovo
+            if platform.id == "switch" and pl["emulator"] in ("ryujinx", "eden", "eglantine"):
+                try:  # il gioco parte con aggiornamento, DLC e mod scelti nella scheda (default: tutto, il piu' nuovo)
+                    from .. import switchcontent as SC
                     sib = SF.package_files(path) if path.is_dir() else [f for f in path.parent.iterdir() if f.suffix.lower() in SF.PACKAGE_EXTS]
                     base = resolve_target(platform, path) if src != path else target  # aggiornamenti: sempre quelli originali
-                    if (up := register_switch_update(pl["exe"], base, sib)):
-                        self._set(message=f"Aggiornamento collegato: {up.name}")
-                except OSError:  # nessun aggiornamento collegato non impedisce di giocare
-                    pass
+                    if (msg := SC.prepare_launch(pl["emulator"], pl["exe"], Path(self.cfg.cache), base, sib,
+                                                 switch_roots(self.cfg, path), self.profile_of(key))):
+                        self._set(message=msg)
+                except (OSError, ValueError) as e:  # contenuti non collegati non impediscono di giocare
+                    self._set(message=f"Aggiornamenti/DLC non collegati: {e}")
             core = str(_core_path(self.cfg, pl["core"])) if pl["core"] else ""
             args = [a.replace("{rom}", str(target)).replace("{core}", core) for a in pl["args"]]
             if self._stop_evt.is_set():  # «Chiudi gioco» durante copia/estrazione

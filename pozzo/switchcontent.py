@@ -360,3 +360,49 @@ def remove_mod(cache: Path, tid: int, name: str, dests: list[Path] = ()):
         if p.exists() or _is_link(p):
             _unlink(p)
     shutil.rmtree(mods_store(cache, tid) / name)
+
+
+# ---------------------------------------------------------------- avvio
+EDEN_LIKE = ("eden", "eglantine")
+
+
+def mod_dir(emulator: str, exe: str, tid: int) -> Path | None:
+    """Cartella mod del gioco nell'emulatore (Ryujinx: id minuscolo, Eden: maiuscolo, come li cercano loro)."""
+    if emulator == "ryujinx":
+        from .library.launcher import ryujinx_data_dir
+        return ryujinx_data_dir(exe) / "mods" / "contents" / f"{tid:016x}"
+    if emulator in EDEN_LIKE:
+        from .emuadapters.eden import _base
+        return _base(exe) / "load" / f"{tid:016X}"
+    return None
+
+
+def prepare_launch(emulator: str, exe: str, cache: Path, base: Path, siblings: list[Path], roots: list[Path],
+                   profile: dict | None, running: bool | None = None, keys: dict | None = None) -> str:
+    """Prima dell'avvio: aggiornamento, DLC e mod scelti nei file dell'emulatore. Ritorna il messaggio di stato."""
+    if emulator != "ryujinx" and emulator not in EDEN_LIKE:
+        return ""
+    ch = choices(profile)
+    info = gather(base, siblings, ch, keys)
+    if info["tid"] is None:
+        return ""
+    dest = mod_dir(emulator, exe, info["tid"])
+    off = [m for m in ch["mods_off"] if m in list_mods(cache, info["tid"])]
+    linked = link_mods(cache, info["tid"], dest, off)
+    if emulator == "ryujinx":
+        from .library.launcher import ryujinx_data_dir
+        write_ryujinx(ryujinx_data_dir(exe), info, [dest / m for m in off],
+                      [dest / m for m in list_mods(cache, info["tid"])])
+    else:
+        if running is None:
+            from .emuadapters.eden import running_names
+            from .remote.emusetup import _running
+            running = _running((*running_names(), "eglantine.exe", "eglantine"))
+        if not running:  # Eden riscrive qt-config.ini alla chiusura: con l'emulatore aperto si perderebbe tutto
+            from .emuadapters.eden import _base
+            write_eden(_base(exe), roots, info, ch, off)
+    dlc = sum(1 for d in info["dlcs"] if d["enabled"])
+    parts = [f"aggiornamento {info['update'].name}" if info["update"] else "",
+             f"{dlc} DLC" if dlc else "", f"{len(linked)} mod" if linked else ""]
+    parts = [p for p in parts if p]
+    return ("Collegati: " + ", ".join(parts)) if parts else ""
