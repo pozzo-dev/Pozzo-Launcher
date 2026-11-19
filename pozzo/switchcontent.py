@@ -9,6 +9,8 @@ Si tocca solo cio' che gestisce Pozzo: voci estranee e mod messe a mano restano 
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 from . import switchfiles as SF
@@ -245,3 +247,116 @@ def write_eden(user_dir: Path, roots: list[Path], info: dict, ch: dict, mod_name
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(new, "utf-8")
     return True
+
+
+# ---------------------------------------------------------------- mod (romfs/exefs/cheats per Title ID)
+MOD_DIRS = {"romfs", "exefs", "cheats"}
+MARK = ".pozzo"  # file nelle copie fatte da Pozzo quando il collegamento non si puo' creare: solo quelle si tolgono
+
+
+def mods_store(cache: Path, tid: int) -> Path:
+    return Path(cache) / "mods" / "switch" / f"{tid:016X}"
+
+
+def list_mods(cache: Path, tid: int) -> list[str]:
+    d = mods_store(cache, tid)
+    return sorted(p.name for p in d.iterdir() if p.is_dir()) if d.is_dir() else []
+
+
+def _mod_root(folder: Path) -> Path | None:
+    """La cartella che contiene romfs/exefs/cheats: quella data o la sua unica sottocartella."""
+    def has(p: Path) -> bool:
+        return any(c.is_dir() and c.name.lower() in MOD_DIRS for c in p.iterdir())
+    if has(folder):
+        return folder
+    subs = [p for p in folder.iterdir() if p.is_dir()]
+    return subs[0] if len(subs) == 1 and has(subs[0]) else None
+
+
+def import_mod(cache: Path, tid: int, src: Path, name: str = "") -> str:
+    """Mette una mod (archivio zip/7z/rar o cartella) nell'archivio di Pozzo per questo gioco. Ritorna il nome."""
+    import re
+    import shutil
+    import tempfile
+    from . import mods as M
+    src = Path(src)
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name or (src.name if src.is_dir() else src.stem)).strip(" .")
+    if not name:
+        raise ValueError("nome della mod non valido")
+    dest = mods_store(cache, tid) / name
+    if dest.exists():
+        raise ValueError(f"esiste gia' una mod chiamata {name}")
+    with tempfile.TemporaryDirectory(dir=str(Path(cache))) if Path(cache).is_dir() else tempfile.TemporaryDirectory() as t:
+        work = Path(t) / "mod"
+        if src.is_dir():
+            shutil.copytree(src, work)
+        else:
+            arc = Path(t) / src.name  # copia: extract_files rinomina l'archivio e quello dell'utente non si tocca
+            shutil.copy2(src, arc)
+            work.mkdir()
+            M.extract_files(arc, work)
+        root = _mod_root(work)
+        if root is None:
+            raise ValueError("la mod non contiene romfs, exefs o cheats")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(root), str(dest))
+    return name
+
+
+def _is_link(p: Path) -> bool:
+    return p.is_symlink() or bool(getattr(os.path, "isjunction", lambda _: False)(p))
+
+
+def _make_link(src: Path, dst: Path):
+    if sys.platform == "win32":
+        import _winapi  # junction: niente permessi di amministratore, a differenza dei symlink
+        _winapi.CreateJunction(str(src), str(dst))
+    else:
+        dst.symlink_to(src, target_is_directory=True)
+
+
+def _unlink(p: Path):
+    import shutil
+    if _is_link(p):
+        p.unlink() if p.is_symlink() else os.rmdir(p)
+    elif (p / MARK).is_file():
+        shutil.rmtree(p)
+
+
+def link_mods(cache: Path, tid: int, dest: Path, off: list[str]) -> list[str]:
+    """Collega le mod accese di Pozzo nella cartella mod dell'emulatore (dest) e toglie le spente.
+    Le cartelle messe dall'utente (ne' collegamento ne' copia di Pozzo) non si toccano. Ritorna le mod collegate."""
+    import shutil
+    dest = Path(dest)
+    done = []
+    for name in list_mods(cache, tid):
+        src, dst = mods_store(cache, tid) / name, dest / name
+        if name in off:
+            if dst.exists() or _is_link(dst):
+                _unlink(dst)
+            continue
+        if _is_link(dst) or (dst / MARK).is_file():
+            done.append(name)
+            continue
+        if dst.exists():
+            continue  # una mod dell'utente con lo stesso nome: vince la sua
+        dest.mkdir(parents=True, exist_ok=True)
+        try:
+            _make_link(src, dst)
+        except OSError:
+            shutil.copytree(src, dst)  # disco che non accetta collegamenti (es. FAT32)
+            (dst / MARK).write_text("copia di Pozzo Launcher\n", "utf-8")
+        done.append(name)
+    return done
+
+
+def remove_mod(cache: Path, tid: int, name: str, dests: list[Path] = ()):
+    """Toglie la mod dall'archivio di Pozzo e i suoi collegamenti/copie nelle cartelle degli emulatori."""
+    import shutil
+    if name not in list_mods(cache, tid):
+        raise ValueError(f"mod sconosciuta: {name}")
+    for d in dests:
+        p = Path(d) / name
+        if p.exists() or _is_link(p):
+            _unlink(p)
+    shutil.rmtree(mods_store(cache, tid) / name)

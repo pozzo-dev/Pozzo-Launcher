@@ -150,8 +150,75 @@ def test_write_eden(d: Path):
     assert SC.write_eden(user, [d], SC.gather(d / BASE, files, ch), ch, []) is False
 
 
+TID = 0x0100AAAA00000000
+
+
+def _zip_mod(d: Path) -> Path:
+    import zipfile
+    z = d / "MiaMod.zip"
+    with zipfile.ZipFile(z, "w") as f:
+        f.writestr("MiaMod/romfs/x.txt", "ciao")
+    return z
+
+
+def test_import_zip_appiattito(d: Path):
+    cache = d / "cache"
+    assert SC.import_mod(cache, TID, _zip_mod(d)) == "MiaMod"
+    assert SC.list_mods(cache, TID) == ["MiaMod"]
+    assert (SC.mods_store(cache, TID) / "MiaMod" / "romfs" / "x.txt").read_text() == "ciao"
+    assert (d / "MiaMod.zip").is_file(), "l'archivio dell'utente resta dov'era"
+    try:
+        SC.import_mod(cache, TID, _zip_mod(d))
+        raise AssertionError("nome gia' usato: deve fallire")
+    except ValueError:
+        pass
+
+
+def test_import_senza_romfs(d: Path):
+    src = d / "Strana"
+    (src / "altro").mkdir(parents=True)
+    (src / "altro" / "f.txt").write_text("x")
+    try:
+        SC.import_mod(d / "cache", TID, src)
+        raise AssertionError("senza romfs/exefs/cheats deve fallire")
+    except ValueError:
+        pass
+    assert SC.list_mods(d / "cache", TID) == []
+
+
+def test_link_e_spegni(d: Path):
+    cache, dest = d / "cache", d / "emu" / "load" / f"{TID:016X}"
+    SC.import_mod(cache, TID, _zip_mod(d))
+    (dest / "Manuale" / "romfs").mkdir(parents=True)
+    assert SC.link_mods(cache, TID, dest, []) == ["MiaMod"]
+    assert (dest / "MiaMod" / "romfs" / "x.txt").read_text() == "ciao"
+    assert SC.link_mods(cache, TID, dest, ["MiaMod"]) == []
+    assert not (dest / "MiaMod").exists() and (dest / "Manuale" / "romfs").is_dir(), "la mod a mano resta"
+    assert (SC.mods_store(cache, TID) / "MiaMod" / "romfs" / "x.txt").is_file(), "spegnere non cancella la mod"
+    SC.remove_mod(cache, TID, "MiaMod")
+    assert SC.list_mods(cache, TID) == []
+
+
+def test_link_ripiego_copia(d: Path):
+    cache, dest = d / "cache", d / "emu"
+    SC.import_mod(cache, TID, _zip_mod(d))
+    orig = SC._make_link
+
+    def rotto(src, dst):
+        raise OSError("niente link")
+    SC._make_link = rotto
+    try:
+        assert SC.link_mods(cache, TID, dest, []) == ["MiaMod"]
+    finally:
+        SC._make_link = orig
+    assert (dest / "MiaMod" / SC.MARK).is_file() and (dest / "MiaMod" / "romfs" / "x.txt").is_file()
+    SC.link_mods(cache, TID, dest, ["MiaMod"])
+    assert not (dest / "MiaMod").exists()
+
+
 TESTS = [test_dlc_ncas_da_nome, test_dlc_senza_id_non_collegabile, test_scelta_update, test_write_ryujinx_merge,
-         test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden]
+         test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden,
+         test_import_zip_appiattito, test_import_senza_romfs, test_link_e_spegni, test_link_ripiego_copia]
 
 if __name__ == "__main__":
     for fn in TESTS:
