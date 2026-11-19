@@ -447,22 +447,10 @@ def register_switch_update(exe: str | Path, base: Path, siblings: list[Path]) ->
     """Ryujinx: l'aggiornamento piu' nuovo del gioco (stesso Title ID, accanto al base) va in games/<id>/updates.json,
     che e' quello che l'emulatore carica: il gioco parte gia' aggiornato, senza installare nulla. Ritorna il file scelto.
     Gli altri aggiornamenti gia' elencati restano; si riscrive solo se cambia qualcosa."""
-    ups, _ = SF.companions(base, siblings)
-    fam = SF.family(base.name)
-    if not ups or fam is None:
-        return None
-    f = ryujinx_data_dir(exe) / "games" / f"{fam:016x}" / "updates.json"
-    try:
-        cur = json.loads(f.read_text("utf-8"))
-    except (OSError, ValueError):
-        cur = {}
-    paths = [p for p in cur.get("paths") or [] if isinstance(p, str)]
-    paths += [str(u) for u in ups if str(u) not in paths]
-    new = {"selected": str(ups[0]), "paths": paths}
-    if cur != new:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(new, indent=2), "utf-8")
-    return ups[0]
+    from .. import switchcontent as SC
+    info = SC.gather(base, siblings, SC.choices(None))
+    SC.write_ryujinx(ryujinx_data_dir(exe), info)
+    return info["update"]
 
 
 def _needs_extract(pl: dict, platform: P.Platform, target: Path) -> bool:
