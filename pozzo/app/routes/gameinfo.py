@@ -427,4 +427,66 @@ def build_router(ctx) -> APIRouter:
         return {"update": fc.get("update_display") or (str(fc["update"]) if fc.get("update") is not None else None),
                 "dlc": fc.get("dlc") or 0}
 
+    # ------------------------------------------------------------ Switch: scelta di aggiornamento, DLC e mod
+    def _sw(gid: int):
+        """(gioco, base, file accanto, contenuti) di un gioco Switch; 400 per le altre console."""
+        from ... import switchcontent as SC, switchfiles as SF
+        from ...library import launcher as L
+        g = lib.get(gid)
+        if g["platform"] != "switch" or not g.get("files"):
+            raise HTTPException(400, I.tr("s.switch.notSwitch"))
+        path = Path(g["files"][0])
+        if not path.exists():
+            raise HTTPException(400, I.tr("s.switch.notFound"))
+        base = L.resolve_target(P.PLATFORMS["switch"], path)
+        sib = SF.package_files(path) if path.is_dir() else [f for f in path.parent.iterdir() if f.suffix.lower() in SF.PACKAGE_EXTS]
+        ch = SC.choices(ctx.user.profile(g["key"]))
+        return g, base, sib, ch, SC.gather(base, sib, ch)
+
+    def _sw_state(gid: int) -> dict:
+        from ... import switchcontent as SC
+        _g, _base, _sib, ch, info = _sw(gid)
+        return SC.describe(info, ch, Path(cfg.cache))
+
+    @router.get("/api/game/{gid}/switch/contents")
+    def api_switch_contents(gid: int):
+        return _sw_state(gid)
+
+    @router.post("/api/game/{gid}/switch/contents")
+    def api_switch_contents_save(gid: int, body: dict = Body(...)):
+        from ... import switchcontent as SC
+        _g, _base, _sib, _ch, info = _sw(gid)
+        try:
+            ch = SC.clean_choices(body, info)
+        except ValueError as e:
+            raise HTTPException(400, I.tr("s.switch.badUpdate" if str(e) == "update" else "s.switch.badExtra"))
+        for k in ctx._member_keys(gid):
+            ctx.user.set_profile([k], SC.with_choices(ctx.user.profile(k), ch))
+        return _sw_state(gid)
+
+    @router.post("/api/game/{gid}/switch/mods")
+    def api_switch_mod_import(gid: int, body: dict = Body(...)):
+        from ... import switchcontent as SC
+        _g, _base, _sib, _ch, info = _sw(gid)
+        src = Path(str(body.get("path") or ""))
+        if info["tid"] is None or not src.exists():
+            raise HTTPException(400, I.tr("s.switch.badMod"))
+        try:
+            SC.import_mod(Path(cfg.cache), info["tid"], src)
+        except ValueError as e:
+            raise HTTPException(400, I.tr("s.switch.modRejected", msg=str(e)))
+        return _sw_state(gid)
+
+    @router.delete("/api/game/{gid}/switch/mods/{name}")
+    def api_switch_mod_remove(gid: int, name: str):
+        from ... import switchcontent as SC
+        _g, _base, _sib, _ch, info = _sw(gid)
+        dests = [d for e in ("ryujinx", "eden", "eglantine") if cfg.emulators.get(e)
+                 for d in [SC.mod_dir(e, cfg.emulators[e], info["tid"])] if d]
+        try:
+            SC.remove_mod(Path(cfg.cache), info["tid"], name, dests)
+        except ValueError:
+            raise HTTPException(400, I.tr("s.switch.badMod"))
+        return _sw_state(gid)
+
     return router

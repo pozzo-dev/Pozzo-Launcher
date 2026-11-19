@@ -4358,5 +4358,11 @@
  "s.mods.depMissing": "Dependency not found on Thunderstore: {mod}",
  "s.mods.requiredBy": "Needed by: {mods}. Remove or disable those first",
  "s.mods.jobRunning": "A mod installation is already in progress for this game",
- "f.phone_touch.started": "Open Pozzo Launcher on the phone: the bottom screen appears there by itself."
+ "f.phone_touch.started": "Open Pozzo Launcher on the phone: the bottom screen appears there by itself.",
+ "s.switch.notSwitch": "Not a Switch game",
+ "s.switch.notFound": "Game files not found: is the drive connected?",
+ "s.switch.badUpdate": "This update doesn't belong to the game",
+ "s.switch.badExtra": "The added file doesn't exist or isn't a Switch package (.nsp, .nsz, .xci, .xcz)",
+ "s.switch.badMod": "Mod not found",
+ "s.switch.modRejected": "Mod not imported: {msg}"
 }

@@ -4358,5 +4358,11 @@
  "s.mods.depMissing": "Dipendenza non trovata su Thunderstore: {mod}",
  "s.mods.requiredBy": "Serve a: {mods}. Rimuovi o disattiva prima quelle",
  "s.mods.jobRunning": "C'è già un'installazione di mod in corso per questo gioco",
- "f.phone_touch.started": "Apri Pozzo Launcher sul telefono: lo schermo inferiore compare lì da solo."
+ "f.phone_touch.started": "Apri Pozzo Launcher sul telefono: lo schermo inferiore compare lì da solo.",
+ "s.switch.notSwitch": "Non è un gioco Switch",
+ "s.switch.notFound": "File del gioco non trovati: il disco è collegato?",
+ "s.switch.badUpdate": "Questo aggiornamento non è del gioco",
+ "s.switch.badExtra": "Il file aggiunto non esiste o non è un pacchetto Switch (.nsp, .nsz, .xci, .xcz)",
+ "s.switch.badMod": "Mod non trovata",
+ "s.switch.modRejected": "Mod non importata: {msg}"
 }

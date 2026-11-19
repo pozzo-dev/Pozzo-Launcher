@@ -571,6 +571,8 @@ def build_router(ctx) -> APIRouter:
             raise HTTPException(400, I.tr("s.library.exeMissing"))
         if data.get("exe"):
             data["exe"] = data["exe"].strip('"')
+        from ... import switchcontent as SC
+        data = SC.keep_switch(user.profile(g["key"]), data)  # le scelte di aggiornamento/DLC/mod non sono in questo modulo
         user.set_profile(_member_keys(gid), data or None)
         return api_profile(gid)
 

@@ -406,3 +406,38 @@ def prepare_launch(emulator: str, exe: str, cache: Path, base: Path, siblings: l
              f"{dlc} DLC" if dlc else "", f"{len(linked)} mod" if linked else ""]
     parts = [p for p in parts if p]
     return ("Collegati: " + ", ".join(parts)) if parts else ""
+
+
+# ---------------------------------------------------------------- scheda del gioco (API)
+def describe(info: dict, ch: dict, cache: Path) -> dict:
+    """Contenuti e scelte del gioco per la scheda: solo valori semplici (JSON)."""
+    tid = info.get("tid")
+    mods = list_mods(cache, tid) if tid is not None else []
+    return {"tid": f"{tid:016X}" if tid is not None else "", "choice": ch,
+            "updates": [{"path": str(u), "name": u.name, "version": SF.version(u.name)} for u in info["updates"]],
+            "selected": str(info["update"]) if info["update"] else "",
+            "dlcs": [{"path": str(x["path"]), "name": x["path"].name, "enabled": x["enabled"], "error": x["error"]}
+                     for x in info["dlcs"]],
+            "mods": [{"name": m, "enabled": m not in ch["mods_off"]} for m in mods]}
+
+
+def clean_choices(body: dict, info: dict) -> dict:
+    """Scelte arrivate dalla scheda: ValueError se l'aggiornamento non e' del gioco o un file aggiunto non va."""
+    ch = choices({"switch": body if isinstance(body, dict) else {}})
+    if ch["update"] not in ("latest", "none") and ch["update"] not in {str(u) for u in info["updates"]}:
+        raise ValueError("update")
+    for x in ch["extra"]:
+        p = Path(x)
+        if not p.is_file() or p.suffix.lower() not in SF.PACKAGE_EXTS:
+            raise ValueError("extra")
+    return ch
+
+
+def keep_switch(old: dict | None, new: dict) -> dict:
+    """Salvando il profilo di avvio le scelte Switch (che non stanno in quel modulo) non si perdono."""
+    sw = (old or {}).get("switch")
+    return {**new, "switch": sw} if sw else dict(new)
+
+
+def with_choices(profile: dict | None, ch: dict) -> dict:
+    return {**(profile or {}), "switch": ch}

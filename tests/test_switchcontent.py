@@ -253,10 +253,44 @@ def test_switch_roots_ripiego(d: Path):
     assert L.switch_roots(cfg, game) == [game], "cartelle ROM non trovate: almeno quella del gioco"
 
 
+def test_descrivi_per_la_scheda(d: Path):
+    files = _files(d)
+    SC.import_mod(d / "cache", TID, _zip_mod(d))
+    ch = SC.choices({"switch": {"mods_off": ["MiaMod"]}})
+    out = SC.describe(SC.gather(d / BASE, files, ch), ch, d / "cache")
+    assert out["tid"] == "0100AAAA00000000"
+    assert [u["version"] for u in out["updates"]] == [131072, 65536]
+    assert out["dlcs"][0]["enabled"] is True and out["dlcs"][0]["name"].startswith("Gioco DLC")
+    assert out["mods"] == [{"name": "MiaMod", "enabled": False}]
+    json.dumps(out)  # serializzabile
+
+
+def test_valida_scelte(d: Path):
+    files = _files(d)
+    info = SC.gather(d / BASE, files, SC.choices(None))
+    old = str(d / "Gioco [0100AAAA00000800][v65536].nsp")
+    ok = SC.clean_choices({"update": old, "dlc_off": [str(files[0])], "extra": [], "mods_off": ["X"]}, info)
+    assert ok["update"] == old and ok["mods_off"] == ["X"]
+    for bad in ({"update": "C:/a_caso.nsp"}, {"extra": [str(d / "manca.nsp")]}, {"extra": [str(d / BASE) + ".txt"]}):
+        try:
+            SC.clean_choices(bad, info)
+            raise AssertionError(f"doveva rifiutare {bad}")
+        except ValueError:
+            pass
+
+
+def test_profilo_conserva_switch(d: Path):
+    old = {"emulator": "eden", "switch": {"update": "none"}}
+    assert SC.keep_switch(old, {"emulator": "ryujinx"}) == {"emulator": "ryujinx", "switch": {"update": "none"}}
+    assert SC.keep_switch(None, {"emulator": "ryujinx"}) == {"emulator": "ryujinx"}
+    assert SC.with_choices({"emulator": "eden"}, {"update": "latest"}) == {"emulator": "eden", "switch": {"update": "latest"}}
+
+
 TESTS = [test_dlc_ncas_da_nome, test_dlc_senza_id_non_collegabile, test_scelta_update, test_write_ryujinx_merge,
          test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden,
          test_import_zip_appiattito, test_import_senza_romfs, test_link_e_spegni, test_link_ripiego_copia,
-         test_prepare_ryujinx, test_prepare_eden_aperto, test_switch_roots_ripiego]
+         test_prepare_ryujinx, test_prepare_eden_aperto, test_switch_roots_ripiego,
+         test_descrivi_per_la_scheda, test_valida_scelte, test_profilo_conserva_switch]
 
 if __name__ == "__main__":
     for fn in TESTS:
