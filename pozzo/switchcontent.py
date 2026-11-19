@@ -52,6 +52,15 @@ def dlc_ncas(path: Path, keys: dict | None = None) -> list[dict]:
     return [{"path": "/" + data[0], "title_id": tid}]
 
 
+def load_keys(cfg) -> dict | None:
+    """prod.keys dell'utente (servono solo per i DLC senza Title ID nel nome); None se mancano o non si leggono."""
+    from . import switchmeta as SM
+    try:
+        return SM.load_keys(getattr(cfg, "switch_keys", "") or "")
+    except Exception:  # chiavi assenti o rotte: quei DLC restano «non collegabili»
+        return None
+
+
 def gather(base: Path, siblings: list[Path], ch: dict, keys: dict | None = None) -> dict:
     """Aggiornamenti (il piu' nuovo prima), aggiornamento scelto e DLC del gioco, con lo stato di ciascuno."""
     extra = [Path(x) for x in ch.get("extra") or [] if Path(x).is_file()]
@@ -70,7 +79,7 @@ def gather(base: Path, siblings: list[Path], ch: dict, keys: dict | None = None)
         except (OSError, SwitchError) as e:
             ncas, err = [], str(e) or type(e).__name__
         items.append({"path": p, "ncas": ncas, "enabled": not err and str(p) not in off, "error": err})
-    return {"tid": SF.family(base.name), "updates": ups, "update": update, "dlcs": items}
+    return {"tid": SF.family(base.name), "updates": ups, "update": update, "want": want, "dlcs": items}
 
 
 def _game_dir(data_dir: Path, tid: int) -> Path:
@@ -102,15 +111,18 @@ def write_ryujinx(data_dir: Path, info: dict, mods_off: list[Path] = (), mods_al
 
     cur = _load(gdir / "updates.json", {})
     cur = cur if isinstance(cur, dict) else {}
-    paths = [p for p in cur.get("paths") or [] if isinstance(p, str)]
+    old = cur.get("paths")
+    paths = [p for p in old if isinstance(p, str)] if isinstance(old, list) else []
     paths += [str(u) for u in info["updates"] if str(u) not in paths]
-    if info["updates"] or cur:
+    # senza aggiornamenti accanto al gioco non si tocca: puo' averne scelto uno altrove dalla GUI di Ryujinx
+    if info["updates"] or info.get("want") == "none":
         new = {"selected": str(info["update"]) if info["update"] else "", "paths": paths}
         wrote |= _save(gdir / "updates.json", cur, new)
 
     cur = _load(gdir / "dlc.json", [])
     cur = cur if isinstance(cur, list) else []
-    mine = {str(d["path"]) for d in info["dlcs"]}
+    # solo i DLC che Pozzo collega: quelli «non collegabili» la GUI di Ryujinx puo' averli aggiunti lei
+    mine = {str(d["path"]) for d in info["dlcs"] if d["ncas"]}
     new = [x for x in cur if not (isinstance(x, dict) and x.get("path") in mine)]
     new += [{"path": str(d["path"]), "dlc_nca_list": [{**n, "is_enabled": d["enabled"]} for n in d["ncas"]]}
             for d in info["dlcs"] if d["ncas"]]
@@ -122,7 +134,8 @@ def write_ryujinx(data_dir: Path, info: dict, mods_off: list[Path] = (), mods_al
     off = {str(Path(m)) for m in mods_off}
     managed = off | {str(Path(m)) for m in mods_all}
     # le voci delle mod di Pozzo si rifanno; le altre (spente dall'utente nella GUI) restano
-    rest = [m for m in cur.get("mods") or [] if isinstance(m, dict) and m.get("path") not in managed]
+    old = cur.get("mods")
+    rest = [m for m in old if isinstance(m, dict) and m.get("path") not in managed] if isinstance(old, list) else []
     new_mods = rest + [{"name": Path(m).name, "path": m, "enabled": False} for m in sorted(off)]
     if cur or new_mods:
         wrote |= _save(gdir / "mods.json", cur, {**cur, "mods": new_mods})
@@ -198,7 +211,8 @@ def _eden_off(info: dict, ch: dict, mod_names_off: list[str]) -> list[str]:
     return off + list(mod_names_off)
 
 
-def eden_ini(text: str, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str]) -> str:
+def eden_ini(text: str, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str],
+             managed_mods: list[str] = ()) -> str:
     """qt-config.ini con le cartelle ROM tra i contenuti esterni e gli add-on spenti del gioco; il resto com'era."""
     blocks = _blocks(text)
     ui = _section(blocks, "UI")
@@ -219,8 +233,11 @@ def eden_ini(text: str, roots: list[Path], info: dict, ch: dict, mod_names_off: 
         tid = str(info["tid"])
         b = next((b for b in blocks if b[0] == "DisabledAddOns"), None)
         cur = _disabled(b[1][1:]) if b else []
-        want = _eden_off(info, ch, mod_names_off)
-        if dict(cur).get(tid, []) != want:
+        mine = set(managed_mods) | set(mod_names_off)
+        ours = lambda n: n in ("Update", "DLC") or n.startswith("Update@") or n in mine  # noqa: E731
+        # quello che l'utente ha spento da Eden (mod messe a mano, ...) resta spento
+        want = _eden_off(info, ch, mod_names_off) + [n for n in dict(cur).get(tid, []) if not ours(n)]
+        if set(dict(cur).get(tid, [])) != set(want):
             new = [(t, ds) for t, ds in cur if t != tid] + ([(tid, want)] if want else [])
             b = b or _section(blocks, "DisabledAddOns")
             lines = []
@@ -234,14 +251,15 @@ def eden_ini(text: str, roots: list[Path], info: dict, ch: dict, mod_names_off: 
     return out if out.endswith("\n") or not out else out + "\n"
 
 
-def write_eden(user_dir: Path, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str]) -> bool:
+def write_eden(user_dir: Path, roots: list[Path], info: dict, ch: dict, mod_names_off: list[str],
+               managed_mods: list[str] = ()) -> bool:
     """Scrive config/qt-config.ini di Eden (cartella utente) solo se cambia. Da chiamare a Eden chiuso."""
     f = Path(user_dir) / "config" / "qt-config.ini"
     try:
         cur = f.read_text("utf-8")
     except OSError:
         cur = ""
-    new = eden_ini(cur, roots, info, ch, mod_names_off)
+    new = eden_ini(cur, roots, info, ch, mod_names_off, managed_mods)
     if new == cur:
         return False
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -400,7 +418,7 @@ def prepare_launch(emulator: str, exe: str, cache: Path, base: Path, siblings: l
             running = _running((*running_names(), "eglantine.exe", "eglantine"))
         if not running:  # Eden riscrive qt-config.ini alla chiusura: con l'emulatore aperto si perderebbe tutto
             from .emuadapters.eden import _base
-            write_eden(_base(exe), roots, info, ch, off)
+            write_eden(_base(exe), roots, info, ch, off, list_mods(cache, info["tid"]))
     dlc = sum(1 for d in info["dlcs"] if d["enabled"])
     parts = [f"aggiornamento {info['update'].name}" if info["update"] else "",
              f"{dlc} DLC" if dlc else "", f"{len(linked)} mod" if linked else ""]
@@ -426,10 +444,10 @@ def clean_choices(body: dict, info: dict) -> dict:
     ch = choices({"switch": body if isinstance(body, dict) else {}})
     if ch["update"] not in ("latest", "none") and ch["update"] not in {str(u) for u in info["updates"]}:
         raise ValueError("update")
-    for x in ch["extra"]:
-        p = Path(x)
-        if not p.is_file() or p.suffix.lower() not in SF.PACKAGE_EXTS:
-            raise ValueError("extra")
+    # un file aggiunto e poi spostato si lascia cadere: altrimenti la scheda non salverebbe piu' nulla
+    ch["extra"] = [x for x in ch["extra"] if Path(x).is_file()]
+    if any(Path(x).suffix.lower() not in SF.PACKAGE_EXTS for x in ch["extra"]):
+        raise ValueError("extra")
     return ch
 
 

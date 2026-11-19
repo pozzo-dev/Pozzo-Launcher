@@ -1577,9 +1577,10 @@ class Launcher:
                     sib = SF.package_files(path) if path.is_dir() else [f for f in path.parent.iterdir() if f.suffix.lower() in SF.PACKAGE_EXTS]
                     base = resolve_target(platform, path) if src != path else target  # aggiornamenti: sempre quelli originali
                     if (msg := SC.prepare_launch(pl["emulator"], pl["exe"], Path(self.cfg.cache), base, sib,
-                                                 switch_roots(self.cfg, path), self.profile_of(key))):
+                                                 switch_roots(self.cfg, path), self.profile_of(key),
+                                                 keys=SC.load_keys(self.cfg))):
                         self._set(message=msg)
-                except (OSError, ValueError) as e:  # contenuti non collegati non impediscono di giocare
+                except Exception as e:  # noqa: BLE001 - contenuti non collegati (anche file dell'emulatore rotti) non impediscono di giocare
                     self._set(message=f"Aggiornamenti/DLC non collegati: {e}")
             core = str(_core_path(self.cfg, pl["core"])) if pl["core"] else ""
             args = [a.replace("{rom}", str(target)).replace("{core}", core) for a in pl["args"]]

@@ -280,7 +280,8 @@ def test_valida_scelte(d: Path):
     old = str(d / "Gioco [0100AAAA00000800][v65536].nsp")
     ok = SC.clean_choices({"update": old, "dlc_off": [str(files[0])], "extra": [], "mods_off": ["X"]}, info)
     assert ok["update"] == old and ok["mods_off"] == ["X"]
-    for bad in ({"update": "C:/a_caso.nsp"}, {"extra": [str(d / "manca.nsp")]}, {"extra": [str(d / BASE) + ".txt"]}):
+    (d / "note.txt").write_text("x")
+    for bad in ({"update": "C:/a_caso.nsp"}, {"extra": [str(d / "note.txt")]}):
         try:
             SC.clean_choices(bad, info)
             raise AssertionError(f"doveva rifiutare {bad}")
@@ -295,11 +296,79 @@ def test_profilo_conserva_switch(d: Path):
     assert SC.with_choices({"emulator": "eden"}, {"update": "latest"}) == {"emulator": "eden", "switch": {"update": "latest"}}
 
 
+def test_eden_mod_a_mano_resta_spenta(d: Path):
+    files = _files(d)
+    tid = 0x0100AAAA00000000
+    ini = INI.replace(
+        "size=1\n", f"2\\title_id={tid}\n2\\disabled\\1\\d=60fps\n2\\disabled\\size=1\nsize=2\n")
+    ch = SC.choices(None)
+    lines = _lines(SC.eden_ini(ini, [d], SC.gather(d / BASE, files, ch), ch, [], managed_mods=["MiaMod"]))
+    assert r"2\disabled\1\d=60fps" in lines, "la mod spenta dall'utente in Eden resta spenta"
+
+
+def test_ryujinx_update_scelto_a_mano_resta(d: Path):
+    _nsp(d / BASE, ["base.nca"])
+    data = d / "ryu"
+    gdir = data / "games" / "0100aaaa00000000"
+    gdir.mkdir(parents=True)
+    mio = {"selected": "X:/altrove/upd.nsp", "paths": ["X:/altrove/upd.nsp"]}
+    (gdir / "updates.json").write_text(json.dumps(mio), "utf-8")
+    SC.write_ryujinx(data, SC.gather(d / BASE, [d / BASE], SC.choices(None)))
+    assert json.loads((gdir / "updates.json").read_text("utf-8")) == mio
+
+
+def test_ryujinx_dlc_non_collegabile_non_tocca_la_voce(d: Path):
+    files = _files(d) + [_nsp(d / "Pack.nsp", ["a.cnmt.nca", "b.nca", "c.nca"])]
+    data = d / "ryu"
+    gdir = data / "games" / "0100aaaa00000000"
+    gdir.mkdir(parents=True)
+    gui = {"path": str(d / "Pack.nsp"), "dlc_nca_list": [{"path": "/b.nca", "title_id": 1, "is_enabled": True}]}
+    (gdir / "dlc.json").write_text(json.dumps([gui]), "utf-8")
+    ch = SC.choices({"switch": {"extra": [str(d / "Pack.nsp")]}})
+    SC.write_ryujinx(data, SC.gather(d / BASE, files, ch))
+    assert gui in json.loads((gdir / "dlc.json").read_text("utf-8")), "voce messa dalla GUI di Ryujinx: resta"
+
+
+def test_ryujinx_file_rotto_non_blocca(d: Path):
+    files = _files(d)
+    data = d / "ryu"
+    gdir = data / "games" / "0100aaaa00000000"
+    gdir.mkdir(parents=True)
+    (gdir / "updates.json").write_text('{"paths": 5}', "utf-8")
+    (gdir / "mods.json").write_text('{"mods": 7}', "utf-8")
+    SC.write_ryujinx(data, SC.gather(d / BASE, files, SC.choices(None)))
+    assert json.loads((gdir / "updates.json").read_text("utf-8"))["selected"].endswith("[v131072].nsp")
+
+
+def test_extra_sparito_non_blocca_il_salvataggio(d: Path):
+    files = _files(d)
+    info = SC.gather(d / BASE, files, SC.choices(None))
+    ch = SC.clean_choices({"extra": [str(d / "spostato.nsp")], "update": "none"}, info)
+    assert ch["extra"] == [] and ch["update"] == "none"
+
+
+def test_chiavi_switch(d: Path):
+    from pozzo import switchmeta
+    orig = switchmeta.load_keys
+    try:
+        switchmeta.load_keys = lambda configured="": {"header_key": b"x"}
+        assert SC.load_keys(type("C", (), {"switch_keys": ""})()) == {"header_key": b"x"}
+        def rotto(configured=""):
+            raise switchmeta.SwitchError("prod.keys mancante")
+        switchmeta.load_keys = rotto
+        assert SC.load_keys(type("C", (), {"switch_keys": ""})()) is None, "senza chiavi: None, niente errore"
+    finally:
+        switchmeta.load_keys = orig
+
+
 TESTS = [test_dlc_ncas_da_nome, test_dlc_senza_id_non_collegabile, test_scelta_update, test_write_ryujinx_merge,
          test_mods_json, test_eden_cartelle_merge, test_eden_disabled, test_eden_niente_da_spegnere, test_write_eden,
          test_import_zip_appiattito, test_import_senza_romfs, test_link_e_spegni, test_link_ripiego_copia,
          test_prepare_ryujinx, test_prepare_eden_aperto, test_switch_roots_ripiego,
-         test_descrivi_per_la_scheda, test_valida_scelte, test_profilo_conserva_switch]
+         test_descrivi_per_la_scheda, test_valida_scelte, test_profilo_conserva_switch,
+         test_eden_mod_a_mano_resta_spenta, test_ryujinx_update_scelto_a_mano_resta,
+         test_ryujinx_dlc_non_collegabile_non_tocca_la_voce, test_ryujinx_file_rotto_non_blocca,
+         test_extra_sparito_non_blocca_il_salvataggio, test_chiavi_switch]
 
 if __name__ == "__main__":
     for fn in TESTS:

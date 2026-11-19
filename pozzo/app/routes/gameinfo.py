@@ -441,7 +441,7 @@ def build_router(ctx) -> APIRouter:
         base = L.resolve_target(P.PLATFORMS["switch"], path)
         sib = SF.package_files(path) if path.is_dir() else [f for f in path.parent.iterdir() if f.suffix.lower() in SF.PACKAGE_EXTS]
         ch = SC.choices(ctx.user.profile(g["key"]))
-        return g, base, sib, ch, SC.gather(base, sib, ch)
+        return g, base, sib, ch, SC.gather(base, sib, ch, SC.load_keys(cfg))
 
     def _sw_state(gid: int) -> dict:
         from ... import switchcontent as SC
