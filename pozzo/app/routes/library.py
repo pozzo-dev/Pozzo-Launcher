@@ -464,6 +464,7 @@ def build_router(ctx) -> APIRouter:
         if g.get("store"):
             if not g.get("installed"):
                 raise HTTPException(409, I.tr("s.library.notInstalledUseInstall"))
+            g = STORES.current_install(cfg, g)
             launch = g["launch"]
             if g["store"] == "ports":  # i port chiedono come aprire la finestra, se non c'e' una scelta salvata
                 from ... import ports as PT

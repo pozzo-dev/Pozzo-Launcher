@@ -21,6 +21,11 @@ The **PC** section of the sidebar gathers games from official stores installed o
 Stores are enabled and disabled in **Settings › Stores**; this is also where accounts are connected. Changing a
 setting takes effect on the next library refresh.
 
+### Battle.net and Riot games
+
+With **▶ Play** Pozzo opens the client and, as soon as it is ready, makes it start the game. If the client asks you to
+sign in or update, complete that there: Pozzo keeps retrying for a few minutes.
+
 ### Steam
 
 To see **uninstalled** games as well, a free Web API key is required

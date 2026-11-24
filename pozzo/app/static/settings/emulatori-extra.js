@@ -74,7 +74,7 @@
     function costruisci(riga) {
       const consoleId = riga.getAttribute("data-p");
       const cella = riga.querySelector("td");
-      const nome = cella ? (cella.textContent || "").split("consigliati")[0].trim() || consoleId : consoleId;
+      const nome = riga.getAttribute("data-name") || (cella ? (cella.textContent || "").split("consigliati")[0].trim() || consoleId : consoleId);
       const tr = el("tr", "xe-row");
       tr.setAttribute("data-xe", consoleId);
       const td = el("td");
@@ -146,6 +146,7 @@
 
     function disegnaBios(v, d) {
       const items = d.items || [];
+      v.bios.textContent = "";
       if (!items.length) { v.bios.appendChild(el("span", "muted small", trad("k.emu.bios.none", "Nessun BIOS richiesto."))); return; }
       const ul = el("ul", "xe-list");
       items.forEach((it) => {
@@ -166,6 +167,39 @@
         ul.appendChild(li);
       });
       v.bios.appendChild(ul);
+      v.bios.appendChild(rigaImporta(v, items.some((i) => i.file === "firmware")));
+    }
+
+    // scelta dei file con il selettore del sistema: Pozzo li copia dove l'emulatore li cerca
+    function rigaImporta(v, conCartella) {
+      const riga = el("div", "xe-import");
+      const api = global.pywebview && global.pywebview.api;
+      const vai = async (scelta) => {
+        let paths;
+        try { paths = await scelta(); } catch (e) { if (global.toast) global.toast(String(e), true); return; }
+        if (!paths || !paths.length) return;
+        try {
+          const r = await json("/api/emulators/bios/import", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ console: v.consoleId, paths: Array.isArray(paths) ? paths : [paths] }) });
+          if (global.toast) {
+            if (r.copiati.length) global.toast(trad("k.emu.imp.done", "Copiati {n} file in {dir}", {n: r.copiati.length, dir: r.cartella}));
+            if (r.ignorati.length) global.toast(trad("k.emu.imp.ignored", "Non riconosciuti (nome diverso da quelli attesi): {list}", {list: r.ignorati.join(", ")}), true);
+          }
+          disegnaBios(v, r.stato);
+        } catch (e) { if (global.toast) global.toast(e.message, true); }
+      };
+      const bottone = (testo, scelta) => {
+        const b = el("button", "btn", testo);
+        b.type = "button";
+        b.disabled = !api;
+        if (!api) b.title = trad("e.pick.desktopOnly", "Disponibile solo nell'app desktop");
+        b.addEventListener("click", () => vai(scelta));
+        riga.appendChild(b);
+      };
+      bottone(trad("k.emu.imp.btn", "Importa file…"), () => api.pick_files());
+      if (conCartella) bottone(trad("k.emu.imp.folder", "Importa cartella firmware…"), () => api.pick_folder());
+      riga.appendChild(el("span", "muted small", trad("k.emu.imp.hint", "Pozzo li copia nella cartella giusta dell'emulatore.")));
+      return riga;
     }
 
     function messaggio(snap) {

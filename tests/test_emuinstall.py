@@ -80,7 +80,9 @@ def test_install(tmp: Path):
             assert urls[-1] == "duckstation-windows-x64-release.zip", "file x64 per Windows"
             assert cfg.emulators["duckstation"] == exe and Path(exe).read_bytes() == b"v0.1"
             assert Path(exe).is_relative_to(EI.emus_dir(cfg) / "duckstation")
-            assert next(x for x in EI.catalog(cfg) if x["id"] == "duckstation")["version"] == "v0.1"
+            cat = {x["id"]: x for x in EI.catalog(cfg)}
+            assert cat["duckstation"]["version"] == "v0.1" and cat["duckstation"]["installed"] is True
+            assert cat["ppsspp"]["installed"] is False, "non installato da Pozzo: niente pulsante Disinstalla"
 
             (Path(exe).parent / "portable.txt").write_text("mio")  # file dell'utente
             n = len(urls)

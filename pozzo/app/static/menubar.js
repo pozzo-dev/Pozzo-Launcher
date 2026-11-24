@@ -22,6 +22,7 @@
       "-",
       { l: "＋ " + t("b.menu.file.addGame"), f: () => openAddGame("game") },
       { l: "🧩 " + t("b.menu.file.addApp"), f: () => openAddGame("app") },
+      { l: "✉ " + t("a.toolbar.hasInvite"), f: () => click("#join-btn") },
       "-",
       { l: t("b.menu.file.exportBackup"), f: async () => { const r = await api("/api/backups", { body: {} }); toast(t("b.menu.toast.backupCreated", {nome: r.name})); } },
       { l: t("b.menu.file.importBackup"), f: () => openSettings("lib") },

@@ -17,7 +17,7 @@
   .act .times { display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .bar { height: 6px; border-radius: 3px; background: var(--bg-3); overflow: hidden; margin-top: 8px; }
   .bar i { display: block; height: 100%; background: var(--accent); }
-  .bar.indet i { width: 30%; animation: indet 1.2s ease-in-out infinite; }
+  .bar.indet i { width: 30% !important; animation: indet 1.2s ease-in-out infinite; }
   @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(333.333%); } }
   .act.done .bar i { background: var(--good); } .act.error .bar i { background: var(--bad); } .act.cancelled .bar i { background: var(--warn); }
   .act .badge { position: static; } .act .bar { display: block; } /* app.css li usa per copertine e grafici */
@@ -30,6 +30,13 @@
   .tools { display: flex; gap: 6px; margin: 0 0 10px; flex-wrap: wrap; flex: 0 0 auto; }
   .tools button { background: var(--bg-3); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; color: var(--fg); }
   .empty { text-align: center; padding: 40px 0; }
+  /* sotto-attivita': nome e conteggio su una riga, barra sottile sotto */
+  .subs { list-style: none; margin: 8px 0 0; padding: 6px 0 0 10px; border-left: 2px solid var(--line); display: grid; gap: 6px; }
+  .subs li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; font-size: 12px; }
+  .subs .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subs .snum { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .subs .sbar { grid-column: 1 / -1; height: 4px; margin-top: 3px; }
+  .subs li.ok { color: var(--muted); } .subs li.ok .sbar i { background: var(--good); }
 </style>
 </head>
 <body>

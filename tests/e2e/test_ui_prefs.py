@@ -79,6 +79,7 @@ def _run() -> str | None:
                 # 3) editor tema: anteprima non salvata, import rifiutato, salvataggio e persistenza
                 page.goto(base + "/#settings/aspetto", wait_until="domcontentloaded")
                 page.locator("#te-tokens [data-token='bg']").wait_for(state="attached")
+                page.click("#te-tokens >> xpath=ancestor::details[contains(@class,'sadv')]/summary")  # l'editor sta tra le opzioni avanzate
                 assert page.evaluate("localStorage.getItem('gs.userTheme')") is None
                 page.evaluate("""() => { const r = document.querySelector("[data-token='accent'] [data-hsl='0']");
                   r.value = 10; r.dispatchEvent(new Event('input', { bubbles: true })); }""")

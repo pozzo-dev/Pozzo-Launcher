@@ -21,6 +21,11 @@ sia i giochi **installati** sia quelli **posseduti ma non installati**: questi c
 Gli store si attivano e disattivano in **Impostazioni › Store**; lì si collegano anche gli account. Una scelta
 cambiata vale dal prossimo aggiornamento della libreria.
 
+### Giochi Battle.net e Riot
+
+Con **▶ Gioca** Pozzo apre il client e, appena è pronto, gli fa avviare il gioco. Se il client chiede l'accesso o un
+aggiornamento va completato lì: Pozzo continua a riprovare per qualche minuto.
+
 ### Steam
 
 Per vedere anche i giochi **non installati** serve una chiave Web API gratuita

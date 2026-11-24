@@ -150,7 +150,7 @@ ancora qualcosa che lei sa fornire.
 | **IGDB** | online | Descrizioni, voto utenti e critica, franchise | 10 giochi per richiesta |
 | **ScreenScraper** | online | Checksum, testi in italiano, wheel, marquee, video | Quota del tuo account |
 | **RAWG** | online | Voto utenti e Metacritic | Chiave gratuita, 20.000 richieste al mese |
-| **Wikipedia** | online | Descrizioni, sviluppatori, editori, generi, anno (prima in italiano, poi in inglese) | |
+| **Wikipedia** | online | Ultima risorsa: descrizioni, sviluppatori, editori, generi, anno e copertina, nella lingua del gioco (it, en, de, fr, es) | |
 | **Recensioni Steam** | online | Voto per i giochi Steam | 1 richiesta al secondo, riusata per 14 giorni |
 
 I **Database locali** (LaunchBox, TheGamesDB) si scaricano per intero una volta a settimana o al mese: dopo, tutte

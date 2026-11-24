@@ -130,6 +130,15 @@ def build_router(ctx) -> APIRouter:
                 "cores": EI.missing_cores(cfg, _lib_pids()) if cores_ok else [], "arch": EI.ARCH_NAME[EI.ARCH],
                 "retroarch": bool(cfg.emulators.get(L.RA) and Path(cfg.emulators[L.RA]).exists())}
 
+    @router.get("/api/emulators/icon/{emu}")
+    def api_emulators_icon(emu: str):
+        """Icona della vetrina (exe installato o logo del progetto); 404 = la pagina mostra l'iniziale."""
+        from fastapi.responses import FileResponse
+        p = EI.emu_icon(cfg, emu, Path(cfg.cache) / "media" / "emuicons")
+        if not p:
+            raise HTTPException(404)
+        return FileResponse(p, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
     @router.get("/api/emulators/job")
     def api_emulators_job():
         return emu_job

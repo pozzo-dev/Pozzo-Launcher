@@ -65,6 +65,14 @@ def build_router(ctx) -> APIRouter:
     def api_emulators_bios(console: str = ""):
         return _errori(BI.check, console)
 
+    @router.post("/api/emulators/bios/import")
+    def api_emulators_bios_import(body: dict = Body(...)):
+        """Copia i BIOS/chiavi/firmware scelti nella cartella giusta dell'emulatore della console."""
+        paths = [str(x) for x in (body.get("paths") or []) if x]
+        if not paths:
+            raise HTTPException(400, I.tr("s.emuextra.invalid"))
+        return _errori(BI.importa, str(body.get("console") or ""), paths, cfg)
+
     @router.get("/api/game/{gid}/diagnose")
     def api_game_diagnose(gid: int):
         """«Perché non parte?»: controlli in sola lettura, mai un processo avviato."""

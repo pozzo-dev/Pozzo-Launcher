@@ -902,6 +902,15 @@ function bind() {
   $("#emu-inst").addEventListener("click", async (e) => {
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    const u = e.target.closest("[data-emu-uninst]");
+    if (u) {  // configurazione e salvataggi restano nella cartella (keep_data): reinstallando si ritrovano
+      if (!confirm(t("i.emu.uninstall_confirm", { emu: u.dataset.emuUninst }))) return;
+      u.disabled = true;
+      try { await api(`/api/emulators/${encodeURIComponent(u.dataset.emuUninst)}/uninstall`, { body: { keep_data: true } }); }
+      catch (err) { u.disabled = false; return toast(err.message, true); }
+      toast(t("i.emu.uninstalled", { emu: u.dataset.emuUninst }));
+      return loadEmu();
+    }
     const b = e.target.closest("[data-emu-inst], [data-emu-cores]");
     if (!b) return;
     try {

@@ -53,6 +53,66 @@ def test_riot():
     print("ok  Riot Games: installati dal registro, gli altri giochi Riot come disponibili")
 
 
+def test_riot_press_play(tmp: Path):
+    """API locale finta del Riot Client: percorso, password, client chiuso e client non pronto."""
+    import base64
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from pozzo.stores import riot
+    visti, codes = [], [404, 200]
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            visti.append((self.path, self.headers["Authorization"]))
+            self.send_response(codes.pop(0))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    old, riot.LOCKFILE = riot.LOCKFILE, tmp / "lockfile"
+    try:
+        assert riot.press_play("teamfighttactics") is False  # client chiuso: niente lockfile
+        riot.LOCKFILE.write_text(f"Riot Client:1:{srv.server_port}:segreta:http", encoding="utf-8")
+        assert riot.press_play("teamfighttactics") is False  # accesso o aggiornamento in corso
+        assert riot.press_play("teamfighttactics") is True
+        assert riot.press_play("../altro") is False
+        riot.LOCKFILE.write_text("rovinato", encoding="utf-8")
+        assert riot.press_play("teamfighttactics") is False
+    finally:
+        riot.LOCKFILE = old
+        srv.shutdown()
+        srv.server_close()
+    assert visti == [("/product-launcher/v1/products/teamfighttactics/patchlines/live",
+                      "Basic " + base64.b64encode(b"riot:segreta").decode())] * 2, visti
+    print("ok  Riot Games: «Gioca» premuto dall'API locale del client")
+
+
+def test_current_install(tmp: Path):
+    """Gioco spostato dopo l'ultima lettura dello store: all'avvio si usa la cartella nuova."""
+    from pozzo import stores
+    from pozzo.stores.base import StoreGame
+    g = {"key": "windows/battlenet:hs_beta", "store": "battlenet", "install_dir": str(tmp / "vecchia"), "launch": {"target": "a"}}
+    found = [StoreGame("battlenet", "hs_beta", "Hearthstone", True, str(tmp), {"target": "b"})]
+
+    async def fetch(self):
+        return found
+    old, stores.BattleNet.fetch = stores.BattleNet.fetch, fetch
+    try:
+        new = stores.current_install(None, g)
+        assert new["install_dir"] == str(tmp) and new["launch"] == {"target": "b"}, new
+        assert stores.current_install(None, new) is new  # cartella esistente: nessuna rilettura
+        found.clear()
+        assert stores.current_install(None, g) is g
+    finally:
+        stores.BattleNet.fetch = old
+    print("ok  gioco spostato: cartella riletta all'avvio")
+
+
 def make_env(tmp: Path):
     (tmp / "roms").mkdir()
     (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
@@ -175,6 +235,10 @@ def test_library_and_api(tmp: Path):
 if __name__ == "__main__":
     test_vdf()
     test_riot()
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_riot_press_play(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_current_install(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_library_and_api(Path(t))
     print("TUTTI I TEST OK")

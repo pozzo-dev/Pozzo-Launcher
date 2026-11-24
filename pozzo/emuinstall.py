@@ -228,6 +228,61 @@ def emus_dir(cfg) -> Path:
     return Path(cfg.app.get("emulators_dir") or C.settings_path(cfg).parent / "Emulatori")
 
 
+# organizzazioni GitHub il cui avatar e' il logo del progetto (quello di una persona non lo e')
+LOGO_ORGS = {"libretro", "dolphin-emu", "PCSX2", "RPCS3", "Vita3K", "melonDS-emu", "azahar-emu", "cemu-project",
+             "xenia-canary", "xemu-project", "shadps4-emu", "mgba-emu", "dosbox-staging"}
+
+
+def logo_url(emu: str) -> str | None:
+    s = KNOWN.get(emu) or {}
+    owner = (s.get("repo") or "").split("/")[0]
+    # Forgejo/Gitea (Eden, Ryujinx) stanno dietro un controllo anti-bot: niente logo remoto, resta l'iniziale
+    return f"https://github.com/{owner}.png?size=128" if owner in LOGO_ORGS and not s.get("api") else None
+
+
+def _fetch_logo(url: str) -> bytes:
+    import httpx
+    r = httpx.get(url, follow_redirects=True, timeout=10)
+    r.raise_for_status()
+    if not r.headers.get("content-type", "").startswith("image/") or len(r.content) > 512 * 1024:
+        raise OSError("non e' un'immagine")
+    return r.content
+
+
+def emu_icon(cfg, emu: str, folder: Path, fetch=_fetch_logo) -> Path | None:
+    """Icona per la vetrina: dall'eseguibile configurato (Windows), altrimenti il logo del progetto. In cache."""
+    if emu not in KNOWN:
+        return None
+    folder = Path(folder)
+    exe = cfg.emulators.get(emu)
+    if exe:
+        try:
+            from .library.shortcut import exe_icon
+        except ImportError:  # versioni senza l'estrazione delle icone: si passa al logo
+            exe_icon = None
+        out = folder / f"{emu}-exe.png"
+        try:
+            if out.is_file() or (exe_icon and exe_icon(Path(exe), out)):
+                return out
+        except OSError:
+            pass
+    out = folder / f"{emu}-logo.png"
+    if out.is_file():
+        return out
+    url = logo_url(emu)
+    if not url:
+        return None
+    try:
+        data = fetch(url)
+    except Exception:  # offline o GitHub che non risponde: la vetrina mostra l'iniziale
+        return None
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, out)
+    return out
+
+
 def installed(cfg) -> dict[str, dict]:
     """{emulatore: {"version", "dir"}} installati da qui (finche' l'eseguibile configurato esiste)."""
     return {e: v for e, v in (cfg.app.get("emu_installed") or {}).items()
@@ -241,6 +296,7 @@ def catalog(cfg) -> list[dict]:
     return [{"id": e, "repo": s["repo"], "home": s.get("home") or f"https://github.com/{s['repo']}",
              "consoles": [names.get(pid, pid) for pid, c in L.PRESETS.items() if any(x == e for x, _ in c)],
              "version": (inst.get(e) or {}).get("version") or "", "configured": bool(cfg.emulators.get(e)),
+             "installed": e in inst,  # installato da Pozzo (anche a versione ignota, dopo un ripristino): si disinstalla
              "arch_ok": e in SOURCES}
             for e, s in {**KNOWN, **SOURCES}.items()]
 

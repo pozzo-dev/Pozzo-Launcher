@@ -17,9 +17,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 from . import config as C
+from . import i18n as I
 from . import platforms as P
 from .library import launcher as L
 
@@ -168,3 +170,37 @@ def check(console_id: str, folder: str | None = None) -> dict:
             singoli.append(ok or not obbligatorio)
     ok_generale = all(singoli) and all(gruppi.values())
     return {"console": console_id, "emulator": preset[0][0], "items": items, "ok": ok_generale}
+
+
+def importa(console_id: str, sorgenti: list[str], cfg) -> dict:
+    """Copia i file scelti dall'utente nella cartella giusta dell'emulatore della console.
+
+    Si accettano solo i nomi attesi (REQUISITI): gli altri vanno in «ignorati» e non si toccano. Una cartella vale
+    solo per «firmware» (Switch). Destinazione: system/ per RetroArch, bios/ per gli altri, accanto all'eseguibile:
+    sono tra le cartelle che check() guarda. Senza un emulatore configurato: ValueError.
+    """
+    if console_id not in P.PLATFORMS:
+        raise ValueError(f"console sconosciuta: {console_id}")
+    spec = REQUISITI.get(console_id)
+    if not spec:
+        raise ValueError(I.tr("s.bios.noneNeeded"))
+    scelto = next(((e, cfg.emulators[e]) for e in [e for e, _ in L.PRESETS.get(console_id, [])] + [L.RA]
+                   if cfg.emulators.get(e)), None)
+    if not scelto:
+        raise ValueError(I.tr("s.bios.noEmu"))
+    emu, exe = scelto
+    dest = Path(exe).parent / ("system" if emu == L.RA else "bios")
+    attesi = {n.lower(): n for n, _, _ in spec["files"]}
+    copiati, ignorati = [], []
+    for src in map(Path, sorgenti):
+        nome = attesi.get(src.name.lower()) if src.is_file() else ("firmware" if src.is_dir() and "firmware" in attesi else None)
+        if nome is None:
+            ignorati.append(src.name)
+            continue
+        dest.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dest / nome, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dest / nome)
+        copiati.append(nome)
+    return {"copiati": copiati, "ignorati": ignorati, "cartella": str(dest), "stato": check(console_id)}

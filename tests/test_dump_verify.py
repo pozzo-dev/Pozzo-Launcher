@@ -117,3 +117,9 @@ def test_legacy_name_dat_cache_does_not_skip_file_hash(tmp_path):
     games = scanner.scan(cfg, cache, [(get("snes"), rom.parent)])
     assert len(games) == 1 and games[0].needs_hash
     cache.close()
+
+
+def test_name_match_by_normalized_title_without_regions(tmp_path):
+    # stesso titolo con un'altra regione: passa da by_norm e rank(); regions e' il default (tupla), non deve esplodere
+    game = Game(tmp_path / "Same Name (Europe).sfc", get("snes"), 9, 0, crc="DEADBEEF")
+    assert _index().identify_match(game) == ("Same Name (USA)", "name", "")

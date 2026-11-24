@@ -186,12 +186,35 @@ def test_switch_personali(tmp: Path):
     print("ok  Switch: chiavi per formato (hash non pubblico), firmware come cartella con dentro qualcosa")
 
 
+def test_importa(tmp: Path):
+    """Importa: solo i nomi attesi, nella cartella bios/ accanto all'eseguibile; il resto resta fuori."""
+    from types import SimpleNamespace
+    exe = tmp / "emu" / "duckstation.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"x")
+    cfg = SimpleNamespace(emulators={"duckstation": str(exe)})
+    src = tmp / "src"
+    src.mkdir()
+    (src / "SCPH5500.BIN").write_bytes(b"bios")
+    (src / "altro.txt").write_bytes(b"no")
+    r = B.importa("psx", [str(src / "SCPH5500.BIN"), str(src / "altro.txt")], cfg)
+    assert r["copiati"] == ["scph5500.bin"] and r["ignorati"] == ["altro.txt"], r
+    assert (exe.parent / "bios" / "scph5500.bin").read_bytes() == b"bios"
+    assert _item(r["stato"], "scph5500.bin")["found"] is False, "check() senza cartella guarda la config reale"
+    try:
+        B.importa("psx", [str(src / "altro.txt")], SimpleNamespace(emulators={}))
+        raise AssertionError("senza emulatore deve fallire")
+    except ValueError:
+        pass
+    print("ok  importa: nome atteso copiato in bios/, estraneo ignorato, senza emulatore errore")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_hash_noto(Path(t))
     for fn in (test_hash_non_noto, test_hash_non_noto_per_davvero, test_file_mancante_e_cartella_vuota,
                test_file_illeggibile, test_firmware_cartella_e_blocchi, test_console_senza_bios, test_json_fixture,
-               test_switch_personali):
+               test_switch_personali, test_importa):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             fn(Path(t))
     test_console_sconosciuta()

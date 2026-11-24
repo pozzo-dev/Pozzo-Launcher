@@ -145,7 +145,7 @@
 
   function fixText(node) {
     const el = node.parentElement;
-    if (blocked(el)) return;
+    if (!el || blocked(el)) return; // nodo gia' tolto (es. i18n ha riscritto il testo) prima che l'osservatore arrivasse
     let first = true;
     for (;;) {
       const v = node.nodeValue;

@@ -555,6 +555,13 @@ async function loadExtensions() {
     if (bar) bar.hidden = !drawer;
     if (nav) { nav.hidden = !topNav; nav.style.display = topNav ? "" : "none"; }
     if (toggle) { toggle.hidden = !drawer; toggle.style.display = drawer ? "" : "none"; }
+    // azioni principali (Nuovi giochi, Big Picture, Impostazioni): con la barra in alto stanno li', a destra;
+    // con la barra laterale restano nella riga del titolo
+    const acts = $(".tb-actions"), tb = $("#toolbar");
+    if (acts && bar && tb) {
+      if (topNav && acts.parentElement !== bar) bar.append(acts);
+      else if (!topNav && acts.parentElement !== tb) tb.insertBefore(acts, tb.querySelector(".tools"));
+    }
   }
   const theme = ext.themes.find((t) => t.id === ext.active_theme);
   const css = theme && (mode === "bigpicture" ? theme.bigpicture : theme.desktop);

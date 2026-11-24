@@ -4,6 +4,15 @@ const fmt = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 36
 const LABEL = () => ({ running: t("a.act.st.running"), done: t("a.act.st.done"), error: t("a.act.st.error"), cancelled: t("a.act.st.cancelled") });
 let data = { jobs: [], now: 0 }, skew = 0;
 
+// sotto-attivita' (scansione, hash, una per fonte…): barra propria; senza totale non si sa quanto manca
+function sub(s) {
+  const done = s.total > 0 && s.done >= s.total;
+  const w = s.total > 0 ? Math.min(100, (s.done / s.total) * 100) : 0;
+  const n = s.total > 0 ? `${Math.min(s.done, s.total).toLocaleString()} / ${s.total.toLocaleString()}` : "…";
+  return `<li class="${done ? "ok" : ""}"><span class="sname" title="${esc(s.name)}">${done ? "✓ " : ""}${esc(s.name)}</span><span class="snum">${n}</span>
+    <div class="bar sbar"><i style="width:${w}%"></i></div></li>`;
+}
+
 function render() {
   const now = Date.now() / 1000 - skew;
   const run = data.jobs.filter((j) => j.status === "running").length;
@@ -25,6 +34,7 @@ function render() {
       <div class="bar ${j.status === "running" && p == null ? "indet" : ""}"><i style="width:${width}%"></i></div>
       <div class="times muted"><span>${p != null && j.status === "running" ? Math.floor(p * 100) + "% · " : ""}${el != null ? "⏱ " + fmt(el) : ""}</span>
         <span>${eta != null ? t("a.act.eta", { time: fmt(eta) }) : ""}</span></div>
+      ${j.status === "running" && (j.tasks || []).length > 1 ? `<ul class="subs">${j.tasks.map(sub).join("")}</ul>` : ""}
     </div>`;
   }).join("") : `<div class="empty muted">${t("a.act.empty")}</div>`;
 }

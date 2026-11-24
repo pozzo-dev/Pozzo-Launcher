@@ -3,10 +3,8 @@
   Pozzo Launcher è aperto. Usa il canale locale di Discord: <b>nessun dato esce dal PC</b> e non serve un server.
   Discord deve essere aperto; le immagini non sono mostrabili (Discord accetta solo asset caricati
   sull'applicazione, non indirizzi web).</p>
-<div class="row wrap">
-  <label class="chk"><input type="checkbox" id="dc-on"> <span data-i18n="k.integr.dc.on">Attiva la presenza su Discord</span></label>
-  <label class="chk"><input type="checkbox" id="dc-time" checked> <span data-i18n="k.integr.dc.time">Mostra il tempo di gioco</span></label>
-</div>
+<label class="chk"><input type="checkbox" id="dc-on"> <span data-i18n="k.integr.dc.on">Attiva la presenza su Discord</span></label>
+<label class="chk"><input type="checkbox" id="dc-time" checked> <span data-i18n="k.integr.dc.time">Mostra il tempo di gioco</span></label>
 <div class="row wrap">
   <label class="lbl-field grow"><span data-i18n="k.integr.dc.id">ID applicazione Discord</span>
     <input class="field" id="dc-id" placeholder="es. 1234567890123456789" autocomplete="off">
@@ -43,3 +41,49 @@
 </div>
 <p class="muted small" data-i18n="k.integr.p.voice">Il controllo vocale richiede Discord aperto e l'applicazione autorizzata. Gli scope RPC vocali sono privilegiati: Discord li consente solo all'owner o ai tester dell'app personale.</p>
 <p class="small" id="media-discord-state" role="status"></p>
+
+<h3 data-i18n="j.dat.exp.title">Esporta per altri frontend</h3>
+<p class="muted small" data-i18n-html="j.dat.exp.desc">Metadati e immagini nel formato di <b>ES-DE</b> (EmulationStation), <b>Pegasus</b>, oppure
+  come <b>pagina web statica</b> (un solo <i>index.html</i> con copertine nella cartella <i>covers</i>): si apre
+  nel browser anche senza server, da un NAS o da un disco di rete, con ricerca, filtro per console e scheda del gioco.</p>
+<div class="row wrap">
+  <select class="field" id="xf-format"><option value="esde">ES-DE (gamelist.xml)</option><option value="pegasus">Pegasus (metadata.pegasus.txt)</option><option value="html" data-i18n="j.dat.exp.fmt.html">Pagina web (index.html)</option></select>
+  <input class="field grow" id="xf-out" placeholder="Cartella di destinazione (vuoto = cartella output)" data-i18n-placeholder="j.dat.exp.out.ph">
+  <button class="btn" id="xf-pick" type="button">📁</button>
+  <button class="btn" id="xf-go" data-i18n="j.dat.exp.go">Esporta</button>
+</div>
+<div class="row wrap" id="xf-title-row" hidden>
+  <label class="lbl-field grow"><span data-i18n="j.dat.exp.title.label">Titolo della pagina</span>
+    <input class="field" id="xf-title" placeholder="La mia libreria" data-i18n-placeholder="j.dat.exp.title.ph" maxlength="80">
+  </label>
+</div>
+<p class="muted small" id="xf-info"></p>
+
+<details class="sadv"><summary><span data-i18n="e.settings.advanced">Opzioni avanzate</span></summary>
+<h3 data-i18n="k.sys.h.api">API locale</h3>
+<p class="muted small" data-i18n-html="k.sys.api.p">Per script, Stream Deck, Home Assistant e webhook: gli endpoint <code>/api/v1</code>
+  restano gli stessi tra le versioni e vogliono questo token (<code>Authorization: Bearer …</code>).
+  Esempi e regole nelle <a href="#" data-open="https://github.com/erpaffo/Pozzo-Launcher/blob/main/docs/riferimento.md#api-locale">istruzioni</a>.</p>
+<div class="row wrap small">
+  <input class="field grow" id="api-token" readonly>
+  <button class="btn" id="api-token-copy" type="button" data-i18n="k.sys.btn.copy">Copia</button>
+  <button class="btn" id="api-token-new" type="button" title="Il token cambia: gli script gia' configurati smettono di funzionare" data-i18n-title="k.sys.api.new_tip" data-i18n="k.sys.btn.new_token">Nuovo token</button>
+</div>
+<p class="muted small" id="api-url"></p>
+
+<h3 data-i18n="s.general.whHeading">Webhook</h3>
+<p class="muted small" data-i18n="s.general.whDesc">Invia una richiesta POST JSON a Home Assistant, Stream Deck o tuoi script.</p>
+<div id="wh-list"></div>
+<div class="row wrap"><button class="btn" id="wh-add" type="button" data-i18n="s.general.whAdd">＋ Aggiungi webhook</button>
+  <button class="btn" id="wh-save" type="button" data-i18n="s.general.whSave">Salva webhook</button><span class="muted small" id="wh-state"></span></div>
+
+<h3 data-i18n="s.general.gsHeading">Script globali</h3>
+<p class="muted small" data-i18n="s.general.gsDesc">Un comando per evento, eseguito con le variabili POZZO_GAME_ID, POZZO_TITLE, POZZO_PLATFORM, POZZO_EXE, POZZO_EVENT
+  (e POZZO_DOWNLOAD_NAME per i download). Gira sul tuo PC con i tuoi permessi.</p>
+<div class="row wrap">
+  <label><span data-i18n="s.general.gsStarted">Gioco avviato</span> <input class="field" id="gs-game_started"></label>
+  <label><span data-i18n="s.general.gsStopped">Gioco chiuso</span> <input class="field" id="gs-game_stopped"></label>
+  <label><span data-i18n="s.general.gsDl">Download finito</span> <input class="field" id="gs-download_finished"></label>
+</div>
+<div class="row wrap"><button class="btn" id="gs-save" type="button" data-i18n="s.general.gsSave">Salva script</button></div>
+</details>

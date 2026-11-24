@@ -108,6 +108,37 @@ function removeStorageItem(key) {
   } catch { /* storage non disponibile */ }
 }
 
+/* ------------------------------------------------------------------ pulsantiera app: preferenze */
+const APPS_SIZES = ["s", "m", "l"];
+const APPS_SHAPES = ["rounded", "square", "circle"];
+const APPS_LOOKS = ["glow", "solid", "accent"];
+const APPS_PREFS_KEY = "gs.dash.apps.prefs";
+
+function appsPrefs() {
+  let p = {};
+  try { p = JSON.parse(getStorageItem(APPS_PREFS_KEY) || "{}") || {}; } catch { p = {}; }
+  return {
+    size: APPS_SIZES.includes(p.size) ? p.size : "m",
+    shape: APPS_SHAPES.includes(p.shape) ? p.shape : "rounded",
+    look: APPS_LOOKS.includes(p.look) ? p.look : "glow",
+    labels: p.labels !== false,
+  };
+}
+
+// cambia l'aspetto al volo (attributi sul widget) senza ridisegnare la dashboard
+if (root.document && typeof root.document.addEventListener === "function") {
+  root.document.addEventListener("change", (e) => {
+    const el = e.target && e.target.closest ? e.target.closest("[data-apps-pref]") : null;
+    if (!el) return;
+    const key = el.getAttribute("data-apps-pref");
+    const p = { ...appsPrefs(), [key]: el.type === "checkbox" ? el.checked : el.value };
+    setStorageItem(APPS_PREFS_KEY, JSON.stringify(p));
+    root.document.querySelectorAll(".gs-apps-widget").forEach((w) => {
+      w.dataset.size = p.size; w.dataset.shape = p.shape; w.dataset.look = p.look; w.dataset.labels = p.labels ? "1" : "0";
+    });
+  });
+}
+
 /* ------------------------------------------------------------------ registry */
 function registerWidget(def) {
   if (!def || typeof def !== "object") {
@@ -261,19 +292,36 @@ const builtInWidgets = [
     defaultSpan: 1,
     render: (context) => {
       const apps = libraryGames(context).filter((g) => checkIsApp(g));
-      const visibleApps = apps.slice(0, 16);
+      const visibleApps = apps.slice(0, 32);
+      const pr = appsPrefs();
 
+      // tasto da «stream deck»: icona dell'.exe, sotto la stessa icona sfocata come sfondo; senza icona restano le iniziali
       const appsHtml = visibleApps.map((g) => {
-        return `<button class="btn gs-app-tile" type="button" data-app-launch="${esc(String(g.id))}" data-shelf-game="${esc(String(g.id))}" title="${esc(g.title)}">
-          <img class="gs-app-icon" src="/img/${encodeURIComponent(String(g.id))}/icon" alt="" loading="lazy" decoding="async" data-onerr="remove">
+        const src = `/img/${encodeURIComponent(String(g.id))}/icon`;
+        const ini = String(g.title || "?").split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
+        return `<button class="gs-app-tile" type="button" data-app-launch="${esc(String(g.id))}" data-shelf-game="${esc(String(g.id))}" title="${esc(g.title)}" aria-label="${esc(g.title)}">
+          <span class="gs-app-key" aria-hidden="true">
+            <img class="gs-app-glow" src="${src}" alt="" loading="lazy" decoding="async" data-onerr="remove">
+            <span class="gs-app-ini">${esc(ini)}</span>
+            <img class="gs-app-icon" src="${src}" alt="" loading="lazy" decoding="async" data-onerr="remove">
+          </span>
           <span class="gs-app-title">${esc(g.title)}</span>
         </button>`;
       }).join("");
 
-      return `<div class="gs-apps-widget">
+      const sel = (key, vals) => `<label class="small">${t("g.dash.apps." + key)}
+          <select class="field" data-apps-pref="${key}">${vals.map((v) => `<option value="${v}"${pr[key] === v ? " selected" : ""}>${t(`g.dash.apps.${key}.${v}`)}</option>`).join("")}</select></label>`;
+
+      return `<div class="gs-apps-widget" data-size="${esc(pr.size)}" data-shape="${esc(pr.shape)}" data-look="${esc(pr.look)}" data-labels="${pr.labels ? "1" : "0"}">
         ${apps.length ? `<div class="gs-apps-grid">${appsHtml}</div>` : `<p class="muted">${t("g.dash.apps.empty")}</p>`}
-        <div style="margin-top:12px;">
+        <div class="gs-apps-bar">
           <button class="btn" type="button" data-add-app="app">＋ ${t("g.dash.apps.add")}</button>
+          <details class="gs-apps-opts"><summary>⚙ ${t("g.dash.apps.customize")}</summary>
+            <div class="gs-apps-opts-grid">
+              ${sel("size", APPS_SIZES)}${sel("shape", APPS_SHAPES)}${sel("look", APPS_LOOKS)}
+              <label class="chk small"><input type="checkbox" data-apps-pref="labels"${pr.labels ? " checked" : ""}> ${t("g.dash.apps.labels")}</label>
+            </div>
+          </details>
         </div>
       </div>`;
     },

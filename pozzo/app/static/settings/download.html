@@ -68,6 +68,13 @@
 <p class="muted small" data-i18n="j.dl.game.desc2">Con «Limita la banda» il limite qui sopra sostituisce quello globale finché giochi (0 = nessun limite).
   Alla chiusura del gioco riprendono solo i download fermati da questa modalità: quelli messi in pausa a mano restano fermi.</p>
 
+<h3 data-i18n="j.dl.cats.title">Categorie</h3>
+<p class="muted small" data-i18n="j.dl.cats.desc">Una categoria ha una sua cartella e limiti di condivisione che valgono al posto di quelli globali (0 = come globale).
+  Si assegna dalla finestra «Aggiungi download» o dai dettagli di un download.</p>
+<div id="dls-cats"></div>
+<button class="btn" id="dls-cat-add" type="button" data-i18n="j.dl.cats.add">Aggiungi categoria</button>
+
+<details class="sadv"><summary><span data-i18n="e.settings.advanced">Opzioni avanzate</span></summary>
 <h3 data-i18n="j.dl.net.title">Rete</h3>
 <label class="lbl-field"><span data-i18n="j.dl.iface">Interfaccia di rete per i download</span>
   <select class="field" id="dls-iface" aria-describedby="dls-iface-state dls-iface-desc">
@@ -108,12 +115,6 @@
 <label class="lbl-field"><span data-i18n="j.dl.trackers">Tracker aggiuntivi, uno per riga (aggiunti a ogni torrent)</span>
   <textarea class="field" id="dls-trackers" rows="4" spellcheck="false" placeholder="udp://tracker.example.org:1337/announce"></textarea></label>
 
-<h3 data-i18n="j.dl.cats.title">Categorie</h3>
-<p class="muted small" data-i18n="j.dl.cats.desc">Una categoria ha una sua cartella e limiti di condivisione che valgono al posto di quelli globali (0 = come globale).
-  Si assegna dalla finestra «Aggiungi download» o dai dettagli di un download.</p>
-<div id="dls-cats"></div>
-<button class="btn" id="dls-cat-add" type="button" data-i18n="j.dl.cats.add">Aggiungi categoria</button>
-
 <h3 data-i18n="j.dl.rss.title">Feed RSS</h3>
 <p class="muted small" data-i18n="j.dl.rss.desc">Pozzo controlla i feed e scarica solo gli elementi che combaciano con un filtro (espressione regolare sul titolo),
   nella categoria indicata. Gli elementi già presenti nel feed quando lo aggiungi non vengono scaricati.</p>
@@ -139,28 +140,4 @@
 <p class="muted small" data-i18n="j.dl.debrid.desc">Con un servizio debrid i link dei siti di hosting (Mega, 1fichier, Rapidgator…) scaricano alla massima velocità.
   I link passano dal primo servizio attivo, nell'ordine qui sotto. La chiave resta su questo PC e non viene più mostrata.</p>
 <div id="dls-debrid"></div>
-
-<h3 data-i18n="j.s2.title">Switch 2</h3>
-<p class="muted small" data-i18n="j.s2.desc">Converte i giochi Switch 2 già in chiaro tra cartella (exefs/romfs), NSP e NUP. Serve Eglantine 2.5.0 o successiva.
-  Pozzo non usa chiavi e non decifra: gli NSP retail o cifrati vengono rifiutati.</p>
-<p class="small" id="s2-status" role="status"></p>
-<label class="lbl-field"><span data-i18n="j.s2.fmt">Dopo il download converti in</span>
-  <select class="field" id="s2-fmt">
-    <option value="nsp">NSP</option><option value="nup">NUP</option>
-    <option value="folder" data-i18n="j.s2.fmt.folder">Cartella</option>
-    <option value="off" data-i18n="j.s2.fmt.off">Non convertire</option>
-  </select></label>
-<h4 data-i18n="j.s2.tool">Converti un file o una cartella</h4>
-<label class="lbl-field"><span data-i18n="j.s2.src">File o cartella da convertire</span>
-  <span class="row tight"><input class="field grow" id="s2-src">
-  <button class="btn" id="s2-pick-file" type="button" data-i18n="j.s2.pickFile">File…</button>
-  <button class="btn" id="s2-pick-dir" type="button" data-i18n="j.s2.pickDir">Cartella…</button></span></label>
-<div class="row wrap">
-  <label><span data-i18n="j.s2.to">Formato di arrivo</span>
-    <select class="field" id="s2-to"><option value="nsp">NSP</option><option value="nup">NUP</option>
-      <option value="folder" data-i18n="j.s2.fmt.folder">Cartella</option></select></label>
-  <button class="btn" id="s2-go" type="button" data-i18n="j.s2.go">Converti</button>
-  <button class="btn" id="s2-cancel" type="button" hidden data-i18n="j.s2.cancel">Annulla</button>
-</div>
-<progress id="s2-bar" max="100" value="0" hidden aria-labelledby="s2-msg"></progress>
-<p class="muted small" id="s2-msg" role="status" aria-live="polite"></p>
+</details>

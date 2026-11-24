@@ -1087,7 +1087,11 @@ def test_feedback_button():
     foot = html[html.index('class="side-foot"'):]
     assert foot.index('id="feedback-btn"') < foot.index("</aside>"), "Idee / bug sta nel piede fisso della barra laterale"
     tb = html[html.index('class="tb-actions"'):html.index("</header>", html.index('class="tb-actions"'))]
-    assert all(i in tb.split('class="tools"')[0] for i in ('id="settings-btn"', 'id="scan-btn"', 'id="random-btn"', 'id="bp-btn"')), "azioni nella prima riga"
+    assert all(i in tb.split('class="tools"')[0] for i in ('id="settings-btn"', 'id="scan-btn"', 'id="bp-btn"')), "azioni nella prima riga"
+    head = html[html.index('class="view-head"'):html.index('class="tb-actions"')]
+    assert 'id="random-btn"' in head, "«A caso» accanto al titolo della vista"
+    # restano nella pagina per scorciatoie e menu (File › Ho un invito), ma non occupano la barra
+    assert all(f'id="{i}" hidden' in tb for i in ("refresh-btn", "join-btn"))
     assert "body.foryou-mode .tools { display: none" in css and "#toolbar .tools > #search" not in css
     print("ok  azioni in alto a destra, Impostazioni fisse, Idee/bug nel piede della barra laterale")
 

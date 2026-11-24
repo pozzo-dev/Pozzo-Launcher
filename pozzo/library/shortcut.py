@@ -49,6 +49,64 @@ def make_icon(image: Path, out: Path) -> Path | None:
         return None
 
 
+def exe_icon(exe: Path, out: Path, size: int = 256) -> Path | None:
+    """Icona di un .exe come PNG (la piu' grande disponibile, fino a `size`). Solo Windows; None se manca."""
+    if sys.platform != "win32" or not Path(exe).is_file():
+        return None
+    import ctypes
+    from ctypes import wintypes as W
+    # DLL proprie: i tipi impostati qui (handle a 64 bit) non cambiano le windll condivise
+    u32, g32 = ctypes.WinDLL("user32"), ctypes.WinDLL("gdi32")
+    u32.GetDC.restype = W.HDC
+    u32.GetDC.argtypes = [W.HWND]
+    u32.ReleaseDC.argtypes = [W.HWND, W.HDC]
+    u32.GetIconInfo.argtypes = [W.HICON, ctypes.c_void_p]
+    u32.DestroyIcon.argtypes = [W.HICON]
+    g32.GetObjectW.argtypes = [W.HANDLE, ctypes.c_int, ctypes.c_void_p]
+    g32.GetDIBits.argtypes = [W.HDC, W.HBITMAP, W.UINT, W.UINT, ctypes.c_void_p, ctypes.c_void_p, W.UINT]
+    g32.DeleteObject.argtypes = [W.HANDLE]
+    hicon, iid = W.HICON(), W.UINT()
+    if u32.PrivateExtractIconsW(str(exe), 0, size, size, ctypes.byref(hicon), ctypes.byref(iid), 1, 0) != 1 or not hicon:
+        return None
+
+    class ICONINFO(ctypes.Structure):
+        _fields_ = [("fIcon", W.BOOL), ("x", W.DWORD), ("y", W.DWORD), ("mask", W.HBITMAP), ("color", W.HBITMAP)]
+
+    class BITMAP(ctypes.Structure):
+        _fields_ = [("type", W.LONG), ("w", W.LONG), ("h", W.LONG), ("wb", W.LONG), ("planes", W.WORD),
+                    ("bpp", W.WORD), ("bits", ctypes.c_void_p)]
+
+    ii, hdc = ICONINFO(), None
+    try:
+        if not u32.GetIconInfo(hicon, ctypes.byref(ii)) or not ii.color:
+            return None
+        bm = BITMAP()
+        g32.GetObjectW(ii.color, ctypes.sizeof(bm), ctypes.byref(bm))
+        w, h = bm.w, bm.h
+        # BITMAPINFOHEADER a 32 bit, altezza negativa = righe dall'alto
+        bih = (ctypes.c_uint32 * 10)(40, w, ctypes.c_uint32(-h).value, 1 | (32 << 16), 0, 0, 0, 0, 0, 0)
+        buf = ctypes.create_string_buffer(w * h * 4)
+        hdc = u32.GetDC(None)
+        if not g32.GetDIBits(hdc, ii.color, 0, h, buf, bih, 0):
+            return None
+        from PIL import Image
+        im = Image.frombuffer("RGBA", (w, h), buf.raw, "raw", "BGRA", 0, 1)
+        if not im.getchannel("A").getbbox():  # icone vecchie senza alfa: tutto opaco
+            im.putalpha(255)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        im.save(out, "PNG")
+        return out
+    except Exception:
+        return None
+    finally:
+        if hdc:
+            u32.ReleaseDC(None, hdc)
+        for b in (ii.mask, ii.color):
+            if b:
+                g32.DeleteObject(b)
+        u32.DestroyIcon(hicon)
+
+
 def create(title: str, base_cmd: str, workdir: str, key: str, icon: str | None) -> Path:
     """Crea (o sostituisce) il collegamento sul desktop e ne restituisce il percorso."""
     target, args = split_cmd(base_cmd)

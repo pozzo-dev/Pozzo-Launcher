@@ -267,6 +267,51 @@ def test_battlenet_launch_non_aspetta_il_launcher(tmp_path: Path):
     print("ok  Battle.net: comando di avvio subito e ripetuto, nessuna attesa fissa del launcher")
 
 
+def test_riot_preme_gioca(tmp_path: Path):
+    """Riot: il client si apre una volta sola e «Gioca» si ripete finché il client è pronto, poi basta."""
+    import time
+
+    from pozzo.stores import riot
+    exe = tmp_path / "RiotClientServices.exe"
+    exe.write_bytes(b"")
+    aperti, premuti = [], []
+
+    class FakeProc:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    class FakeSub:
+        CREATE_NO_WINDOW = 0
+
+        @staticmethod
+        def Popen(cmd, **kw):  # noqa: N802
+            aperti.append(cmd)
+            return FakeProc()
+
+    def press(pid):
+        premuti.append(pid)
+        return len(premuti) == 2  # la prima volta il client non e' pronto
+
+    saved = (L.subprocess, L.Launcher._game_procs, L.LAUNCH_RESEND, riot.press_play)
+    L.subprocess, L.LAUNCH_RESEND, riot.press_play = FakeSub, 0.05, press
+    L.Launcher._game_procs = staticmethod(lambda folder: [])
+    try:
+        ln = L.Launcher(C.Config(), FakeUser())
+        ln.launch_pc("windows/riot:teamfighttactics", "TFT", {"type": "exe", "target": str(exe), "args": []},
+                     str(tmp_path), "Riot Games", "riot")
+        time.sleep(7)  # tre giri del ciclo di controllo (2 s l'uno)
+        ln.stop()
+        deadline = time.time() + 10
+        while ln.state.get("status") != "finished" and time.time() < deadline:
+            time.sleep(0.05)
+    finally:
+        L.subprocess, L.Launcher._game_procs, L.LAUNCH_RESEND, riot.press_play = saved
+    assert premuti == ["teamfighttactics"] * 2 and len(aperti) == 1, (premuti, aperti)
+    print("ok  Riot: «Gioca» premuto finché il client lo accetta")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_eden_plan_and_command(Path(t))
@@ -277,6 +322,8 @@ if __name__ == "__main__":
         test_stop_game(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_battlenet_launch_non_aspetta_il_launcher(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_riot_preme_gioca(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_sharpemu_ps5(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:

@@ -11,6 +11,8 @@ import os
 import re
 from pathlib import Path
 
+import httpx
+
 from .base import StoreGame, StoreProvider, reg_get, reg_subkeys
 
 # prodotto del Riot Client -> (titolo, generi, anno, descrizione, pagina ufficiale)
@@ -28,7 +30,23 @@ PRODUCTS = {
 }
 UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 INSTALLS = Path(os.path.expandvars(r"%PROGRAMDATA%\Riot Games\RiotClientInstalls.json"))
+# porta e password dell'API locale del Riot Client, presente solo mentre è aperto
+LOCKFILE = Path(os.path.expandvars(r"%LOCALAPPDATA%\Riot Games\Riot Client\Config\lockfile"))
 _ARGS = re.compile(r"--uninstall-product=([\w-]+)\s+--uninstall-patchline=(\w*)")
+
+
+def press_play(pid: str) -> bool:
+    """Come il pulsante «Gioca» del Riot Client: Riot ha disattivato l'avvio automatico di --launch-product.
+    False finché il client non è pronto (in caricamento, accesso o aggiornamento da fare)."""
+    if pid not in PRODUCTS:
+        return False
+    try:
+        _, _, port, password, scheme = LOCKFILE.read_text(encoding="utf-8").strip().split(":")
+        # trust_env=False: la password locale non deve passare da un proxy di sistema
+        with httpx.Client(auth=("riot", password), verify=False, trust_env=False, timeout=10) as c:  # nosec B501 - certificato autofirmato su 127.0.0.1
+            return c.post(f"{scheme}://127.0.0.1:{int(port)}/product-launcher/v1/products/{pid}/patchlines/live").is_success
+    except (OSError, ValueError, httpx.HTTPError):
+        return False
 
 
 class Riot(StoreProvider):

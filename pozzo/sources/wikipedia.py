@@ -15,6 +15,7 @@ import re
 from urllib.parse import unquote, urlparse
 
 from .. import matching
+from ..localize import wiki_langs
 from ..net import RateLimiter, request
 from ..scanner import Game
 from .base import Result, Skipped, Source
@@ -28,8 +29,22 @@ LANG = {
     "en": {"query": "video game", "box": re.compile(r"\{\{\s*infobox video ?game\b", re.I),
            "developer": ("developer", "developers"), "publisher": ("publisher", "publishers"), "genres": ("genre", "genres"),
            "year": ("released", "release"), "modes": ("modes",)},
+    "de": {"query": "Computerspiel", "box": re.compile(r"\{\{\s*infobox computer- und videospiel\b", re.I),
+           "developer": ("entwickler",), "publisher": ("publisher",), "genres": ("genre",),
+           "year": ("release",), "modes": ("spielmodi",)},
+    "fr": {"query": "jeu vidéo", "box": re.compile(r"\{\{\s*infobox jeu vidéo\b", re.I),
+           "developer": ("développeur",), "publisher": ("éditeur",), "genres": ("genre",),
+           "year": ("date",), "modes": ("mode",)},
+    "es": {"query": "videojuego", "box": re.compile(r"\{\{\s*ficha de videojuego\b", re.I),
+           "developer": ("desarrollador",), "publisher": ("distribuidor",), "genres": ("género",),
+           "year": ("lanzamiento",), "modes": ("modo",)},
 }
-WANTED = ("description", "developer", "publisher", "genres", "release_date")
+WANTED = ("description", "developer", "publisher", "genres", "release_date", "media:cover")
+# l'immagine di testata e' spesso un logo: si tiene solo se sembra una copertina
+NOT_COVER = re.compile(r"logo|icon|wordmark|title|screen|gameplay|\.svg$", re.I)
+# edizioni e versioni attaccate al titolo non stanno nelle pagine di Wikipedia
+EDITION = re.compile(r"\s*[-:]?\s*\b(?:game of the year|goty|deluxe|complete|definitive|remastered|digital|special|"
+                     r"collector's|enhanced)\s+edition\b|\s+v\d+(?:\.\d+)*\s*$", re.I)
 
 
 def _strip_wiki(s: str) -> str:
@@ -130,17 +145,22 @@ class Wikipedia(Source):
             return None
         return r.json()
 
+    @staticmethod
+    def _name(game: Game) -> str:
+        """Titolo pulito per la ricerca: senza tag, scene, edizioni e versioni."""
+        return EDITION.sub("", game.search_name).strip() or game.search_name
+
     async def _search(self, lang: str, game: Game) -> str | None:
-        q = f'{game.search_name} {LANG[lang]["query"]} {game.platform.name}'
+        q = f'{self._name(game)} {LANG[lang]["query"]} {game.platform.name}'
         js = await self._api(lang, {"action": "query", "list": "search", "srsearch": q, "srlimit": 6, "srprop": ""})
         hits = [h["title"] for h in (js or {}).get("query", {}).get("search", [])]
         # "Sonic (videogioco 1991)" -> "Sonic"
-        hit, _ = matching.best(game.search_name, hits, key=lambda t: re.sub(r"\s*\(.*?\)\s*$", "", t),
+        hit, _ = matching.best(self._name(game), hits, key=lambda t: re.sub(r"\s*\(.*?\)\s*$", "", t),
                                min_score=max(self.cfg.min_match, 85))
         return hit
 
     async def _page(self, lang: str, title: str) -> dict | None:
-        js = await self._api(lang, {"action": "query", "prop": "extracts|revisions", "exintro": 1, "explaintext": 1,
+        js = await self._api(lang, {"action": "query", "prop": "extracts|revisions|pageimages", "piprop": "original", "exintro": 1, "explaintext": 1,
                                     "rvprop": "content", "rvslots": "main", "rvsection": 0, "redirects": 1,
                                     "titles": title})
         pages = (js or {}).get("query", {}).get("pages", [])
@@ -153,7 +173,8 @@ class Wikipedia(Source):
             return None  # non e' la pagina di un videogioco
         # "Super Metroid (スーパーメトロイド?, Sūpā Metoroido) è..." -> "Super Metroid è..."
         extract = re.sub(r"\s*\([^()]*[぀-ヿ一-鿿][^()]*\)", "", p.get("extract") or "").strip()
-        return {"extract": extract, "box": box, "url": f"https://{lang}.wikipedia.org/wiki/"
+        img = (p.get("original") or {}).get("source") or ""
+        return {"extract": extract, "box": box, "image": "" if NOT_COVER.search(img.split("?")[0]) else img, "url": f"https://{lang}.wikipedia.org/wiki/"
                 + p["title"].replace(" ", "_")}
 
     async def lookup(self, game: Game) -> Result | None:
@@ -167,7 +188,9 @@ class Wikipedia(Source):
                 u = urlparse(r["wiki"])
                 known[u.netloc.split(".")[0]] = unquote(u.path.split("/wiki/", 1)[1]).replace("_", " ")
         f: dict = {}
-        for lang in self.langs:
+        cover = ""
+        want_cover = "media:cover" in missing
+        for lang in wiki_langs(game, self.cfg, self.langs):
             title = known.get(lang) or await self._search(lang, game)
             if not title:
                 continue
@@ -191,8 +214,12 @@ class Wikipedia(Source):
                 if v and k not in f:
                     f[k] = v
             f.setdefault("wikipedia_url", page["url"])
-            if not (missing - set(f)):
+            if want_cover and not cover and page["image"]:  # la prima lingua con una copertina vera: la sua edizione
+                cover = page["image"]
+            if not (missing - set(f) - ({"media:cover"} if cover else set())):
                 break  # tutto quello che mancava e' stato trovato
         f = {k: v for k, v in f.items() if k in missing or k == "wikipedia_url"
              or (k == "players" and not game.data.get("players"))}
-        return Result(fields=f) if set(f) - {"wikipedia_url"} else None
+        if not (set(f) - {"wikipedia_url"} or cover):
+            return None
+        return Result(fields=f, media={"cover": cover} if cover else {}, media_headers={"User-Agent": UA} if cover else None)

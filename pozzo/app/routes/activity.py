@@ -12,6 +12,27 @@ from ... import i18n as I, platforms as P
 from ..server import STATIC, _asset_version
 
 
+MAX_SUBTASKS = 12  # le righe arrivano anche al telefono: niente elenchi lunghi
+
+
+def overall(tasks: list[dict], running: bool) -> float | None:
+    """Avanzamento di un lavoro dalle sue sotto-attivita': media delle loro frazioni, non somma degli elementi
+    (la scansione di migliaia di file finiva subito e portava la barra al 100% mentre la ricerca dati era all'inizio).
+    Sotto-attivita' ancora senza totale non contano. In corso ma tutte finite (o nessuna misurabile):
+    c'e' una fase non misurata (es. ricostruzione della libreria), quindi None = barra indeterminata."""
+    fr = [min(1.0, (t.get("done") or 0) / t["total"]) for t in tasks if t.get("total")]
+    if not fr or (running and all(f >= 1 for f in fr)):
+        return None
+    return sum(fr) / len(fr)
+
+
+def subtasks(tasks: list[dict]) -> list[dict]:
+    """Sotto-attivita' da mostrare sotto la barra principale, nell'ordine in cui sono nate (le ultime MAX_SUBTASKS)."""
+    rows = [{"name": str(t.get("name") or "").strip(), "total": t.get("total") or 0, "done": t.get("done") or 0}
+            for t in tasks]
+    return rows[-MAX_SUBTASKS:]
+
+
 def build_router(ctx) -> APIRouter:
     _rebuild, _start_store_refresh, activity_hidden, api_scan_start, bulk_job, job = ctx._rebuild, ctx._start_store_refresh, ctx.activity_hidden, ctx.api_scan_start, ctx.bulk_job, ctx.job
     launcher, lib, phone_hub, state = ctx.launcher, ctx.lib, ctx.phone_hub, ctx.state
@@ -26,9 +47,7 @@ def build_router(ctx) -> APIRouter:
             prog = None
             tasks = state.get("tasks") or []
             if tasks:
-                tot = sum(t.get("total") or 0 for t in tasks)
-                done = sum(t.get("done") or 0 for t in tasks)
-                prog = (done / tot) if tot else None
+                prog = overall(tasks, state.get("status") == "running")
             elif state.get("total"):
                 prog = (state.get("done") or 0) / state["total"]
             log = state.get("log") or []
@@ -40,7 +59,7 @@ def build_router(ctx) -> APIRouter:
                     "started": state.get("started") or 0, "finished": state.get("finished") or 0,
                     "stoppable": (jid in job_stops or jid.startswith("netmeta:")) and state.get("status") == "running"
                     and state.get("stoppable", True) and not state.get("stopping"),
-                    "last": log[-1] if log else ""}
+                    "last": log[-1] if log else "", "tasks": subtasks(tasks)}
 
         rows = [
             row("scan", I.tr("s.activity.scan"), job["current"].state()),

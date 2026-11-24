@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.20.2 (2026-11-25)
+
+### Aggiunto
+
+- **Disinstallare gli emulatori**: in Impostazioni › Emulatori, accanto ad «Aggiorna», il pulsante 🗑 Disinstalla toglie un emulatore installato da Pozzo (quelli indicati a mano non si toccano). Configurazione e salvataggi restano nella sua cartella: reinstallandolo si ritrovano.
+- **Importare BIOS, chiavi e firmware**: in Impostazioni › Emulatori, aprendo una console, «Importa file…» (e «Importa cartella firmware…» per Switch) copia i file scelti nella cartella dove l'emulatore li cerca (`system` per RetroArch, `bios` per gli altri). I file con un nome diverso da quelli attesi non vengono copiati e sono elencati in un avviso.
+- **Wikipedia in più lingue e con la copertina**: oltre a italiano e inglese cerca anche in tedesco, francese e spagnolo, partendo dalla lingua del gioco. Quando nessun'altra fonte ha la copertina, prende quella della pagina; le immagini che sembrano loghi o schermate vengono scartate.
+- **Come funziona la ricerca dei dati**: in Impostazioni › Libreria una breve spiegazione di cosa cerca lo scraping, in quali fonti e in che ordine, cosa succede se non trova il gioco e come si avvia.
+- **Aggiornamenti, DLC e mod dei giochi Switch**: con Ryujinx ed Eden (anche Eglantine) il gioco parte già con l'aggiornamento, i DLC e le mod scelti nella nuova sezione «Contenuti Switch» della scheda, senza installare nulla nella memoria dell'emulatore. Le mod si importano da un archivio o da una cartella, si spengono e si rimuovono; le scelte e le mod fatte a mano nell'emulatore non vengono toccate. Limiti: su Eden i DLC si accendono e si spengono tutti insieme; i pacchetti con più DLC e i DLC in formato XCI non si collegano a Ryujinx.
+
+### Migliorato
+
+- **Copertine nella lingua giusta**: se il file della ROM indica una sola regione (Italy, Germany…) si usa quell'edizione; se è «Europe», «World» o non dice nulla si preferisce l'edizione nella tua lingua, poi quella internazionale. Vale per le copertine di ScreenScraper, il riconoscimento con i database libretro e Wikipedia.
+- **Ricerca su Wikipedia più precisa**: dal titolo si tolgono edizioni e versioni («Game of the Year Edition», «Deluxe Edition», «v1.2»…) prima di cercare la pagina.
+- **Tabella «Emulatore per console» più leggibile**: in cima un riepilogo di quante console sono pronte e quante no, e le console da sistemare vengono per prime. Core e argomenti si vedono solo aprendo la riga della console. La sezione «Programmi» ora è richiudibile.
+- **Avanzamento delle attività**: nel pannello Attività, sotto la barra di un lavoro, compaiono le sue sotto-attività (scansione delle cartelle, hash, una per ogni fonte, immagini…), ognuna con la sua barra e il conteggio. La percentuale del lavoro è la media delle sotto-attività invece della somma dei loro elementi: «Cerca nuovi giochi» non resta più quasi al 100% mentre la ricerca dei dati è appena iniziata, e durante le fasi non misurabili (ricostruzione della libreria) la barra si muove invece di restare piena.
+- **Pulsantiera delle app nella Home**: le applicazioni aggiunte a mano mostrano la loro icona (presa dal .exe) su tasti in stile stream deck. Da «⚙ Personalizza» nel widget si scelgono dimensione, forma (arrotondati, quadrati, rotondi), stile (colori dell'icona, tinta unita, colore del tema) e se mostrare i nomi.
+
+### Corretto
+
+- **Barra «in corso» invisibile nel pannello Attività**: per i lavori di cui non si conosce l'avanzamento la barra animata restava vuota.
+- **Riconoscimento delle ROM per nome**: un gioco con lo stesso titolo ma un'altra regione poteva bloccare il riconoscimento con i database libretro (errore interno sulle regioni preferite).
+- **Build più affidabili**: un mirror di Ubuntu bloccato non ferma più la build per 20 minuti, e i test più pesanti hanno più tempo quando girano in parallelo.
+- **Giochi Battle.net e Riot che si fermavano al client**: Hearthstone, League of Legends, Teamfight Tactics e gli altri giochi Riot partono da soli appena il client è pronto, senza premere «Gioca». Se un gioco Battle.net o Riot è stato spostato, all'avvio Pozzo usa la cartella nuova.
+
 ## 0.20.1 (2026-11-19)
 ### Aggiunto
 

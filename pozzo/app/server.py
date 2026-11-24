@@ -746,6 +746,13 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                 r = win.create_file_dialog(kind, file_types=types)
                 return r[0] if r else None
 
+            def pick_files(self):
+                """Scelta di piu' file (BIOS, chiavi): lista di percorsi o None."""
+                win = webview.windows[0]
+                kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+                r = win.create_file_dialog(kind, allow_multiple=True)
+                return list(r) if r else None
+
             def login(self, store_id):
                 """Apre la pagina ufficiale di login (Epic/GOG) e cattura il codice di autorizzazione."""
                 import json as _json

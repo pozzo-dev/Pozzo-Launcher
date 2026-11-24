@@ -15,6 +15,7 @@ from __future__ import annotations
 from .. import matching
 from ..net import RateLimiter, Stop, request
 from ..scanner import Game
+from ..localize import regions_for
 from .base import Result, Source, pick_region
 
 API = "https://api.screenscraper.fr/api2/"
@@ -191,6 +192,7 @@ class ScreenScraper(Source):
 
     def _parse(self, j: dict, game: Game) -> Result:
         regions, langs = self.cfg.regions, self.cfg.languages
+        media_regions = regions_for(game, self.cfg)  # copertina nell'edizione del gioco o nella lingua dell'utente
         title = pick_region(j.get("noms", []), regions)
         if not title or "notgame" in title.lower() or title.lower() == "zzz":
             return Result()
@@ -226,6 +228,6 @@ class ScreenScraper(Source):
             for t in ss_types:
                 cands = [m for m in medias if m.get("type") == t and m.get("url")]
                 if cands:
-                    res.media[mtype] = pick_region(cands, regions, key_text="url")
+                    res.media[mtype] = pick_region(cands, media_regions, key_text="url")
                     break
         return res

@@ -18,45 +18,11 @@
 <label class="chk"><input type="checkbox" id="bp-start"> <span data-i18n="s.general.bpStart">Apri in Big Picture all'avvio</span></label>
 <p class="muted small" data-i18n-html="s.general.bpStartDesc">Utile per HTPC e console casalinga. Da riga di comando <code>--no-bigpicture</code> forza il desktop.</p>
 
-<h3 data-i18n="s.general.scHeading">Scorciatoie da tastiera</h3>
-<p class="muted small" data-i18n-html="s.general.scDesc">Ctrl (Windows) o Cmd (Mac) + K cerca, + , impostazioni, + 1/2/3 Libreria/Preferiti/Store.
-  Premi <code>?</code> per l'elenco completo.</p>
-<button class="btn" type="button" data-sc-open data-i18n="s.general.scOpen">⌨ Mostra e personalizza le scorciatoie…</button>
-
-<h3 data-i18n="b.hints.set.title">Suggerimenti</h3>
-<p class="muted small" data-i18n="b.hints.set.desc">Piccoli fumetti che ti fanno scoprire le funzioni: al massimo due a ogni avvio, mai ripetuti.</p>
-<p class="muted small" id="hint-count" aria-live="polite"></p>
-<div class="row wrap">
-  <select class="field" id="hint-mode" data-i18n-aria="b.hints.set.title"><option value="on" data-i18n="b.hints.set.on">Attivi</option>
-    <option value="day" data-i18n="b.hints.day">Silenzia per 1 giorno</option>
-    <option value="week" data-i18n="b.hints.set.week">Silenzia per 7 giorni</option><option value="off" data-i18n="b.hints.set.off">Disattiva per sempre</option></select>
-  <button class="btn" id="hint-reset" type="button" data-i18n="b.hints.set.reset">Rivedi tutti i suggerimenti</button>
-</div>
-
-<h3 data-i18n="s.general.tourHeading">Tour guidato</h3>
-<p class="muted small" data-i18n="s.general.tourDesc">Un breve percorso che mostra dove si trovano le funzioni principali.</p>
-<div class="row wrap"><button class="btn" id="tour-start" type="button" data-i18n="s.general.tourStart">Rivedi il tour</button></div>
-<label class="chk"><input type="checkbox" id="tour-auto"> <span data-i18n="s.general.tourAuto">Avvia il tour al primo avvio</span></label>
-
 <h3 data-i18n="s.general.notifyHeading">Notifiche di sistema</h3>
 <p class="muted small" data-i18n="s.general.notifyDesc">Un avviso quando un gioco scende sotto la soglia di prezzo, esce un gioco gratis,
   un port PC ha un aggiornamento o finisce una ricerca. Restano nel centro notifiche del sistema.</p>
 <label class="chk"><input type="checkbox" id="nt-on"> <span data-i18n="s.general.notifyOn">Attiva le notifiche</span></label>
 <p class="muted small" id="nt-state"></p>
-
-<h3 data-i18n="s.general.whHeading">Webhook</h3>
-<p class="muted small" data-i18n="s.general.whDesc">Invia una richiesta POST JSON a Home Assistant, Stream Deck o tuoi script.</p>
-<div id="wh-list"></div>
-<div class="row wrap"><button class="btn" id="wh-add" type="button" data-i18n="s.general.whAdd">＋ Aggiungi webhook</button>
-  <button class="btn" id="wh-save" type="button" data-i18n="s.general.whSave">Salva webhook</button><span class="muted small" id="wh-state"></span></div>
-
-<h3 data-i18n="s.general.gsHeading">Script globali</h3>
-<p class="muted small" data-i18n="s.general.gsDesc">Un comando per evento, eseguito con le variabili POZZO_GAME_ID, POZZO_TITLE, POZZO_PLATFORM, POZZO_EXE, POZZO_EVENT
-  (e POZZO_DOWNLOAD_NAME per i download). Gira sul tuo PC con i tuoi permessi.</p>
-<label><span data-i18n="s.general.gsStarted">Gioco avviato</span> <input class="field" id="gs-game_started"></label>
-<label><span data-i18n="s.general.gsStopped">Gioco chiuso</span> <input class="field" id="gs-game_stopped"></label>
-<label><span data-i18n="s.general.gsDl">Download finito</span> <input class="field" id="gs-download_finished"></label>
-<div class="row wrap"><button class="btn" id="gs-save" type="button" data-i18n="s.general.gsSave">Salva script</button></div>
 
 <div id="prof-section" hidden>
 <h3 data-i18n="s.general.profHeading">Profili utente</h3>
@@ -71,3 +37,24 @@
 <p class="muted small" data-i18n-html="s.general.profHint">Se spunti l'ultima casella, «Chi gioca?» non compare più su questo dispositivo: per cambiare utente usa il pulsante
   qui sopra, il menu in alto a destra o <kbd>Ctrl+P</kbd>. Toglila per tornare a scegliere a ogni avvio.</p>
 </div>
+
+<h3 data-i18n="s.general.helpHeading">Aiuto e scorciatoie</h3>
+<h4 data-i18n="s.general.scHeading">Scorciatoie da tastiera</h4>
+<p class="muted small" data-i18n-html="s.general.scDesc">Ctrl (Windows) o Cmd (Mac) + K cerca, + , impostazioni, + 1/2/3 Libreria/Preferiti/Store.
+  Premi <code>?</code> per l'elenco completo.</p>
+<button class="btn" type="button" data-sc-open data-i18n="s.general.scOpen">⌨ Mostra e personalizza le scorciatoie…</button>
+
+<h4 data-i18n="b.hints.set.title">Suggerimenti</h4>
+<p class="muted small" data-i18n="b.hints.set.desc">Piccoli fumetti che ti fanno scoprire le funzioni: al massimo due a ogni avvio, mai ripetuti.</p>
+<p class="muted small" id="hint-count" aria-live="polite"></p>
+<div class="row wrap">
+  <select class="field" id="hint-mode" data-i18n-aria="b.hints.set.title"><option value="on" data-i18n="b.hints.set.on">Attivi</option>
+    <option value="day" data-i18n="b.hints.day">Silenzia per 1 giorno</option>
+    <option value="week" data-i18n="b.hints.set.week">Silenzia per 7 giorni</option><option value="off" data-i18n="b.hints.set.off">Disattiva per sempre</option></select>
+  <button class="btn" id="hint-reset" type="button" data-i18n="b.hints.set.reset">Rivedi tutti i suggerimenti</button>
+</div>
+
+<h4 data-i18n="s.general.tourHeading">Tour guidato</h4>
+<p class="muted small" data-i18n="s.general.tourDesc">Un breve percorso che mostra dove si trovano le funzioni principali.</p>
+<div class="row wrap"><button class="btn" id="tour-start" type="button" data-i18n="s.general.tourStart">Rivedi il tour</button></div>
+<label class="chk"><input type="checkbox" id="tour-auto"> <span data-i18n="s.general.tourAuto">Avvia il tour al primo avvio</span></label>

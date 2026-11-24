@@ -11,7 +11,9 @@ PPSSPP, DuckStation, PCSX2, RPCS3, Vita3K, melonDS, Azahar, Cemu, Xenia Canary, 
 sola. La versione viene dalle release GitHub di ogni progetto; RetroArch, Dolphin e PPSSPP si scaricano dal loro sito
 ufficiale. Gli emulatori vanno nella cartella indicata sotto (altrimenti in `Emulatori`, accanto alle impostazioni).
 **↻ Aggiorna** installa la versione nuova sopra quella vecchia: configurazione e dati nella cartella dell'emulatore
-restano. **⬇ Scarica i core** prende dal buildbot di libretro i core di RetroArch che mancano alle console della
+restano. **🗑 Disinstalla** (solo per gli emulatori installati da Pozzo, non per quelli indicati a mano) toglie
+l'emulatore dopo una conferma; configurazione e salvataggi restano nella sua cartella, e reinstallandolo li ritrovi.
+Con l'emulatore aperto non si disinstalla. **⬇ Scarica i core** prende dal buildbot di libretro i core di RetroArch che mancano alle console della
 libreria. Ryujinx ed Eden non pubblicano su GitHub: si installano a mano. Su macOS e Linux l'installazione usa i pacchetti di ogni emulatore (.dmg o .app su macOS, AppImage su Linux). Dolphin non ha una build Linux, Xenia è solo Windows, Cemu su Mac è la versione Intel (gira con Rosetta).
 
 Gli emulatori sono dei loro sviluppatori: Pozzo scarica le build che pubblicano, senza modificarle, e ogni riga porta

@@ -117,9 +117,9 @@ function autosaveControl(element, save) {
 
 /* ------------------------------------------------------------------ impostazioni */
 const SETTINGS_CATS = [
-  ["generale", "Generale", "sliders"], ["aspetto", "Aspetto", "palette"], ["libreria", "Libreria", "books"],
-  ["fonti", "Fonti dati", "database"], ["store", "Store e account", "store"], ["download", "Download", "download"], ["emulatori", "Emulatori e avvio", "gamepad"],
-  ["controller", "Controller e telefono", "phone"], ["streaming", "Streaming", "wifi"],
+  ["generale", "Generale", "sliders"], ["aspetto", "Aspetto", "palette"], ["libreria", "Libreria e fonti", "books"],
+  ["store", "Store e account", "store"], ["emulatori", "Emulatori e avvio", "cartridge"], ["download", "Download", "download"],
+  ["controller", "Controller", "gamepad"], ["streaming", "Telefono e streaming", "phone"],
   ["integrazioni", "Integrazioni", "link"], ["estensioni", "Estensioni", "puzzle"],
   ["dati", "Dati e backup", "backup"], ["sistema", "Sistema", "monitor"],
 ];
@@ -130,6 +130,7 @@ const SETTINGS_ICONS = {
   database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/>',
   store: '<path d="M4 9h16l-1 12H5L4 9Z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',
   gamepad: '<path d="M7 8h10a4 4 0 0 1 3.8 5l-1 3.5a2 2 0 0 1-3.2 1L14 15h-4l-2.6 2.5a2 2 0 0 1-3.2-1L3.2 13A4 4 0 0 1 7 8Z"/><path d="M7 11v4m-2-2h4m6-1h.01M17 14h.01"/>',
+  cartridge: '<path d="M6 3h12v13l-2 5H8l-2-5V3Z"/><path d="M9 7h6m-6 4h6"/>',
   phone: '<rect x="6" y="2.5" width="12" height="19" rx="2"/><path d="M10 18.5h4"/>',
   wifi: '<path d="M3 9a14 14 0 0 1 18 0M6.5 12.5a9 9 0 0 1 11 0M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r=".8"/>',
   link: '<path d="M10 13.5 8.5 15a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0"/><path d="m14 10.5 1.5-1.5a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0"/><path d="m8.5 15 7-7"/>',
@@ -143,8 +144,8 @@ function settingsIcon(name) {
   return `<svg class="snav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${SETTINGS_ICONS[name] || SETTINGS_ICONS.monitor}</svg>`;
 }
 const SETTINGS_ALIASES = {
-  health: "sistema", about: "sistema", info: "sistema", scan: "libreria", src: "fonti",
-  acc: "store", emu: "emulatori", remote: "controller", integ: "integrazioni",
+  health: "sistema", about: "sistema", info: "sistema", scan: "libreria", src: "libreria", fonti: "libreria",
+  acc: "store", emu: "emulatori", remote: "streaming", phone: "streaming", integ: "integrazioni",
   look: "aspetto", lib: "dati", downloads: "download",
 };
 const SET = { tab: "generale", emu: null, preview: null, platforms: null, extraEmus: [], lastStatus: null };
@@ -156,6 +157,7 @@ function settingsCategory(id) {
 
 async function loadSettingsMarkup() {
   const body = $("#settings-body");
+  await GSI18n.ready; // la riga della prova controller usa t(): senza catalogo mostrerebbe le chiavi
   await Promise.all(SETTINGS_CATS.map(async ([id]) => {
     const pane = document.createElement("section");
     pane.className = "settings-pane";
@@ -164,7 +166,8 @@ async function loadSettingsMarkup() {
     body.appendChild(pane);
     const response = await fetch(`/static/settings/${id}.html?v=${encodeURIComponent(document.documentElement.dataset.v || "")}`);
     if (!response.ok) throw new Error(t("e.settings.loadFailed", { id, status: response.status }));
-    pane.innerHTML = await response.text();
+    pane.innerHTML = `<p class="spane-desc muted" data-i18n="e.catd.${id}"></p>` + await response.text();
+    groupSettings(pane);
   }));
   const test = $("#pads-test-btn"), slot = $("#pads-test-setting");
   if (test && slot) slot.replaceWith(settingsRow(
@@ -173,6 +176,52 @@ async function loadSettingsMarkup() {
     test,
   ));
   renderSettingsNav();
+}
+
+/* Ogni titolo h3 con quello che lo segue diventa un riquadro, e ogni casella da sola diventa una riga
+ * «testo a sinistra, interruttore a destra» con la sua spiegazione: si vede sempre cosa si sta cambiando. */
+function groupSettings(box) {
+  let group = null;
+  for (const el of [...box.children]) {
+    if (el.tagName === "SUMMARY" || el.classList.contains("spane-desc")) continue;
+    if (el.matches("details.sadv")) {
+      group = null;
+      groupSettings(el);
+      const n = el.querySelectorAll(":scope > .sgroup").length;
+      el.querySelector("summary").insertAdjacentHTML("beforeend", ` <span class="sadv-n">${n}</span>`);
+      continue;
+    }
+    if (el.firstElementChild?.tagName === "H3" && el.tagName !== "LABEL") { // blocchi gia' raggruppati (profili, differenze di sistema)
+      el.classList.add("sgroup");
+      switchRows(el);
+      group = null;
+      continue;
+    }
+    if (el.tagName === "H3" || !group) {
+      group = document.createElement("section");
+      group.className = "sgroup";
+      el.before(group);
+    }
+    group.append(el);
+  }
+  box.querySelectorAll(":scope > .sgroup").forEach(switchRows);
+}
+
+function switchRows(group) {
+  for (const label of group.querySelectorAll(":scope > label.chk")) {
+    const input = label.querySelector("input[type=checkbox]");
+    if (!input) continue;
+    const row = document.createElement("div");
+    row.className = "sw-row";
+    label.before(row);
+    row.append(label);
+    const desc = row.nextElementSibling;
+    if (desc?.matches("p.muted.small:not([id])")) {
+      desc.id = `${input.id || "sw-" + Math.random().toString(36).slice(2)}-desc`;
+      input.setAttribute("aria-describedby", [input.getAttribute("aria-describedby"), desc.id].filter(Boolean).join(" "));
+      row.append(desc);
+    }
+  }
 }
 
 function settingsRow(title, description, control, status) {
@@ -271,15 +320,14 @@ function showTab(tab) {
     ? (GS.ui.settingsTabs.find((x) => `ext:${x.id}` === id)?.label || t("e.settings.extension"))
     : t("e.cat." + id);
   $("#settings-body").scrollTop = 0;
-  if (id === "generale") { loadPower(); loadNotify(); loadWebhooks(); loadGlobalScripts(); loadProfilesSettings(); loadHints(); loadTour(); }
+  if (id === "generale") { loadPower(); loadNotify(); loadProfilesSettings(); loadHints(); loadTour(); }
   else if (id === "download") loadDownloadSettings();
   else if (id === "sistema") { loadHealth(); loadAbout(); loadSystemErrors(); }
-  else if (id === "libreria") { loadScan(); loadSources(); renderCustomConsoles(); watchStatusStart(); api("/api/status").then(showStatus); }
-  else if (id === "fonti") { loadSources(); pollHltb(); pollCollart(); }
+  else if (id === "libreria") { loadScan(); loadSources(); renderCustomConsoles(); watchStatusStart(); api("/api/status").then(showStatus); pollHltb(); pollCollart(); }
   else if (id === "store") { loadAccounts(); loadPcStores(); loadSteamExport(); }
-  else if (id === "emulatori") loadEmu();
-  else if (id === "controller" || id === "streaming") { loadRemote(); if (id === "controller") loadLibShare(); }
-  else if (id === "integrazioni") loadIntegrations();
+  else if (id === "emulatori") { loadEmu(); loadDownloadSettings(); } // Switch 2 salva tra le impostazioni dei download
+  else if (id === "streaming") { loadRemote(); loadLibShare(); }
+  else if (id === "integrazioni") { loadIntegrations(); loadWebhooks(); loadGlobalScripts(); loadApiToken(); }
   else if (id === "aspetto" || id === "estensioni") { loadAppearance(); if (id === "aspetto") initUiPrefs(); }
   else if (id === "dati") { loadBackups(); loadSync(); loadSaveDir(); loadMaintenance(); }
   else if (id.startsWith("ext:")) stopPadTest();
@@ -494,6 +542,8 @@ function initSettingsLayout() {
     history.pushState({ settings: category }, "", `#settings/${category}`);
     showTab(category);
     const target = document.getElementById(result.dataset.settingsTarget);
+    const adv = target?.closest("details.sadv");
+    if (adv) adv.open = true; // l'opzione trovata puo' stare tra le avanzate chiuse
     target?.scrollIntoView({ block: "center" });
     target?.classList.add("flash");
     setTimeout(() => target?.classList.remove("flash"), 1200);
@@ -841,12 +891,15 @@ async function loadAbout() {
     $("#about-data").textContent = t("e.about.dataIn", { dir: a.data_dir });
     $("#about-log").innerHTML = a.changelog ? miniMd(a.changelog) : `<p class="muted">${t("e.about.noChangelog")}</p>`;
   } catch (e) { toast(e.message, true); }
-  try {
-    const t = await api("/api/api-token");
-    $("#api-token").value = t.token;
-    $("#api-url").textContent = window.t("e.about.apiUrl", { url: t.url, file: t.file });
-  } catch { /* niente: la scheda Info funziona lo stesso */ }
   checkUpdate(false, true);
+}
+
+async function loadApiToken() {
+  try {
+    const r = await api("/api/api-token");
+    $("#api-token").value = r.token;
+    $("#api-url").textContent = t("e.about.apiUrl", { url: r.url, file: r.file });
+  } catch { /* niente: il resto di Integrazioni funziona lo stesso */ }
 }
 
 async function checkUpdate(force = false, show = false) {
@@ -1471,8 +1524,11 @@ function renderScanJob(js) {
 function setScanRunning(on) {
   $("#scan-start").hidden = on;
   $("#scan-cancel").hidden = !on;
-  $("#scan-btn").classList.toggle("busy", on);
-  $("#scan-btn").textContent = on ? t("e.scan.scraping") : t("e.scan.newGames");
+  const b = $("#scan-btn");
+  b.classList.toggle("busy", on);
+  // solo l'etichetta: l'icona resta (prima il testo intero sostituiva anche quella)
+  const lbl = b.querySelector("[data-i18n]") || b;
+  lbl.textContent = on ? t("e.scan.scraping") : t("a.toolbar.newGames");
 }
 
 let scanTimer = 0;

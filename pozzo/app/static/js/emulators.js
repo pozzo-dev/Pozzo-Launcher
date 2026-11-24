@@ -35,18 +35,23 @@ function renderEmu(d, draft) {
     + `<tr><td class="muted">${t("i.emu.core")}</td><td><input class="field" id="ra-cores" value="${esc(draft && draft.retroarch_cores !== undefined ? draft.retroarch_cores : d.retroarch_cores || "")}" `
     + `placeholder="${t("i.emu.cores.placeholder")}"></td><td></td></tr></table>`;
   const known = [...new Set([...d.known, ...names])].sort();
-  $("#emu-table").innerHTML = `<table class="emu"><tr><th>${t("i.emu.col.console")}</th><th style="width:160px">${t("i.emu.col.emulator")}</th><th style="width:150px">${t("i.emu.col.core")}</th><th>${t("i.emu.col.args")}</th><th style="width:180px">${t("i.emu.col.status")}</th></tr>`
-    + d.platforms.map((p) => {
+  // console da sistemare in cima (sort stabile): sono quelle per cui l'utente apre la pagina
+  const plats = [...d.platforms].sort((x, y) => !!x.effective - !!y.effective);
+  const bad = plats.filter((p) => !p.effective).length;
+  $("#emu-table").innerHTML = `<p class="small emu-sum" role="status">${t("i.emu.summary", { ok: plats.length - bad, bad })}</p>`
+    + `<table class="emu"><tr><th>${t("i.emu.col.console")}</th><th style="width:200px">${t("i.emu.col.emulator")}</th><th style="width:200px">${t("i.emu.col.status")}</th></tr>`
+    + plats.map((p) => {
       const dp = draft && draft.platforms[p.platform] ? draft.platforms[p.platform] : { emulator: p.emulator, core: p.core, args: p.args };
       const rec = new Set(p.candidates.map((c) => c.split(" ")[0]));
       const opts = [`<option value="">${t("i.emu.auto")}</option>`,
         ...known.map((k) => `<option value="${esc(k)}" ${k === dp.emulator ? "selected" : ""}>${esc(k)}${rec.has(k) ? " ★" : ""}</option>`),
         `<option value="__new">${t("i.emu.other")}</option>`].join("");
       const status = p.effective ? `<span class="status-ok">✓ ${esc(p.effective)}</span>` : `<span class="status-bad">${esc(p.problem || t("i.emu.notConfigured"))}</span>`;
-      return `<tr data-p="${esc(p.platform)}"${p.effective ? "" : " data-open"}><td><button class="emu-more" type="button" aria-expanded="${p.effective ? "false" : "true"}">${esc(p.name)}</button><div class="muted small">${t("i.emu.recommended", { list: esc(p.candidates.join(", ") || "—") })}</div></td>`
-        + `<td><select class="field emu-sel">${opts}</select></td>`
-        + `<td><input class="field emu-core" value="${esc(dp.core)}" placeholder="${esc(p.default_core)}"></td>`
-        + `<td><input class="field emu-args" value="${esc(dp.args)}" placeholder="${esc(p.default_args)}"></td><td>${status}</td></tr>`;
+      // core e argomenti restano nella riga (li legge collectEmu) ma si vedono solo a riga aperta
+      return `<tr data-p="${esc(p.platform)}" data-name="${esc(p.name)}"${p.effective ? "" : " data-open"}><td><button class="emu-more" type="button" aria-expanded="${p.effective ? "false" : "true"}">${esc(p.name)}</button><div class="muted small">${t("i.emu.recommended", { list: esc(p.candidates.join(", ") || "—") })}</div>`
+        + `<div class="emu-adv"><label class="small"><span class="muted">${t("i.emu.col.core")}</span><input class="field emu-core" value="${esc(dp.core)}" placeholder="${esc(p.default_core)}"></label>`
+        + `<label class="small"><span class="muted">${t("i.emu.col.args")}</span><input class="field emu-args" value="${esc(dp.args)}" placeholder="${esc(p.default_args)}"></label></div></td>`
+        + `<td><select class="field emu-sel" aria-label="${esc(p.name)}">${opts}</select></td><td>${status}</td></tr>`;
     }).join("") + `</table>`;
 }
 
@@ -55,21 +60,75 @@ async function renderEmuInstall() {
   try { d = await api("/api/emulators/catalog"); } catch (e) { return toast(e.message, true); }
   const cores = d.cores.length ? `<div class="row"><span class="muted small grow">${t("i.emu.coresMissing", { list: esc(d.cores.join(", ")) })}</span>`
     + `<button class="btn" data-emu-cores ${d.retroarch ? "" : "disabled title=\"" + t("i.emu.installRetroarchFirst") + "\""}>⬇ ${t("i.emu.downloadCores")}</button></div>` : "";
-  // gia' installati in cima, senza build per questo processore in fondo; per il resto l'ordine del catalogo
-  const rank = (x) => (x.version ? 0 : x.arch_ok === false ? 2 : 1);
-  const items = [...d.items].sort((a, b) => rank(a) - rank(b));
-  const state = (x) => (x.version ? `<span class="status-ok">✓ ${esc(x.version)}</span>`
-    : x.arch_ok === false ? `<span class="muted" id="emu-arch-${esc(x.id)}">${t("i.emu.wrongArch", { arch: esc(d.arch) })}</span>`
-    : x.configured ? `<span class="muted">${t("i.emu.alreadySet")}</span>` : "—");
-  // senza build per questo processore il pulsante resta, disattivato e legato al motivo scritto accanto
-  const btn = (x) => (x.arch_ok === false
-    ? `<button class="btn" type="button" disabled aria-describedby="emu-arch-${esc(x.id)}">⬇ ${t("i.common.install")}</button>`
-    : `<button class="btn" type="button" data-emu-inst="${esc(x.id)}">${x.version ? "↻ " + t("i.common.update") : "⬇ " + t("i.common.install")}</button>`);
-  $("#emu-inst").innerHTML = `<table class="emu emu-inst"><tr><th style="width:150px">${t("i.emu.col.emulator")}</th><th>${t("i.emu.col.console")}</th><th style="width:150px">${t("i.common.installed")}</th><th style="width:120px"></th></tr>`
-    + items.map((x) => `<tr><td><a href="#" data-open="${esc(x.home)}">${esc(x.id)} ↗</a><div class="muted small">${esc(x.repo)}</div></td>`
-      + `<td class="small"><div class="emu-cons" title="${esc(x.consoles.join(", "))}">${esc(x.consoles.join(", ") || "—")}</div></td><td class="small">${state(x)}</td>`
-      + `<td>${btn(x)}</td></tr>`).join("")
-    + `</table>${cores}<p class="muted small">${t("i.emu.defaultDir", { dir: esc(d.dir) })}</p>`;
+  // vetrina come uno store: installati, disponibili, e in fondo (chiusi) quelli senza build per questo processore
+  const shelves = [
+    [t("i.emu.store.installed"), d.items.filter((x) => x.installed)],
+    [t("i.emu.store.available"), d.items.filter((x) => !x.installed && x.arch_ok !== false)],
+  ];
+  const blocked = d.items.filter((x) => !x.installed && x.arch_ok === false);
+  const shelf = ([title, list]) => (list.length ? `<section class="emu-shelf"><h4 class="emu-shelf-h">${esc(title)} <span class="muted">${list.length}</span></h4>
+    <div class="emu-cards">${list.map((x) => emuCard(x, d)).join("")}</div></section>` : "");
+  $("#emu-inst").innerHTML = shelves.map(shelf).join("")
+    + (blocked.length ? `<details class="emu-shelf emu-fold"><summary>${t("i.emu.store.unavailable", { arch: esc(d.arch) })} <span class="muted">${blocked.length}</span></summary>
+      <div class="emu-cards">${blocked.map((x) => emuCard(x, d)).join("")}</div></details>` : "")
+    + `${cores}<p class="muted small">${t("i.emu.defaultDir", { dir: esc(d.dir) })}</p>`;
+  markEmuUpdates();
+}
+
+// nomi come li scrivono i progetti (l'id del catalogo e' in minuscolo)
+const EMU_NAMES = { azahar: "Azahar", cemu: "Cemu", dolphin: "Dolphin", "dosbox-staging": "DOSBox Staging", duckstation: "DuckStation",
+  eden: "Eden", eglantine: "Eglantine", flycast: "Flycast", melonds: "melonDS", mesen: "Mesen", mgba: "mGBA", openemu: "OpenEmu",
+  pcsx2: "PCSX2", ppsspp: "PPSSPP", retroarch: "RetroArch", rmg: "Rosalie's Mupen GUI", rpcs3: "RPCS3", ryujinx: "Ryujinx",
+  shadps4: "shadPS4", vita3k: "Vita3K", xemu: "xemu", xenia: "Xenia Canary" };
+
+function emuCard(x, d) {
+  const name = EMU_NAMES[x.id] || x.id;
+  const aboutKey = `i.emu.about.${x.id}`;
+  const about = t(aboutKey) === aboutKey ? "" : t(aboutKey);
+  const hue = [...x.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);  // colore stabile per l'iniziale
+  const ver = x.installed ? `<span class="emu-ver">${esc(x.version || t("i.common.installed"))}</span>` : "";
+  const note = x.arch_ok === false ? `<p class="emu-note" id="emu-arch-${esc(x.id)}">${t("i.emu.wrongArch", { arch: esc(d.arch) })}</p>`
+    : !x.installed && x.configured ? `<p class="emu-note">${t("i.emu.alreadySet")}</p>` : "";
+  // installato: «Aggiorna» resta secondario finche' non c'e' davvero una versione nuova (markEmuUpdates)
+  const main = x.arch_ok === false
+    ? `<button class="btn" type="button" disabled aria-describedby="emu-arch-${esc(x.id)}">${ic("download")} ${t("i.common.install")}</button>`
+    : x.installed
+      ? `<button class="btn" type="button" data-emu-inst="${esc(x.id)}">${ic("refresh")} ${t("i.common.update")}</button>`
+      : `<button class="btn primary" type="button" data-emu-inst="${esc(x.id)}">${ic("download")} ${t("i.common.install")}</button>`;
+  // solo quelli installati da Pozzo: quelli indicati a mano non si toccano
+  const remove = x.installed ? `<button class="btn emu-remove" type="button" data-emu-uninst="${esc(x.id)}" title="${esc(t("i.emu.uninstall_tip"))}"
+    aria-label="${esc(t("i.emu.uninstall"))} ${esc(name)}">${ic("trash")}<span>${t("i.emu.uninstall")}</span></button>` : "";
+  return `<article class="emu-card${x.installed ? " is-installed" : ""}" data-emu-card="${esc(x.id)}">
+    <div class="emu-ic" style="--emu-hue:${hue}"><span aria-hidden="true">${esc(name.charAt(0))}</span>
+      <img src="/api/emulators/icon/${encodeURIComponent(x.id)}" alt="" loading="lazy" data-onerr="remove"></div>
+    <div class="emu-meta">
+      <div class="emu-title"><b>${esc(name)}</b>${ver}</div>
+      ${about ? `<p class="emu-about">${esc(about)}</p>` : ""}
+      ${x.consoles.every((c) => about.includes(c)) ? "" : `<p class="emu-cons" title="${esc(x.consoles.join(", "))}">${esc(x.consoles.join(" · "))}</p>`}
+      ${note}
+    </div>
+    <div class="emu-actions">${main}${remove}
+      <a href="#" class="emu-site" data-open="${esc(x.home)}">${t("i.emu.site")} ${ic("external")}</a></div>
+  </article>`;
+}
+
+// versioni nuove (controllo in cache 12 ore): «Aggiorna» diventa il pulsante principale con la versione
+async function markEmuUpdates() {
+  let r;
+  try { r = await api("/api/emulators/updates"); } catch { return; }
+  for (const u of r.updates || []) {
+    const card = document.querySelector(`.emu-card[data-emu-card="${CSS.escape(u.id)}"]`);
+    if (!card) continue;
+    const b = card.querySelector("[data-emu-inst]");
+    const v = card.querySelector(".emu-ver");
+    if (u.update && b) {
+      b.classList.add("primary");
+      b.innerHTML = `${ic("download")} ${esc(t("i.emu.updateTo", { v: u.latest }))}`;
+      v?.insertAdjacentHTML("afterend", `<span class="emu-new">${esc(t("i.emu.newVersion"))}</span>`);
+    } else if (b && u.latest) {
+      b.title = t("i.emu.upToDate");
+    }
+  }
 }
 
 async function followEmuJob() {

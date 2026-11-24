@@ -1,3 +1,4 @@
+<h3 data-i18n="k.lib.h.roms">Cartelle ROM</h3>
 <p class="muted"><span data-i18n="k.lib.rom.folder">Cartella ROM:</span> <code id="scan-root"></code> <button class="btn" id="roms-change" type="button" data-i18n="k.lib.rom.change">📁 Cambia…</button>
   <button class="btn" id="setup-open" type="button" title="Cartella ROM, store PC e account delle fonti, passo per passo" data-i18n-title="k.lib.setup.tip" data-i18n="k.lib.setup.btn">🧭 Configurazione guidata</button>
   <span data-i18n="k.lib.rom.hint">— le console vengono riconosciute dal nome della cartella. Lo scraping interroga solo i giochi mai cercati prima, quindi è veloce anche su librerie grandi.</span></p>
@@ -43,6 +44,45 @@
 <pre id="build-log" class="log"></pre>
 <p class="muted" id="thumbs-info"></p>
 
+<h3 data-i18n="k.fonti.h.order">Fonti dei dati</h3>
+<p class="muted" data-i18n-html="k.fonti.intro">Le fonti vengono usate <b>in quest'ordine</b>: ognuna interroga solo i giochi a cui manca ancora
+  qualcosa. Metti prima quelle <b>offline</b> (nessuna richiesta ai siti) e dopo quelle online con quote.
+  I limiti valgono anche tra un'esecuzione e l'altra; in caso di errori ripetuti la fonte va in pausa da sola.</p>
+<details class="emu-fold"><summary data-i18n="k.lib.how.title">Come funziona la ricerca dei dati</summary>
+<ul class="small how-list">
+  <li data-i18n-html="k.lib.how.what"></li>
+  <li data-i18n-html="k.lib.how.where"></li>
+  <li data-i18n-html="k.lib.how.fallback"></li>
+  <li data-i18n-html="k.lib.how.lang"></li>
+  <li data-i18n-html="k.lib.how.start"></li>
+</ul></details>
+<table class="emu"><thead><tr><th style="width:56px"></th><th data-i18n="k.fonti.col.source">Fonte</th><th style="width:130px" data-i18n="k.fonti.col.today">Oggi / mese</th>
+  <th style="width:90px" title="richieste al secondo" data-i18n-title="k.fonti.col.rate_tip" data-i18n="k.fonti.col.rate">Ritmo/s</th><th style="width:100px" data-i18n="k.fonti.col.maxday">Max/giorno</th><th style="width:100px" data-i18n="k.fonti.col.maxmonth">Max/mese</th></tr></thead>
+  <tbody id="src-table"></tbody></table>
+<div class="row"><label class="lbl-field grow"><span data-i18n="k.fonti.rawg.label">Chiave RAWG (valutazioni e Metacritic, gratuita)</span>
+  <span class="row tight"><input class="field grow" id="rawg-key" placeholder="incolla la chiave" data-i18n-placeholder="k.fonti.rawg.ph">
+  <a href="#" data-open="https://rawg.io/apidocs" data-i18n="k.fonti.rawg.get">Ottieni la chiave</a>
+  <button class="btn" id="rawg-save" type="button" data-i18n="k.fonti.rawg.save">Salva chiave</button></span></label></div>
+<h3 data-i18n="k.fonti.h.dbs">Database locali</h3>
+<p class="muted small" data-i18n="k.fonti.dbs.p">Scaricati per intero una volta a settimana/mese: poi tutte le ricerche sono locali, senza richieste.</p>
+<div id="bulk-list"></div>
+<pre class="log" id="bulk-log"></pre>
+<h3 data-i18n="k.fonti.h.hltb">Durate dei giochi (HowLongToBeat)</h3>
+<p class="muted small" data-i18n="k.fonti.hltb.p">Quanto serve per finire la storia, la storia con gli extra e il 100%. Prima i tempi ufficiali di IGDB
+  per i giochi già collegati (500 per richiesta, pochi secondi), poi HowLongToBeat per gli altri: circa 50 giochi al minuto
+  (il massimo che il sito accetta), iniziando dai giochi che hai giocato e dai più popolari. Cache di 6 mesi.</p>
+<div class="row"><span id="hltb-info" class="muted small grow"></span>
+  <button class="btn" id="hltb-missing" data-i18n="k.common.search_missing">Cerca le mancanti</button><button class="btn" id="hltb-all" data-i18n="k.common.update_all">Aggiorna tutte</button>
+  <button class="btn" id="hltb-stop" hidden data-i18n="k.common.stop">■ Interrompi</button></div>
+<div id="hltb-progress" class="job-progress"></div>
+<h3 data-i18n="k.fonti.h.coll">Immagini delle collezioni</h3>
+<p class="muted small" data-i18n="k.fonti.coll.p">Logo e copertina di ogni saga da Wikipedia (una richiesta alla volta, in sottofondo all'avvio);
+  dove manca si usano le immagini dei giochi della collezione.</p>
+<div class="row"><span id="collart-info" class="muted small grow"></span>
+  <button class="btn" id="collart-missing" data-i18n="k.common.search_missing">Cerca le mancanti</button><button class="btn" id="collart-all" data-i18n="k.common.update_all">Aggiorna tutte</button>
+  <button class="btn" id="collart-stop" hidden data-i18n="k.common.stop">■ Interrompi</button></div>
+  <div id="collart-progress" class="job-progress"></div>
+
 <h3 data-i18n="k.lib.imp.title">Importa da un altro launcher</h3>
 <div class="row">
   <select id="imp-fmt" class="field">
@@ -57,3 +97,14 @@
 </div>
 <p class="muted small" data-i18n="k.lib.imp.note">Porta giochi gia' presenti, tempo di gioco, preferiti e raccolte. Non copia mai file di gioco e non cancella nulla.</p>
 <p class="muted small" id="imp-out"></p>
+
+<details class="sadv"><summary><span data-i18n="e.settings.advanced">Opzioni avanzate</span></summary>
+<h3 data-i18n="k.sys.h.downloaded">Dati scaricati</h3>
+<p class="muted small"><span data-i18n="k.sys.storage.p">Metadati, copertine e cache: dove stanno e quanto pesano.</span> <button class="btn" id="storage-go" data-i18n="k.sys.btn.calc">⟳ Calcola</button></p>
+<div id="storage-box" class="small"></div>
+
+<h3 data-i18n="k.sys.h.cache">Cache delle fonti</h3>
+<p class="muted small"><span data-i18n="k.sys.cache.p">Risposte di RAWG, IGDB, HowLongToBeat e delle altre fonti, più il database LaunchBox. Svuotarle le fa riscaricare al prossimo uso.</span>
+  <button class="btn" id="csrc-go" data-i18n="k.sys.btn.show">⟳ Mostra</button> <button class="btn" id="csrc-clear-all" data-i18n="k.sys.btn.clear_all">Svuota tutte</button></p>
+<div id="csrc-box" class="small"></div>
+</details>

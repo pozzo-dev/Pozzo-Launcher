@@ -126,6 +126,14 @@ async def _download_images(cfg, cache, client, games: list[dict], log, progress=
     jobs = []
     for g in games:
         g.setdefault("media", {})
+        # app e giochi aggiunti a mano: l'icona e' quella del loro .exe (per la pulsantiera delle app)
+        ln = g.get("launch") or {}
+        if g["store"] == "manual" and ln.get("type") == "exe" and not g["media"].get("icon"):
+            from ..library.shortcut import exe_icon
+            safe = f"manual_{g['id']}".replace(":", "_")
+            p = exe_icon(Path(ln["target"]), media_dir / "icon" / f"{safe}.png")
+            if p:
+                g["media"]["icon"] = p.relative_to(cache.folder).as_posix()
         for kind in ("cover", "hero", "logo", "header", "icon"):
             url = g["images"].get(kind)
             if not url or g["media"].get(kind):
@@ -214,6 +222,16 @@ async def refresh(cfg, cache, log=print, only: list[str] | None = None, progress
                 s["installed"] += sum(1 for g in games if g["installed"])
     cache.kv_set("stores:refreshed", time.time())
     return summary
+
+
+def current_install(cfg, g: dict) -> dict:
+    """Cartella e avvio aggiornati di un gioco spostato dopo l'ultima lettura dello store: senza la cartella giusta
+    il launcher non vede il gioco partire. Solo Battle.net e Riot, che si leggono dal registro senza rete."""
+    if g.get("store") not in ("battlenet", "riot") or Path(g.get("install_dir") or "?").is_dir():
+        return g
+    prov = provider(g["store"], cfg, None, None, lambda *a: None)
+    s = next((s for s in asyncio.run(prov.fetch()) if s.installed and g["key"].endswith(f":{s.id}")), None)
+    return {**g, "install_dir": s.install_dir, "launch": s.launch} if s else g
 
 
 def provider(pid: str, cfg, cache, client, log=print):

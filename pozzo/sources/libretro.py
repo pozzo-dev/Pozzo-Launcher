@@ -21,6 +21,7 @@ from urllib.parse import quote
 
 from .. import matching
 from ..net import RateLimiter, request
+from ..localize import regions_for
 from ..scanner import Game, clean_title, hash_games, regions_of
 from .base import Result, Source
 
@@ -130,7 +131,7 @@ class Index:
                 return self.by_name[stem.lower()], "name", ""
         cands = self.by_norm.get(matching.normalize(game.stem))
         if cands:
-            want = regions_of(game.stem) + regions
+            want = regions_of(game.stem) + list(regions)  # il default e' una tupla
             def rank(n):
                 rs = regions_of(n)
                 return min((want.index(r) for r in rs if r in want), default=99), len(n)
@@ -239,7 +240,7 @@ class Libretro(Source):
             verification = idx.verify(g)
             g.verify_status = verification["status"]
             g.data["verify_status"] = verification["status"]
-            matched = idx.identify_match(g, self.cfg.regions)
+            matched = idx.identify_match(g, regions_for(g, self.cfg))
             if matched:
                 name, g.match_by, _ = matched
                 g.data["match_by"] = g.match_by
@@ -253,7 +254,7 @@ class Libretro(Source):
         idx = self.indexes[game.platform.id]
         verification = idx.verify(game)
         game.verify_status = verification["status"]
-        matched = idx.identify_match(game, self.cfg.regions)
+        matched = idx.identify_match(game, regions_for(game, self.cfg))
         res = Result()
         name = matched[0] if matched else None
         game.match_by = matched[1] if matched else ""

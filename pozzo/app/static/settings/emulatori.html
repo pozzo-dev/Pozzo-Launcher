@@ -1,17 +1,8 @@
-<nav class="emu-nav">
-  <button class="btn" type="button" data-goto="emu-s-inst" data-i18n="j.emu.inst.title">Installa emulatori</button>
-  <button class="btn" type="button" data-goto="emu-s-det" data-i18n="j.emu.det.title">Emulatori già installati</button>
-  <button class="btn" type="button" data-goto="emu-s-table" data-i18n="j.emu.table.title">Emulatore per console</button>
-  <button class="btn" type="button" data-goto="emu-s-launch" data-i18n="j.emu.launch.title">Avvio dei giochi</button>
-</nav>
-<section class="emu-sec" id="emu-s-inst">
 <h3 data-i18n="j.emu.inst.title">Installa emulatori</h3>
 <p class="muted small" data-i18n="j.emu.inst.desc">Scarica l'ultima versione ufficiale dalle release dei progetti e la imposta da sola. Gli emulatori
   sono dei loro sviluppatori: il link porta a ciascun progetto. Vanno nella cartella qui sotto, se indicata.</p>
 <div id="emu-inst"></div>
 <div id="emu-inst-job"></div>
-</section>
-<section class="emu-sec" id="emu-s-det">
 <h3 data-i18n="j.emu.det.title">Emulatori già installati</h3>
 <div class="row">
   <input id="emu-folder" class="field grow" placeholder="Cartella che contiene gli emulatori, es. C:\Emulatori" data-i18n-placeholder="j.emu.det.folder.ph">
@@ -20,12 +11,11 @@
 </div>
 <div class="row"><button class="btn" id="emu-scan" data-i18n="j.emu.det.scan">Cerca emulatori già installati</button></div>
 <div id="emu-found" class="small"></div>
-<h3 data-i18n="j.emu.prog.title">Programmi</h3>
+<details class="emu-fold"><summary data-i18n="j.emu.prog.title">Programmi</summary>
 <p class="muted small" data-i18n="j.emu.prog.desc">Un percorso per emulatore: vale per tutte le console che lo usano.</p>
 <div id="emu-paths"></div>
 <div class="row"><button class="btn" id="emu-add">＋ <span data-i18n="j.emu.prog.add">Aggiungi un altro emulatore</span></button></div>
-</section>
-<section class="emu-sec" id="emu-s-table">
+</details>
 <h3 data-i18n="j.emu.table.title">Emulatore per console</h3>
 <p class="muted small" data-i18n-html="j.emu.table.desc">«Automatico» usa il primo emulatore installato tra quelli consigliati. Negli argomenti
   <code>{rom}</code> è il file del gioco, <code>{core}</code> il core di RetroArch.</p>
@@ -34,21 +24,6 @@
   <span class="muted small" id="emu-saved-to"></span>
   <button class="btn primary" id="emu-save" data-i18n="j.common.save">Salva</button>
 </div>
-</section>
-<section class="emu-sec">
-<details class="emu-fold"><summary data-i18n="j.emu.upd.title">Aggiornamenti degli emulatori</summary>
-<label class="small" for="emu-au-mode" data-i18n="j.emu.upd.auto">Aggiornamento automatico emulatori</label>
-<div class="row"><select id="emu-au-mode" class="field grow">
-  <option value="off" data-i18n="j.emu.upd.off">Disattivato</option>
-  <option value="notify" data-i18n="j.emu.upd.notify">Solo avviso</option>
-  <option value="install" data-i18n="j.emu.upd.install">Installa automaticamente</option>
-</select></div>
-<p class="muted small" data-i18n="j.emu.upd.desc">Controlla una volta al giorno. Un emulatore aperto non viene aggiornato: si riprova il giorno dopo.</p>
-<div class="row"><button class="btn" id="emu-upd-check" type="button">🔄 <span data-i18n="j.emu.upd.check">Controlla ora</span></button></div>
-<div id="emu-upd" class="small" role="status" aria-live="polite"></div>
-</details>
-</section>
-<section class="emu-sec" id="emu-s-launch">
 <h3 data-i18n="j.emu.launch.title">Avvio dei giochi</h3>
 <p class="muted small" data-i18n-html="j.emu.launch.desc">Script eseguiti per <b>tutti</b> i giochi (console e PC), ad esempio per cambiare risoluzione o
   attivare l'HDR. Un comando o un file <code>.bat</code>/<code>.ps1</code>; ricevono <code>POZZO_TITLE</code> e
@@ -60,7 +35,47 @@
 <label class="chk"><input type="checkbox" id="ln-close"> <span data-i18n="j.emu.launch.close">Chiudi il launcher dello store (Steam, Epic, GOG Galaxy,
   Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco</span></label>
 <label class="chk"><input type="checkbox" id="ln-splash" checked> <span data-i18n="j.emu.launch.splash">Mostra uno splash all'avvio dei giochi</span></label>
+<label class="chk"><input type="checkbox" id="pl-proto"> <span data-i18n="j.emu.proto.label">Registra il link pozzo:// su Windows</span></label>
+<p class="muted small" data-i18n="j.emu.proto.desc">Permette di aprire un invito ricevuto da un amico cliccando il link. Si può disattivare in ogni momento.</p>
 <div class="row end"><button class="btn primary" id="ln-save" type="button" data-i18n="j.common.save">Salva</button></div>
+
+<h3 data-i18n="j.s2.title">Switch 2</h3>
+<p class="muted small" data-i18n="j.s2.desc">Converte i giochi Switch 2 già in chiaro tra cartella (exefs/romfs), NSP e NUP. Serve Eglantine 2.5.0 o successiva.
+  Pozzo non usa chiavi e non decifra: gli NSP retail o cifrati vengono rifiutati.</p>
+<p class="small" id="s2-status" role="status"></p>
+<label class="lbl-field"><span data-i18n="j.s2.fmt">Dopo il download converti in</span>
+  <select class="field" id="s2-fmt">
+    <option value="nsp">NSP</option><option value="nup">NUP</option>
+    <option value="folder" data-i18n="j.s2.fmt.folder">Cartella</option>
+    <option value="off" data-i18n="j.s2.fmt.off">Non convertire</option>
+  </select></label>
+<h4 data-i18n="j.s2.tool">Converti un file o una cartella</h4>
+<label class="lbl-field"><span data-i18n="j.s2.src">File o cartella da convertire</span>
+  <span class="row tight"><input class="field grow" id="s2-src">
+  <button class="btn" id="s2-pick-file" type="button" data-i18n="j.s2.pickFile">File…</button>
+  <button class="btn" id="s2-pick-dir" type="button" data-i18n="j.s2.pickDir">Cartella…</button></span></label>
+<div class="row wrap">
+  <label><span data-i18n="j.s2.to">Formato di arrivo</span>
+    <select class="field" id="s2-to"><option value="nsp">NSP</option><option value="nup">NUP</option>
+      <option value="folder" data-i18n="j.s2.fmt.folder">Cartella</option></select></label>
+  <button class="btn" id="s2-go" type="button" data-i18n="j.s2.go">Converti</button>
+  <button class="btn" id="s2-cancel" type="button" hidden data-i18n="j.s2.cancel">Annulla</button>
+</div>
+<progress id="s2-bar" max="100" value="0" hidden aria-labelledby="s2-msg"></progress>
+<p class="muted small" id="s2-msg" role="status" aria-live="polite"></p>
+
+<details class="sadv"><summary><span data-i18n="e.settings.advanced">Opzioni avanzate</span></summary>
+<h3 data-i18n="j.emu.upd.title">Aggiornamenti degli emulatori</h3>
+<label class="small" for="emu-au-mode" data-i18n="j.emu.upd.auto">Aggiornamento automatico emulatori</label>
+<div class="row"><select id="emu-au-mode" class="field grow">
+  <option value="off" data-i18n="j.emu.upd.off">Disattivato</option>
+  <option value="notify" data-i18n="j.emu.upd.notify">Solo avviso</option>
+  <option value="install" data-i18n="j.emu.upd.install">Installa automaticamente</option>
+</select></div>
+<p class="muted small" data-i18n="j.emu.upd.desc">Controlla una volta al giorno. Un emulatore aperto non viene aggiornato: si riprova il giorno dopo.</p>
+<div class="row"><button class="btn" id="emu-upd-check" type="button">🔄 <span data-i18n="j.emu.upd.check">Controlla ora</span></button></div>
+<div id="emu-upd" class="small" role="status" aria-live="polite"></div>
+
 <h3 data-i18n="j.emu.crash.title">Se l'emulatore si chiude subito</h3>
 <p class="muted small" data-i18n="j.emu.crash.desc">Quando un gioco si chiude subito due volte di fila, Pozzo può proporre un emulatore o un core alternativo.</p>
 <label class="small" for="crash-mode" data-i18n="j.emu.crash.mode">Comportamento</label>
@@ -69,6 +84,7 @@
   <option value="apply" data-i18n="j.emu.crash.apply">Riprova da solo con l'alternativa</option>
   <option value="off" data-i18n="j.emu.crash.off">Non fare niente</option>
 </select></div>
+
 <h3 data-i18n="j.emu.fast.title">Disco veloce</h3>
 <p class="muted small" data-i18n="j.emu.fast.desc">Copia il gioco su un disco veloce (SSD) prima di avviarlo, per caricamenti più rapidi se la libreria sta su un HDD.</p>
 <label class="small" for="fc-dir" data-i18n="j.emu.fast.dir">Cartella delle copie temporanee</label>
@@ -77,5 +93,4 @@
 <label class="chk"><input type="checkbox" id="fc-del"> <span data-i18n="j.emu.fast.del">Elimina la copia quando chiudi il gioco</span></label>
 <p class="muted small" data-i18n="j.emu.fast.keep">Se la disattivi, la copia resta sul disco veloce e occupa spazio finché non la cancelli tu.</p>
 <div class="row end"><button class="btn primary" id="fc-save" type="button" data-i18n="j.common.save">Salva</button></div>
-<label class="chk"><input type="checkbox" id="pl-proto"> <span data-i18n="j.emu.proto.label">Registra il link pozzo:// su Windows</span> <span class="muted small" data-i18n="j.emu.proto.desc">Permette di aprire un invito ricevuto da un amico cliccando il link. Si può disattivare in ogni momento.</span></label>
-</section>
+</details>

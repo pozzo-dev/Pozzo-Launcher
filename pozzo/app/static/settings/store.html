@@ -1,15 +1,11 @@
+<h3 data-i18n="k.store.h.list">Store collegati</h3>
 <p class="muted" data-i18n="k.store.p.intro">I giochi PC arrivano dagli store installati su questo computer e dagli account collegati.
   I giochi non installati compaiono con il pulsante «Installa», che apre lo store sulla pagina del gioco.</p>
 <table class="emu"><thead><tr><th>Store</th><th style="width:110px" data-i18n="k.store.col.state">Stato</th><th class="num" style="width:110px" title="installati / totali" data-i18n-title="k.store.col.count_tip" data-i18n="k.store.col.games">Giochi</th><th data-i18n="k.store.col.account">Account</th></tr></thead>
   <tbody id="acc-table"></tbody></table>
 <div class="row end"><span class="muted small" id="acc-info"></span><button class="btn primary" id="acc-refresh" data-i18n="k.store.btn.refresh">↻ Aggiorna store</button></div>
 <div id="acc-progress"></div>
-<h4 data-i18n="k.store.h.steamcmd">Steam senza client (SteamCMD)</h4>
-<p class="muted small" data-i18n="k.store.p.steamcmd">Scarica e aggiorna i giochi Steam che possiedi senza aprire Steam, con SteamCMD (si scarica da solo al primo uso). Pozzo non salva la password: SteamCMD tiene da solo la sessione. I giochi con DRM di Steam richiedono comunque il client Steam in esecuzione.</p>
-<div class="row wrap"><span class="muted grow" id="scmd-status"></span>
-  <button class="btn" id="scmd-login" type="button" data-i18n="k.store.steamcmd.login">Accedi</button>
-  <button class="btn" id="scmd-logout" type="button" hidden data-i18n="k.store.steamcmd.logout">Esci</button></div>
-<h4 data-i18n="k.store.h.update">Aggiornamento degli store</h4>
+<h3 data-i18n="k.store.h.update">Aggiornamento degli store</h3>
 <p class="muted small" data-i18n-html="k.store.p.update">Gli elenchi letti restano salvati nella cache: all'avvio i giochi degli store
   ci sono <b>già</b> e l'app può rileggere i siti in sottofondo. Più store vengono letti in parallelo
   (uno per sito, così nessun server riceve richieste doppie).</p>
@@ -28,7 +24,36 @@
 </div>
 <div id="srf-progress"></div>
 <pre class="log" id="srf-log"></pre>
-<h4 data-i18n="k.store.h.others">Altri store PC (non ufficiali)</h4>
+<h3>RetroAchievements</h3>
+<p class="muted small" data-i18n-html="k.store.p.ra">Obiettivi e progresso dei giochi retro nella scheda di ogni gioco. La <i>Web API key</i> è nel tuo profilo su
+  <a href="#" data-open="https://retroachievements.org/settings">retroachievements.org › Impostazioni</a>.</p>
+<div class="row wrap">
+  <label><span data-i18n="k.store.ra.user">Utente</span> <input class="field" id="ra-user" autocomplete="off"></label>
+  <label>Web API key <input class="field" id="ra-key" type="password" autocomplete="new-password"></label>
+  <button class="btn" id="ra-save" data-i18n="k.store.ra.save">Salva e prova</button>
+</div>
+<h3 data-i18n="k.steamx.h">Esporta in Steam</h3>
+<p class="muted small" data-i18n="k.steamx.p"></p>
+<div class="row wrap">
+  <label><span data-i18n="k.steamx.user">Account Steam</span> <select class="field" id="sx-user"></select></label>
+  <label><span data-i18n="k.steamx.what">Cosa esportare</span> <select class="field" id="sx-what">
+    <option value="all" data-i18n="k.steamx.all">Tutti i giochi</option>
+    <option value="favorites" data-i18n="k.steamx.fav">Solo i preferiti</option>
+    <option value="platforms" data-i18n="k.steamx.plat">Alcune piattaforme</option></select></label>
+  <select class="field" id="sx-plats" multiple size="4" hidden></select>
+  <button class="btn primary" id="sx-go" type="button" data-i18n="k.steamx.go">Esporta</button>
+  <button class="btn" id="sx-rm" type="button" data-i18n="k.steamx.rm">Rimuovi le voci di Pozzo</button>
+</div>
+<div class="muted small" id="sx-info"></div>
+
+<details class="sadv"><summary><span data-i18n="e.settings.advanced">Opzioni avanzate</span></summary>
+<h3 data-i18n="k.store.h.steamcmd">Steam senza client (SteamCMD)</h3>
+<p class="muted small" data-i18n="k.store.p.steamcmd">Scarica e aggiorna i giochi Steam che possiedi senza aprire Steam, con SteamCMD (si scarica da solo al primo uso). Pozzo non salva la password: SteamCMD tiene da solo la sessione. I giochi con DRM di Steam richiedono comunque il client Steam in esecuzione.</p>
+<div class="row wrap"><span class="muted grow" id="scmd-status"></span>
+  <button class="btn" id="scmd-login" type="button" data-i18n="k.store.steamcmd.login">Accedi</button>
+  <button class="btn" id="scmd-logout" type="button" hidden data-i18n="k.store.steamcmd.logout">Esci</button></div>
+
+<h3 data-i18n="k.store.h.others">Altri store PC (non ufficiali)</h3>
 <p class="muted small" data-i18n-html="k.store.p.others">Elenchi di giochi PC che non sono store ufficiali, in due categorie: <b>📦 Repack</b> (giochi molto
   compressi, pensati per chi ha una connessione lenta: il download è più corto ma l'installazione richiede tempo)
   e <b>⬇ Download diretto</b>. Incolla l'indirizzo di una pagina elenco per ogni sito: l'app legge nomi e link e li
@@ -54,24 +79,4 @@
 <pre class="log" id="pcst-log"></pre>
 <p class="muted small" data-i18n="k.store.p.legal">Scarica solo ciò che hai il diritto di scaricare (giochi che possiedi dove la copia di backup è
   consentita, freeware, demo): il download di giochi protetti senza licenza è illegale.</p>
-<h4>RetroAchievements</h4>
-<p class="muted small" data-i18n-html="k.store.p.ra">Obiettivi e progresso dei giochi retro nella scheda di ogni gioco. La <i>Web API key</i> è nel tuo profilo su
-  <a href="#" data-open="https://retroachievements.org/settings">retroachievements.org › Impostazioni</a>.</p>
-<div class="row wrap">
-  <label><span data-i18n="k.store.ra.user">Utente</span> <input class="field" id="ra-user" autocomplete="off"></label>
-  <label>Web API key <input class="field" id="ra-key" type="password" autocomplete="new-password"></label>
-  <button class="btn" id="ra-save" data-i18n="k.store.ra.save">Salva e prova</button>
-</div>
-<h4 data-i18n="k.steamx.h">Esporta in Steam</h4>
-<p class="muted small" data-i18n="k.steamx.p"></p>
-<div class="row wrap">
-  <label><span data-i18n="k.steamx.user">Account Steam</span> <select class="field" id="sx-user"></select></label>
-  <label><span data-i18n="k.steamx.what">Cosa esportare</span> <select class="field" id="sx-what">
-    <option value="all" data-i18n="k.steamx.all">Tutti i giochi</option>
-    <option value="favorites" data-i18n="k.steamx.fav">Solo i preferiti</option>
-    <option value="platforms" data-i18n="k.steamx.plat">Alcune piattaforme</option></select></label>
-  <select class="field" id="sx-plats" multiple size="4" hidden></select>
-  <button class="btn primary" id="sx-go" type="button" data-i18n="k.steamx.go">Esporta</button>
-  <button class="btn" id="sx-rm" type="button" data-i18n="k.steamx.rm">Rimuovi le voci di Pozzo</button>
-</div>
-<div class="muted small" id="sx-info"></div>
+</details>
