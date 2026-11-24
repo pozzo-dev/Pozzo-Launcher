@@ -119,10 +119,21 @@ def test_posix_pause_resume_and_tree_kill():
         pids = job.pids()
         job.kill()
         p.wait(5)
-        end = time.time() + 5
-        while job.active() and time.time() < end:
+
+        def vivi():
+            out = []
+            for x in pids:
+                try:
+                    st = psutil.Process(x).status()
+                except psutil.NoSuchProcess:
+                    continue
+                if st != psutil.STATUS_ZOMBIE:
+                    out.append((x, st))
+            return out
+        end = time.time() + 5  # su macOS un processo in uscita non ha piu' gruppo (active() == 0) ma per un attimo non e' ancora zombie
+        while (job.active() or vivi()) and time.time() < end:
             time.sleep(0.1)
-        assert job.active() == 0 and not any(psutil.pid_exists(x) and psutil.Process(x).status() != psutil.STATUS_ZOMBIE for x in pids)
+        assert job.active() == 0 and vivi() == []
     finally:
         ln._unfreeze()
         job.kill()

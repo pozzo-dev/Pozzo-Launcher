@@ -43,8 +43,8 @@ def test_retroarch_gambatte_starts_and_stays_alive(tmp_path):
     plan = L.plan(cfg, P.get("gb"))
     if not plan:
         pytest.skip("core gambatte non trovato")
-    # video/audio nulli: nessuna finestra ne' scheda audio richieste
-    (tmp_path / "null.cfg").write_text('video_driver = "null"\naudio_driver = "null"\nmenu_driver = "null"\n')
+    # solo l'audio nullo: RetroArch 1.7.3 (Ubuntu 22.04) con video o menu nulli esce o va in segfault, in CI c'e' Xvfb
+    (tmp_path / "null.cfg").write_text('audio_driver = "null"\n')
     cmd = [plan["exe"], *(a.replace("{core}", str(L._core_path(cfg, plan["core"]))).replace("{rom}", str(rom)) for a in plan["args"]),
            "--appendconfig", str(tmp_path / "null.cfg")]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

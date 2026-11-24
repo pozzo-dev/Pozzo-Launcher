@@ -196,12 +196,14 @@ def swarm(tmp):
     ct = lt.create_torrent(lt.list_files(str(src)), 16384)
     lt.set_piece_hashes(ct, str(src.parent))
     (tmp / "set.torrent").write_bytes(lt.bencode(ct.generate()))
-    seed = lt.session({"listen_interfaces": "127.0.0.1:0", "enable_dht": False, "enable_lsd": False,
+    # non la porta 0: Windows puo' darne una riservata in UDP e il seeder resta senza porta
+    seed = lt.session({"listen_interfaces": f"127.0.0.1:{M._free_port()}", "enable_dht": False, "enable_lsd": False,
                        "enable_upnp": False, "enable_natpmp": False})
     p = lt.add_torrent_params()
     p.ti, p.save_path = lt.torrent_info(str(tmp / "set.torrent")), str(src.parent)
     p.flags |= lt.torrent_flags.seed_mode
     h = seed.add_torrent(p)
+    assert _wait(seed.listen_port, 10)
     yield SimpleNamespace(torrent=tmp / "set.torrent", peer=f"127.0.0.1:{seed.listen_port()}")
     seed.remove_torrent(h)
 

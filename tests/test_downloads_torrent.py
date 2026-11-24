@@ -15,7 +15,7 @@ lt = pytest.importorskip("libtorrent")
 from pozzo import net  # noqa: E402
 from pozzo.downloads import task as T  # noqa: E402
 from pozzo.downloads.engines import torrent as TOR  # noqa: E402
-from pozzo.downloads.manager import Manager  # noqa: E402
+from pozzo.downloads.manager import Manager, _free_port  # noqa: E402
 
 PIECE = 16384
 LOCAL = {"enable_dht": False, "enable_lsd": False, "enable_upnp": False, "enable_natpmp": False}
@@ -34,12 +34,14 @@ def swarm(tmp):
     raw = lt.bencode(ct.generate())
     (tmp / "set.torrent").write_bytes(raw)
     ti = lt.torrent_info(raw)
-    seed = lt.session({"listen_interfaces": "127.0.0.1:0", **LOCAL})
+    # non la porta 0: Windows puo' darne una riservata in UDP, il bind uTP fallisce e il seeder resta senza porta
+    seed = lt.session({"listen_interfaces": f"127.0.0.1:{_free_port()}", **LOCAL})
     seed.set_peer_class_filter(lt.ip_filter())  # i peer locali di solito ignorano i limiti: qui il limite vale
     p = lt.add_torrent_params()
     p.ti, p.save_path = ti, str(src.parent)
     p.flags |= lt.torrent_flags.seed_mode
     h = seed.add_torrent(p)
+    assert _wait(seed.listen_port, 10)
     yield SimpleNamespace(data=data, torrent=tmp / "set.torrent", magnet=lt.make_magnet_uri(ti),
                           peer=f"127.0.0.1:{seed.listen_port()}", seed=seed, handle=h)
     seed.remove_torrent(h)
