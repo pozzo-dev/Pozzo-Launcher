@@ -6,7 +6,7 @@ import hashlib
 import httpx
 import threading
 import time
-from pathlib import Path, PurePath
+from pathlib import Path, PureWindowsPath
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -17,7 +17,7 @@ from ... import i18n as I
 
 def _rel_in_cache(rel) -> bool:
     """Controllo lessicale: senza resolve, cosi' una cache spostata altrove con una junction continua a funzionare."""
-    p = PurePath(str(rel))
+    p = PureWindowsPath(str(rel))
     return not (p.is_absolute() or p.drive or p.root or ".." in p.parts)
 
 
