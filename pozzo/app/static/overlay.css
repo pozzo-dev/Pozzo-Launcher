@@ -7,7 +7,7 @@ body.ov {
 #ov-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); animation: ov-fade .18s var(--ov-ease); }
 .ov-card { position: relative; width: min(760px, 92vw); margin: 6vh auto 0; max-height: 88vh; overflow: auto;
   background: var(--ov-glass); border: 1px solid var(--line);
-  border-radius: var(--ov-r); padding: 28px 32px; font-size: 22px; color: var(--fg);
+  border-radius: var(--ov-r); padding: 28px 32px; font-size: 22px; color: var(--text);
   box-shadow: 0 24px 64px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .06); animation: ov-in .2s var(--ov-ease); }
 .ov-card header { display: flex; gap: 20px; align-items: center; margin-bottom: 18px; }
 .ov-card header img { width: 96px; height: 128px; object-fit: cover; border-radius: 10px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
@@ -17,27 +17,57 @@ body.ov {
 .ov-actions, .ov-music { display: flex; gap: 12px; flex-wrap: wrap; }
 .ov-music h2 { width: 100%; margin-bottom: 0; }
 .ov-card button { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; font-size: 20px; padding: 10px 20px;
-  background: var(--bg-3); border: 2px solid transparent; border-radius: 12px; color: var(--fg); cursor: pointer;
+  background: var(--bg-3); border: 2px solid transparent; border-radius: 12px; color: var(--text); cursor: pointer;
   transition: transform .12s var(--ov-ease), border-color .12s, background .12s; }
 .ov-card button svg { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .ov-card button:hover { background: color-mix(in srgb, var(--bg-3) 70%, var(--accent)); }
-.ov-card button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-color: var(--accent); }
+.ov-card button:focus-visible, .ov-card button.focus { outline: 3px solid var(--accent); outline-offset: 3px; border-color: var(--accent); }
 .ov-card button:disabled { opacity: .5; cursor: default; }
 .ov-card header > div { min-width: 0; }
 .ov-card h1, #ov-notes-list li { overflow-wrap: anywhere; }
-@media (forced-colors: active) { .ov-card button { border-color: ButtonText; } .ov-card button:focus-visible { outline-color: Highlight; } }
+@media (forced-colors: active) {
+  .ov-card button { border-color: ButtonText; }
+  .ov-card button:focus-visible, .ov-card button.focus { outline-color: Highlight; }
+}
 .ov-card button.bad { color: var(--bad); }
+.ov-card button.armed { background: color-mix(in srgb, var(--bad) 22%, var(--bg-3)); border-color: var(--bad); }
 .ov-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .ov-card .ov-tabs button { min-height: 44px; font-size: 18px; padding: 8px 16px; background: transparent; color: var(--muted); }
-.ov-card .ov-tabs button[aria-selected="true"] { background: var(--bg-3); color: var(--fg); border-color: var(--line); }
+.ov-card .ov-tabs button[aria-selected="true"] { background: var(--bg-3); color: var(--text); border-color: var(--line); }
 .ov-card [hidden] { display: none; }
 .ov-stat { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 4px 16px; margin-bottom: 18px; }
 .ov-stat b { font-variant-numeric: tabular-nums; text-align: end; }
 .ov-stat .ov-bar { grid-column: 1 / -1; margin-top: 0; }
-#ov-emu-msg { margin: 14px 0 0; font-size: 18px; overflow-wrap: anywhere; }
+#ov-emu-msg, .ov-msg { margin: 14px 0 0; font-size: 18px; overflow-wrap: anywhere; }
+#ov-notes-empty { margin: 4px 0 0; font-size: 18px; }
 .ov-bar { height: 10px; border-radius: 5px; background: var(--bg-3); overflow: hidden; margin-top: 8px; }
 .ov-bar i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 5px; transform: scaleX(0); transform-origin: left; transition: transform .4s var(--ov-ease); }  /* scaleX, non width: niente layout a ogni aggiornamento */
 #ov-notes-list { margin: 0; padding-left: 22px; font-size: 20px; }
+.ov-hints { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.ov-hint { display: inline-flex; align-items: center; gap: 6px; }
+.ov-hints kbd { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--line); color: var(--text); font: 600 13px/1.2 inherit; }
+
+@media (max-height: 780px), (max-width: 960px) {
+  .ov-card { margin-top: 3vh; max-height: 94vh; padding: 18px 22px; font-size: 17px; }
+  .ov-card header { gap: 14px; margin-bottom: 12px; }
+  .ov-card header img { width: 72px; height: 96px; }
+  .ov-card h1 { font-size: 26px; }
+  .ov-card h2 { font-size: 13px; margin: 16px 0 6px; }
+  .ov-time { font-size: 32px; }
+  .ov-tabs { margin: 4px 0 12px; padding-bottom: 10px; }
+  .ov-card .ov-tabs button { min-height: 38px; font-size: 15px; padding: 6px 12px; }
+  .ov-card button { min-height: 42px; font-size: 16px; padding: 8px 14px; }
+  #ov-emu-msg, .ov-msg, #ov-notes-empty, #ov-notes-list { font-size: 15px; }
+  .ov-hints { margin-top: 14px; padding-top: 10px; font-size: 13px; }
+}
+
 @keyframes ov-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
 @keyframes ov-fade { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { #ov-back, .ov-card { animation: none; } .ov-card button, .ov-bar i { transition: none; } }
+html[data-motion="off"] #ov-back, html[data-motion="off"] .ov-card,
+html[data-motion="reduced"] #ov-back, html[data-motion="reduced"] .ov-card { animation: none; }
+html[data-motion="off"] .ov-card button, html[data-motion="off"] .ov-bar i,
+html[data-motion="reduced"] .ov-card button, html[data-motion="reduced"] .ov-bar i { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="normal"]) #ov-back, html:not([data-motion="normal"]) .ov-card { animation: none; }
+  html:not([data-motion="normal"]) .ov-card button, html:not([data-motion="normal"]) .ov-bar i { transition: none; }
+}

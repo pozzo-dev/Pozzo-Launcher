@@ -15,7 +15,7 @@ import time
 DEFAULTS = {"hotkey": "ctrl+shift+o", "achievements": True, "sound": "soft", "hud": False, "hud_corner": "tl"}
 SOUNDS = ("none", "soft", "classic")
 CORNERS = ("tl", "tr", "bl", "br")  # il toast sta in alto a destra: il default dell'HUD e' in alto a sinistra
-HUD_W, HUD_H = 190, 64
+HUD_W, HUD_H = 220, 72
 TOAST_SECONDS = 5.0
 TOAST_MAX = 6  # code piu' lunghe scartano le piu' vecchie: un avviso in ritardo di un minuto non serve
 XINPUT_BACK, XINPUT_R3 = 0x0020, 0x0080
@@ -126,29 +126,43 @@ class Overlay:
         self.url = url.rstrip("/") + "/"
 
     # ------------------------------------------------------------ sessione (eventi del launcher)
-    def game_started(self, _st=None):
+    def _stop_hotkey(self):
+        if self._hotkey:
+            self._hotkey.stop()
+            self._hotkey = None
+
+    def reload_hotkey(self):
+        """Riavvia la scorciatoia globale durante una sessione attiva."""
         from .library import screens
+        with self.lock:
+            self._stop_hotkey()
+            if not self.active:
+                return
+            hk = settings(self.cfg).get("hotkey")
+            if hk:
+                self._hotkey = screens.Hotkey(hk, self.toggle)
+                self._hotkey.start()
+
+    def game_started(self, _st=None):
+        already = self.active
         self.active = True
-        hk = settings(self.cfg).get("hotkey")
-        if hk:
-            self._hotkey = screens.Hotkey(hk, self.toggle)
-            self._hotkey.start()
-        threading.Thread(target=self._watch_pad, daemon=True).start()
+        self.reload_hotkey()
+        if not already:
+            threading.Thread(target=self._watch_pad, daemon=True).start()
         threading.Thread(target=self.show_hud, daemon=True).start()
 
     def game_stopped(self, _st=None):
         self.active = False
         self.hide_hud()
-        if self._hotkey:
-            self._hotkey.stop()
-            self._hotkey = None
+        with self.lock:
+            self._stop_hotkey()
         self.hide(refocus=False)
 
     def _watch_pad(self):
         """Select+R3 sul controller (XInput legge anche quando il gioco ha il fuoco)."""
         from .library import launcher as L
         read = L._xinput()
-        if not read or not self.cfg.app.get("screenshots", {}).get("pad", True):
+        if not read:
             return
         held = False
         while self.active:
@@ -177,7 +191,7 @@ class Overlay:
             w = webview.create_window("Pozzo HUD", f"{self.url}overlay/hud", x=x, y=y, width=HUD_W, height=HUD_H, focus=False, **common)
         else:  # focus=False: WS_EX_NOACTIVATE, il toast non ruba mai il fuoco al gioco
             w = webview.create_window("Pozzo Toast", f"{self.url}overlay/toast", x=sw - 420, y=24, width=400,
-                                      height=110, focus=False, **common)
+                                      height=130, focus=False, **common)
         self.wins[which] = w
         return w
 
@@ -225,6 +239,7 @@ class Overlay:
             w.events.loaded.wait(5)
             self._click_through(w)
             self._show_passive(w)
+            w.evaluate_js("window.hudShow && hudShow()")
             self.hud_on = True
         except Exception:
             pass
@@ -234,6 +249,10 @@ class Overlay:
         if w is None or not self.hud_on:
             return
         self.hud_on = False
+        try:  # ferma polling e timer dell'HUD prima di nascondere la finestra
+            w.evaluate_js("window.hudHide && hudHide()")
+        except Exception:
+            pass
         try:
             w.hide()
         except Exception:
@@ -297,9 +316,10 @@ class Overlay:
             return
         self.queue.push(item)
         self._wake.set()
-        if not self._toaster:
-            self._toaster = threading.Thread(target=self._toast_loop, daemon=True)
-            self._toaster.start()
+        with self.lock:
+            if not self._toaster:
+                self._toaster = threading.Thread(target=self._toast_loop, daemon=True)
+                self._toaster.start()
 
     def _toast_loop(self):
         while True:
@@ -310,10 +330,12 @@ class Overlay:
                     w = self._win("toast")
                     w.events.loaded.wait(5)
                     w.evaluate_js(f"window.showToast && showToast({json.dumps(it)})")
-                    if sys.platform == "darwin":
-                        _mac_call(lambda: _mac_setup(w.native, True))
+                    self._click_through(w)
                     self._show_passive(w)
                     time.sleep(TOAST_SECONDS)
-                    w.hide()
+                    if sys.platform == "darwin":
+                        _mac_call(w.hide)
+                    else:
+                        w.hide()
                 except Exception:
                     pass

@@ -7,6 +7,7 @@
 <style>html, body { background: transparent; }</style>
 <link rel="stylesheet" href="/static/app.css?v={{v}}">
 <link rel="stylesheet" href="/static/overlay.css?v={{v}}">
+<script src="/static/overlay-boot.js?v={{v}}"></script>
 </head>
 <body class="ov">
 <div id="ov-back"></div>
@@ -17,44 +18,55 @@
   </header>
   <p id="ov-none" class="muted" hidden data-i18n="o.overlay.none">Nessun gioco in esecuzione</p>
   <div class="ov-tabs" role="tablist" data-i18n-aria="o.overlay.tabs" aria-label="Sections">
-    <button role="tab" data-tab="overview" aria-selected="true" data-i18n="o.overlay.tab.overview">Panoramica</button>
-    <button role="tab" data-tab="perf" aria-selected="false" data-i18n="o.overlay.tab.perf">Prestazioni</button>
-    <button role="tab" data-tab="emu" aria-selected="false" hidden data-i18n="o.overlay.tab.emu">Emulatore</button>
-    <button role="tab" data-tab="media" aria-selected="false" data-i18n="o.overlay.tab.media">Media e note</button>
+    <button type="button" role="tab" id="ov-tab-overview" data-tab="overview" aria-controls="ov-panel-overview" aria-selected="true" tabindex="0" data-i18n="o.overlay.tab.overview">Panoramica</button>
+    <button type="button" role="tab" id="ov-tab-perf" data-tab="perf" aria-controls="ov-panel-perf" aria-selected="false" tabindex="-1" data-i18n="o.overlay.tab.perf">Prestazioni</button>
+    <button type="button" role="tab" id="ov-tab-emu" data-tab="emu" aria-controls="ov-panel-emu" aria-selected="false" tabindex="-1" hidden data-i18n="o.overlay.tab.emu">Emulatore</button>
+    <button type="button" role="tab" id="ov-tab-media" data-tab="media" aria-controls="ov-panel-media" aria-selected="false" tabindex="-1" data-i18n="o.overlay.tab.media">Media e note</button>
   </div>
 
-  <div class="ov-panel" role="tabpanel" data-panel="overview">
+  <div class="ov-panel" role="tabpanel" id="ov-panel-overview" aria-labelledby="ov-tab-overview" data-panel="overview">
     <div class="ov-actions">
-      <button id="ov-shot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span data-i18n="o.overlay.shot">Schermata</span></button>
-      <button id="ov-pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg><span data-i18n="o.overlay.pause">Pausa</span></button>
-      <button id="ov-stop" class="bad"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span data-i18n="o.overlay.stop">Chiudi gioco</span></button>
-      <button id="ov-close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span data-i18n="o.overlay.close">Chiudi overlay</span></button>
+      <button type="button" id="ov-shot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span data-i18n="o.overlay.shot">Schermata</span></button>
+      <button type="button" id="ov-pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg><span data-i18n="o.overlay.pause">Pausa</span></button>
+      <button type="button" id="ov-stop" class="bad"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span data-i18n="o.overlay.stop">Chiudi gioco</span></button>
+      <button type="button" id="ov-close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span data-i18n="o.overlay.close">Chiudi overlay</span></button>
     </div>
     <section id="ov-ach" hidden><h2 data-i18n="o.overlay.ach">Obiettivi</h2><div id="ov-ach-txt"></div><div class="ov-bar"><i id="ov-ach-bar"></i></div></section>
   </div>
 
-  <div class="ov-panel" role="tabpanel" data-panel="perf" hidden>
+  <div class="ov-panel" role="tabpanel" id="ov-panel-perf" aria-labelledby="ov-tab-perf" data-panel="perf" hidden>
     <div class="ov-stat"><span data-i18n="o.overlay.cpu">CPU</span><b id="ov-cpu">–</b><div class="ov-bar"><i id="ov-cpu-bar"></i></div></div>
     <div class="ov-stat"><span data-i18n="o.overlay.ram">RAM</span><b id="ov-ram">–</b><div class="ov-bar"><i id="ov-ram-bar"></i></div></div>
     <div class="ov-stat"><span data-i18n="o.overlay.battery">Batteria</span><b id="ov-bat">–</b><div class="ov-bar"><i id="ov-bat-bar"></i></div></div>
   </div>
 
-  <div class="ov-panel" role="tabpanel" data-panel="emu" hidden>
+  <div class="ov-panel" role="tabpanel" id="ov-panel-emu" aria-labelledby="ov-tab-emu" data-panel="emu" hidden>
     <div class="ov-actions">
-      <button data-emu="save"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span data-i18n="o.overlay.emuSave">Salva stato</span></button>
-      <button data-emu="load"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-i18n="o.overlay.emuLoad">Carica stato</span></button>
-      <button data-emu="reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v5h5"/></svg><span data-i18n="o.overlay.emuReset">Riavvia gioco</span></button>
+      <button type="button" data-emu="save"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span data-i18n="o.overlay.emuSave">Salva stato</span></button>
+      <button type="button" data-emu="load"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-i18n="o.overlay.emuLoad">Carica stato</span></button>
+      <button type="button" data-emu="reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v5h5"/></svg><span data-i18n="o.overlay.emuReset">Riavvia gioco</span></button>
     </div>
     <p id="ov-emu-msg" class="muted" role="status"></p>
   </div>
 
-  <div class="ov-panel" role="tabpanel" data-panel="media" hidden>
+  <div class="ov-panel" role="tabpanel" id="ov-panel-media" aria-labelledby="ov-tab-media" data-panel="media" hidden>
     <section class="ov-music"><h2 data-i18n="o.overlay.music">Musica</h2>
-      <button data-media="previous" data-i18n-aria="o.overlay.prev" aria-label="Previous track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 5L9 12l10 7z"/></svg></button>
-      <button data-media="play_pause" data-i18n-aria="o.overlay.playpause" aria-label="Play/pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7zM17 5v14"/></svg></button>
-      <button data-media="next" data-i18n-aria="o.overlay.next" aria-label="Next track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M5 5l10 7-10 7z"/></svg></button></section>
-    <section id="ov-notes" hidden><h2 data-i18n="o.overlay.notes">Appunti</h2><ul id="ov-notes-list"></ul></section>
+      <button type="button" data-media="previous" data-i18n-aria="o.overlay.prev" aria-label="Brano precedente"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 5L9 12l10 7z"/></svg></button>
+      <button type="button" data-media="play_pause" data-i18n-aria="o.overlay.playpause" aria-label="Riproduci/pausa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7zM17 5v14"/></svg></button>
+      <button type="button" data-media="next" data-i18n-aria="o.overlay.next" aria-label="Brano successivo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M5 5l10 7-10 7z"/></svg></button>
+      <button type="button" data-media="volume_down" data-i18n-aria="o.overlay.volDown" aria-label="Abbassa volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15 12h6"/></svg></button>
+      <button type="button" data-media="volume_up" data-i18n-aria="o.overlay.volUp" aria-label="Alza volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15 12h6M18 9v6"/></svg></button>
+      <button type="button" data-media="mute" data-i18n-aria="o.overlay.mute" aria-label="Disattiva audio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg></button>
+    </section>
+    <section id="ov-notes"><h2 data-i18n="o.overlay.notes">Appunti</h2><ul id="ov-notes-list"></ul><p id="ov-notes-empty" class="muted" data-i18n="o.overlay.notesEmpty">Nessun appunto per questo gioco.</p></section>
   </div>
+
+  <p id="ov-msg" class="ov-msg muted" role="status" aria-live="polite" hidden></p>
+  <footer class="ov-hints">
+    <span class="ov-hint"><kbd>LB</kbd>/<kbd>RB</kbd> <span data-i18n="o.overlay.hintTabs">Sezioni</span></span>
+    <span class="ov-hint"><kbd>A</kbd> <span data-i18n="o.overlay.hintSelect">Seleziona</span></span>
+    <span class="ov-hint"><kbd>B</kbd>/<kbd>Esc</kbd> <span data-i18n="o.overlay.hintClose">Chiudi</span></span>
+  </footer>
 </main>
 <script src="/static/i18n.js?v={{v}}"></script>
 <script src="/static/overlay.js?v={{v}}"></script>

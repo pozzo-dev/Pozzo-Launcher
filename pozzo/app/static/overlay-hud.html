@@ -6,16 +6,18 @@
 <style>html, body { background: transparent; }</style>
 <link rel="stylesheet" href="/static/app.css?v={{v}}">
 <style>
-  html, body { margin: 0; overflow: hidden; height: 100%; }
-  #h { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 12px;
-    border-radius: 12px; background: rgba(15, 17, 21, .82); color: var(--fg); font: 600 13px/1.25 "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
-  #h-time { font-size: 20px; color: var(--accent); }
-  #h-st { color: #c3c8d6; font-weight: 500; }
+  html, body { margin: 0; overflow: hidden; height: 100%; background: transparent; }
+  #h { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 8px 14px;
+    border-radius: 12px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); border: 1px solid var(--line);
+    color: var(--text); font: 600 14px/1.25 "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  #h-time { font-size: 24px; line-height: 1.1; color: var(--accent); }
+  #h-st { font-size: 13px; color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
+<script src="/static/overlay-boot.js?v={{v}}"></script>
 </head>
 <body>
 <div id="h" role="status"><div id="h-time">0:00</div><div id="h-st"></div></div>
 <script src="/static/i18n.js?v={{v}}"></script>
-<script src="/static/overlay-hud.js"></script>
+<script src="/static/overlay-hud.js?v={{v}}"></script>
 </body>
 </html>
