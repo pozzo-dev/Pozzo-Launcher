@@ -674,11 +674,12 @@ class _PgJob:
         self.pgids: set[int] = set()
 
     def add(self, proc) -> bool:
-        try:
-            self.pgids.add(proc.pid)  # con start_new_session pgid == pid
-            return True
-        except AttributeError:  # processo finto nei test
+        pid = getattr(proc, "pid", None)  # manca nei processi finti dei test
+        # pid 0 non e' un processo vero: su Linux il gruppo 0 e' quello dei thread del kernel e la partita non finirebbe mai
+        if not isinstance(pid, int) or pid <= 0:
             return False
+        self.pgids.add(pid)  # con start_new_session pgid == pid
+        return True
 
     def pids(self) -> list[int]:
         import psutil

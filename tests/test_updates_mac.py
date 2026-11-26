@@ -97,7 +97,8 @@ def _run_swap(t: Path, lock: bool, good: bool = True):
             (d / "PozzoLauncher.cmd").write_text(f'@copy "%~dp0v.txt" "{t / "partita.txt"}" >nul\r\n@exit\r\n')
         else:
             f = d / "PozzoLauncher"
-            f.write_text(f'#!/bin/sh\ncp "{d / "v.txt"}" "{t / "partita.txt"}"\n')
+            # relativo allo script, come %~dp0 su Windows: dopo lo swap «stage» e' diventata «App»
+            f.write_text(f'#!/bin/sh\ncp "$(dirname "$0")/v.txt" "{t / "partita.txt"}"\n')
             f.chmod(0o755)
     if not good:
         shutil.rmtree(src)

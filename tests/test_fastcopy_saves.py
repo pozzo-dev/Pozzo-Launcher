@@ -192,3 +192,10 @@ def test_zip_estratto_da_una_versione_vecchia(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_gruppo_processi_ignora_pid_finti():
+    # pid 0 su Linux e' il gruppo dei thread del kernel: tenerlo farebbe restare la partita «in corso» per sempre
+    job = L._PgJob()
+    assert not job.add(SimpleNamespace(pid=0)) and not job.add(object()) and not job.pgids
+    assert job.add(SimpleNamespace(pid=4242)) and job.pgids == {4242}
