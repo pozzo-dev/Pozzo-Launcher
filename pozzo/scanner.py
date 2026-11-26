@@ -73,6 +73,8 @@ class Game:
     @property
     def key(self) -> str:
         # La chiave usa solo hash letti davvero dal file, cosi' resta stabile tra le esecuzioni
+        # shortcut: oltre max_hash_mb la chiave e' per nome+dimensione; alzare il limite dopo cambia la chiave
+        # (i dati utente restano sulla vecchia), migrare le chiavi se diventa un problema reale
         if self.crc:
             ident = f"{self.crc}:{self.inner_size or self.size}"
         else:

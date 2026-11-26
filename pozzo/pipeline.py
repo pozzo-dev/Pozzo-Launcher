@@ -490,8 +490,11 @@ async def _scrape_inner(cfg, cache, games: list[Game], sources: list[str], refre
             hits = lib.name_first(pending)
             for g in hits:
                 g.needs_hash = False
-                cache.put_file(str(g.path), g.size, g.mtime, {k: getattr(g, k) for k in
-                               ("dat_crc", "dat_size", "dat_md5", "dat_sha1") if getattr(g, k)})
+                # put_file sostituisce la riga: si parte da quella di name_first/hash_games, o la chiave
+                # del gioco tornerebbe al nome alla scansione dopo
+                row = cache.get_file(str(g.path), g.size, g.mtime) or {}
+                row.update({k: getattr(g, k) for k in ("dat_crc", "dat_size", "dat_md5", "dat_sha1") if getattr(g, k)})
+                cache.put_file(str(g.path), g.size, g.mtime, row)
             cache.commit()
             if hits:
                 log(f"Identificati per nome (senza leggere i file): [bold]{len(hits):,}[/] su {len(pending):,} da hashare")

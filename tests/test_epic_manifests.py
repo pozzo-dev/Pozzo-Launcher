@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory() as tmp:
     done.write_text("x")
 
     def item(folder, name, cid, incomplete, manifest):
-        d = {"CatalogItemId": cid, "CatalogNamespace": "fn", "DisplayName": name,
+        d = {"AppName": cid, "CatalogItemId": cid, "CatalogNamespace": "fn", "DisplayName": name,
              "bIsIncompleteInstall": incomplete, "CompleteManifestPath": str(manifest)}
         (folder / f"{cid}.item").write_text(json.dumps(d), encoding="utf-8")
 

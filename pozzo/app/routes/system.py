@@ -311,19 +311,33 @@ def build_router(ctx) -> APIRouter:
             fn()
         return {"window": bool(fn)}
 
+    build_lock, rebuild = threading.Lock(), {"pending": False}
+
     def _rebuild():
         if job["current"].status == "running":
             return
-        state["building"], state["build_started"] = True, time.time()
-        state["build_log"] = []
+        # una costruzione alla volta (library.tmp): chi arriva mentre un'altra gira la fa ripetere a chi la tiene,
+        # cosi' la sua richiesta (nuovo match, relink...) non si perde
+        rebuild["pending"] = True
+        if not build_lock.acquire(blocking=False):
+            return
         try:
-            state["build_stats"] = build(cfg, log=lambda m: state["build_log"].append(_plain(str(m))))
-            lib.load()
-            threading.Thread(target=_pregen_thumbs, daemon=True).start()
-        except Exception as e:
-            state["build_log"].append(I.tr("s.system.error", kind=type(e).__name__, msg=str(e)))
+            state["building"] = True
+            while rebuild["pending"]:
+                rebuild["pending"] = False
+                state["build_started"] = time.time()
+                state["build_log"] = []
+                try:
+                    state["build_stats"] = build(cfg, log=lambda m: state["build_log"].append(_plain(str(m))))
+                    lib.load()
+                    threading.Thread(target=_pregen_thumbs, daemon=True).start()
+                except Exception as e:
+                    state["build_log"].append(I.tr("s.system.error", kind=type(e).__name__, msg=str(e)))
         finally:
             state["building"] = False
+            build_lock.release()
+        if rebuild["pending"]:  # richiesta arrivata tra l'ultimo controllo e il rilascio del lock
+            _rebuild()
 
     @router.post("/api/rebuild")
     def api_rebuild():

@@ -101,15 +101,19 @@ class Steam(StoreProvider):
         out = {}
         for lib in self.libraries():
             for acf in (lib / "steamapps").glob("appmanifest_*.acf"):
-                st = parse_vdf(acf.read_text(encoding="utf-8", errors="ignore")).get("AppState", {})
-                appid, name = st.get("appid"), st.get("name")
-                if not appid or not name or appid in SKIP_APPS or any(w in name.lower() for w in SKIP_WORDS):
+                try:  # un manifest illeggibile o corrotto non deve fermare tutto Steam
+                    st = parse_vdf(acf.read_text(encoding="utf-8", errors="ignore")).get("AppState", {})
+                    appid, name = st.get("appid"), st.get("name")
+                    if not appid or not name or appid in SKIP_APPS or any(w in name.lower() for w in SKIP_WORDS):
+                        continue
+                    full = int(st.get("StateFlags", "0") or 0) & 4 == 4
+                    g = self._game(appid, name, installed=full,
+                                   install_dir=str(lib / "steamapps" / "common" / st.get("installdir", "")),
+                                   last_played=float(st.get("LastPlayed") or 0))
+                    g.size = int(st.get("SizeOnDisk") or 0)
+                except (OSError, ValueError, AttributeError):
                     continue
-                full = int(st.get("StateFlags", "0") or 0) & 4 == 4
-                out[appid] = self._game(appid, name, installed=full,
-                                        install_dir=str(lib / "steamapps" / "common" / st.get("installdir", "")),
-                                        last_played=float(st.get("LastPlayed") or 0))
-                out[appid].size = int(st.get("SizeOnDisk") or 0)
+                out[appid] = g
         return out
 
     async def _kinds(self, appids: set[str]) -> dict[str, str]:

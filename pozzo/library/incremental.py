@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 import time
 from pathlib import Path
 
@@ -24,11 +23,9 @@ from ..matching import normalize
 from ..ownership import file_owners
 from ..pipeline import load_cached
 from ..scanner import _ignored, clean_title, find_platform_dirs, game_at, hash_one
-from .build import INSERT_GAME, _game_row, _regional_groups
+from .build import INSERT_GAME, LIBRARY_LOCK, _game_row, _regional_groups
 from .ratings import combine
 from .sizes import game_size
-
-_LOCK = threading.Lock()  # una scrittura alla volta su library.db
 
 
 def _entry(p: P.Platform, dirs: list[Path], f: Path) -> tuple[Path, bool] | None:
@@ -70,7 +67,7 @@ def add_games(cfg, platform_id: str, paths: list[Path], drop_key: str | None = N
         rows = {g.key: (g, combine(res.get(g.key, {})), game_size(g.path, g.is_dir, cache) or None) for g in games}
     finally:
         cache.close()
-    with _LOCK:
+    with LIBRARY_LOCK:  # lo stesso di build(): durante una ricostruzione si aspetta e si scrive nel file nuovo
         db = sqlite3.connect(dest, timeout=30)
         try:
             pages = "[]"

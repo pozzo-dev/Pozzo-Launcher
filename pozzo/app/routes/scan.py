@@ -318,11 +318,6 @@ def build_router(ctx) -> APIRouter:
         threading.Thread(target=_maint_locked_run, daemon=True).start()
         return {"ok": True}
 
-    @router.get("/api/maintenance/history")
-    def api_maintenance_history():
-        from ... import maintenance as M
-        return {"history": M.history(cfg)}
-
     @router.post("/api/platforms/custom")
     def api_custom_platform(body: dict = Body(...)):
         import re as _re
@@ -441,11 +436,15 @@ def build_router(ctx) -> APIRouter:
         mode = body.get("mode") or ("all" if body.get("refresh") else "new")
         keys, title = None, ""
         if body.get("game"):  # pulsante "Cerca dati mancanti" nel dettaglio: tutte le versioni del gioco
-            g = lib.get(int(body["game"]))
+            try:
+                g = lib.get(int(body["game"]))
+            except (TypeError, ValueError):
+                raise HTTPException(400, I.tr("s.emuextra.invalid"))
             keys = [m["key"] for m in lib.groups[g["grp"]]]
             plats, title, mode = [g["platform"]], g["title"], body.get("mode") or "missing"
         j = J.ScrapeJob(platforms=plats, refresh=mode == "all", retry_missing=mode == "missing", keys=keys, title=title)
-        job["current"] = j
+        if not ctx._claim("current", j):  # controllo e occupazione dello slot insieme: due clic rapidi non avviano due scraping
+            raise HTTPException(409, I.tr("s.scan.scrapeUpdateBusy"))
 
         def after(stats):
             state["build_stats"] = stats

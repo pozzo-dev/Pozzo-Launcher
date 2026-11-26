@@ -109,6 +109,9 @@ class Epic(StoreProvider):
                     d = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
                 except ValueError:
                     continue
+                # JSON valido ma non un manifest (lista, chiavi mancanti): si salta, non deve rompere fetch()
+                if not isinstance(d, dict) or not all(d.get(k) for k in ("AppName", "CatalogNamespace", "CatalogItemId")):
+                    continue
                 if d.get("CatalogNamespace") == "ue":
                     continue
                 if d.get("bIsIncompleteInstall") and not Path(d.get("CompleteManifestPath") or "?").is_file():

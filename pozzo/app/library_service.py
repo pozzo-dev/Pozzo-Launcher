@@ -73,10 +73,18 @@ class Library:
         if not self.path.exists():
             self.full.set()
             return
+        try:
+            self._load(online)
+        finally:
+            if online:  # anche se fallisce: /api/library aspetta full e non deve restare bloccata per sempre
+                self.full.set()
+
+    def _load(self, online: bool):
         db = sqlite3.connect(self.path)
         db.row_factory = sqlite3.Row
         cols = ", ".join(self.DETAIL_SQL.get(c, c) for c in (r[1] for r in db.execute("PRAGMA table_info(games)")))
-        games = [dict(r) for r in db.execute(f"SELECT {cols} FROM games" + ("" if online else " WHERE store IS NOT 'online'"))]  # nosec B608 - solo nomi/placeholder fissi, valori via parametri
+        # NULL o diverso da 'online': l'indice games_store lo usa, "IS NOT" no
+        games = [dict(r) for r in db.execute(f"SELECT {cols} FROM games" + ("" if online else " WHERE store IS NULL OR store != 'online'"))]  # nosec B608 - solo nomi/placeholder fissi, valori via parametri
         pool: dict[str, str] = {}
         share = pool.setdefault
         for g in games:
@@ -104,8 +112,6 @@ class Library:
             self.auto, self.has_owners = auto, has_owners
             self.built_at = float(built[0]) if built else 0.0
             self.patches, self.patch_base, self._url_keys = [], self.meta_rev, None
-        if online:
-            self.full.set()
 
     def add_games(self, keys: list[str], drop_key: str | None = None):
         """Giochi appena messi in library.db da library.incremental: entrano in memoria senza ricaricare tutto.
@@ -156,9 +162,13 @@ class Library:
     def patch_store_meta(self, found: dict) -> int:
         """Copertine e descrizioni appena lette dagli store online, subito in libreria (memoria e library.db) senza
         ricostruirla: riempiono solo i vuoti, con la stessa regola della ricostruzione. Ritorna i giochi cambiati."""
-        from ..library.build import apply_store_meta
+        from ..library.build import LIBRARY_LOCK, apply_store_meta
         if not found or not self.path.exists():
             return 0
+        with LIBRARY_LOCK:  # non durante lo scambio di library.db da parte di build()
+            return self._patch_store_meta(found, apply_store_meta)
+
+    def _patch_store_meta(self, found: dict, apply_store_meta) -> int:
         cols = ("description", "developer", "publisher", "genres", "players", "release_date", "year", "size", "media")
         changed: list[int] = []
         db = sqlite3.connect(self.path, timeout=10)

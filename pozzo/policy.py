@@ -79,10 +79,12 @@ class Ledger:
     def used(self, source: str) -> tuple[int, int]:
         day, month = self.periods()
         with self.lock:
-            self._flush()
+            # niente flush: i conteggi in attesa si sommano, cosi' il batch di spend() serve davvero
             r = dict(self.db.execute("SELECT period, count FROM usage WHERE source=? AND period IN (?,?)",
                                      (source, day, month)).fetchall())
-        return r.get(day, 0), r.get(month, 0)
+            # somme sotto lock: un flush concorrente svuota _pending
+            return (r.get(day, 0) + self._pending.get((source, day), 0),
+                    r.get(month, 0) + self._pending.get((source, month), 0))
 
     def spend(self, source: str, n: int = 1):
         day, month = self.periods()

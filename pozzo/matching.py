@@ -50,7 +50,8 @@ def score(a: str, b: str) -> float:
     s = max(fuzz.ratio(na, nb), fuzz.token_sort_ratio(na, nb))
     # "Sonic" vs "Sonic the Hedgehog": se uno e' prefisso dell'altro con sottotitolo, buono ma non perfetto
     main_a, main_b = re.split(r" - |: ", a)[0], re.split(r" - |: ", b)[0]
-    if normalize(main_a) == normalize(main_b):
+    # bonus solo se uno dei due non ha sottotitolo: "Mario Kart - X" / "Mario Kart: Y" sono giochi diversi
+    if normalize(main_a) == normalize(main_b) and (normalize(main_a) == na or normalize(main_b) == nb):
         s = max(s, 85.0)
     # numeri di sequel diversi = gioco diverso
     nums_a, nums_b = re.findall(r"\b\d+\b", na), re.findall(r"\b\d+\b", nb)

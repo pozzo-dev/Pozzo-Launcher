@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException
@@ -58,7 +59,7 @@ def build_router(ctx) -> APIRouter:
         ck = (lib.built_at, lib.meta_rev, user.rev, part, bool(cfg.app.get("skip_duplicates", True)),
               tuple(cfg.app.get("hide_dlc") or []),
               tuple(sorted((k, tuple(v or [])) for k, v in cfg.catalogs.items())),
-              len(cfg.app.get("smart_collections") or []), PC.active(cfg))  # ultimo: il profilo (ognuno vede i suoi giochi)
+              json.dumps(cfg.app.get("smart_collections") or [], sort_keys=True), PC.active(cfg))  # ultimo: il profilo (ognuno vede i suoi giochi)
         pid = ck[-1]
         hit = lib_payloads.get(ck)
         if hit is not None:
@@ -83,11 +84,12 @@ def build_router(ctx) -> APIRouter:
                                d["play_count"], grp_colls.get(grp, []), len(OW.members(lib.groups[grp], pid)), d["status"]])
             del v  # i dati di 150.000 gruppi (~40 MB): non servono piu' mentre si scrive il JSON
             own = user.media_keys("cover")  # copertine scelte a mano: valgono anche per i giochi senza copertina dalle fonti
+            store_min = {grp: round(sum(m.get("store_playtime") or 0 for m in lib.groups[grp]) / 60) for grp in grp_idx}  # una volta per gruppo
             rows = [[g["id"], g["title"], g["sort_title"], g["platform"], g["year"], int("cover" in g["media"] or g["key"] in own),
                      grp_idx[g["grp"]], g["rating"], g["developer"] or "", ", ".join(g["genres"]), g["found"],
                      g["region"] or "", g.get("store") or "", 1 if g.get("store") is None else g.get("installed") or 0,
                      g.get("size") or 0, g.get("rating_count") or 0, g.get("rating_critics"), _players(g.get("players"), g["platform"]),
-                     round(sum(m.get("store_playtime") or 0 for m in lib.groups[g["grp"]]) / 60), _hltb_main(g.get("hltb")), g.get("content") or "game"]
+                     store_min[g["grp"]], _hltb_main(g.get("hltb")), g.get("content") or "game"]
                     for g in sel]
             plats = defaultdict(int)
             for members in lib.groups.values():
@@ -99,29 +101,31 @@ def build_router(ctx) -> APIRouter:
             for p, urls in cfg.catalogs.items():
                 if urls:
                     plats[p] += 0  # console personalizzata con uno store online
-            # JSON scritto qui: jsonable_encoder di FastAPI su ~150.000 righe costa secondi, json.dumps in un colpo ~200 MB
-            body = _json({
-                "built_at": lib.built_at, "user_rev": user.rev, "meta_rev": lib.meta_rev,
-                "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
-                                     for p, n in plats.items()), key=lambda x: x["name"].lower()),
-                "collections": [{"slug": c["slug"], "name": c["name"], "auto": c["auto"], "custom": c["custom"],
-                                 "hidden": c.get("hidden", False), "count": len(c["groups"])} for c in coll_list],
-                "skip_duplicates": cfg.app.get("skip_duplicates", True),
-                "hide_dlc": cfg.app.get("hide_dlc") or [],
-                "catalogs": {k: v for k, v in cfg.catalogs.items() if v}, "icons_credit": CREDIT,
-                "games": {"cols": ["id", "title", "sort", "platform", "year", "cover", "group", "rating", "developer",
-                                   "genres", "found", "region", "store", "installed", "size", "votes", "critics", "players", "store_minutes", "hltb", "content"],
-                          "rows": rows},
-                "stores": [{"id": p.id, "name": p.name} for p in STORES.PROVIDERS],
-                "groups": {"cols": ["primary", "favorite", "hidden", "last_played", "playtime", "play_count",
-                                    "collections", "versions", "status"], "rows": groups},
-                "smart": cfg.app.get("smart_collections") or [],
-            })
-            # si tengono solo le parti (posseduti, catalogo, tutto) della libreria attuale: le vecchie sono ~26 MB l'una
-            for k in [k for k in lib_payloads if k[:3] + k[4:-1] != ck[:3] + ck[4:-1]]:
-                del lib_payloads[k]
-            lib_payloads[ck] = body
-            return Response(content=body, media_type="application/json")
+        # fuori dal lock: la serializzazione di ~150.000 righe non deve bloccare chi legge la libreria
+        # JSON scritto qui: jsonable_encoder di FastAPI su ~150.000 righe costa secondi, json.dumps in un colpo ~200 MB
+        body = _json({
+            "built_at": lib.built_at, "user_rev": user.rev, "meta_rev": lib.meta_rev,
+            "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
+                                 for p, n in plats.items()), key=lambda x: x["name"].lower()),
+            "collections": [{"slug": c["slug"], "name": c["name"], "auto": c["auto"], "custom": c["custom"],
+                             "hidden": c.get("hidden", False), "count": len(c["groups"])} for c in coll_list],
+            "skip_duplicates": cfg.app.get("skip_duplicates", True),
+            "hide_dlc": cfg.app.get("hide_dlc") or [],
+            "catalogs": {k: v for k, v in cfg.catalogs.items() if v}, "icons_credit": CREDIT,
+            "games": {"cols": ["id", "title", "sort", "platform", "year", "cover", "group", "rating", "developer",
+                               "genres", "found", "region", "store", "installed", "size", "votes", "critics", "players", "store_minutes", "hltb", "content"],
+                      "rows": rows},
+            "stores": [{"id": p.id, "name": p.name} for p in STORES.PROVIDERS],
+            "groups": {"cols": ["primary", "favorite", "hidden", "last_played", "playtime", "play_count",
+                                "collections", "versions", "status"], "rows": groups},
+            "smart": cfg.app.get("smart_collections") or [],
+        })
+        # si tengono solo le parti (posseduti, catalogo, tutto) della libreria attuale: le vecchie sono ~26 MB l'una
+        # fuori da lib.lock: copia delle chiavi e pop() tollerano richieste parallele
+        for k in [k for k in list(lib_payloads) if k[:3] + k[4:-1] != ck[:3] + ck[4:-1]]:
+            lib_payloads.pop(k, None)
+        lib_payloads[ck] = body
+        return Response(content=body, media_type="application/json")
 
     @router.get("/api/library/patches")
     def api_library_patches(since: int = 0):
@@ -236,6 +240,12 @@ def build_router(ctx) -> APIRouter:
                 "emulator": (STORE_NAMES.get(g.get("store"), "PC") if g.get("store")
                              else (plan["emulator"] + (f" ({plan['core']})" if plan["core"] else "")) if plan else None)}
 
+    def _body_gid(body: dict) -> int:
+        try:
+            return int(body["game"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, I.tr("s.emuextra.invalid"))
+
     def _member_keys(gid: int) -> list[str]:
         g = lib.get(gid)
         return [m["key"] for m in lib.groups[g["grp"]]]
@@ -301,12 +311,16 @@ def build_router(ctx) -> APIRouter:
         c = Cache(cfg.cache)
         try:
             hit = c.kv_get("minerva:so:" + pages[0])
+            if hit == "":  # pagina senza magnet: si riguarda dopo un'ora (il sito puo' cambiare), non per sempre
+                hit = c.kv_get("minerva:so:" + pages[0], 3600)
             if hit is None:
                 try:
                     r = httpx.get(pages[0], timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
-                    hit = catalog.single_file_magnet(r.text) if r.status_code == 200 else None
                 except httpx.HTTPError:
                     return None  # rete giu': si riprova al prossimo clic
+                if r.status_code != 200:
+                    return None  # errore del sito: non si ricorda
+                hit = catalog.single_file_magnet(r.text)
                 c.kv_set("minerva:so:" + pages[0], hit or "")
             return hit or None
         finally:
@@ -389,20 +403,30 @@ def build_router(ctx) -> APIRouter:
         from ...cache import Cache
         c = Cache(cfg.cache)
         try:
-            links, errors, fetched = [], [], 0
+            links, errors, data_of, todo = [], [], {}, []
             for u in pages[:4]:
                 data = None if refresh else SL.cached(c, u)
-                if data is None:
-                    if fetched >= 2:  # due pagine nuove per richiesta: le altre arrivano alla prossima apertura
-                        continue
-                    fetched += 1
-                    try:
-                        data = SL.put(c, u, SL.fetch(u))
-                    except (httpx.HTTPError, ValueError, RuntimeError) as e:
+                if data is not None:
+                    data_of[u] = data
+                elif len(todo) < 2:  # due pagine nuove per richiesta: le altre arrivano alla prossima apertura
+                    todo.append(u)
+
+            def _fetch(u):  # in parallelo solo la rete: la cache (sqlite) si scrive da questo thread
+                try:
+                    return SL.fetch(u), None
+                except (httpx.HTTPError, ValueError, RuntimeError) as e:
+                    return None, e
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                for u, (page, e) in zip(todo, ex.map(_fetch, todo)):
+                    if e:
                         errors.append(f"{SL.host(u)}: {type(e).__name__}")
-                        continue
-                site = data.get("site") or SL.host(u)
-                links += [{**x, "page": u, "site": site} for x in data.get("links") or []]
+                    else:
+                        data_of[u] = SL.put(c, u, page)
+            for u in pages[:4]:
+                if u in data_of:
+                    data = data_of[u]
+                    site = data.get("site") or SL.host(u)
+                    links += [{**x, "page": u, "site": site} for x in data.get("links") or []]
             return {"pages": pages, "links": links, "error": "; ".join(errors),
                     "kind_labels": SL.KIND_LABELS, "kind_order": list(SL.KIND_ORDER)}
         finally:
@@ -603,7 +627,7 @@ def build_router(ctx) -> APIRouter:
             raise HTTPException(400, I.tr("s.library.nameMissing"))
         slug = user.create_collection(name)
         if body.get("game"):
-            for k in _member_keys(int(body["game"])):
+            for k in _member_keys(_body_gid(body)):
                 user.edit_membership(slug, k, "add")
         return {"slug": slug}
 
@@ -625,7 +649,7 @@ def build_router(ctx) -> APIRouter:
         action = body.get("action")
         if action not in ("add", "remove"):
             raise HTTPException(400, I.tr("s.library.badAction"))
-        for k in _member_keys(int(body["game"])):
+        for k in _member_keys(_body_gid(body)):
             user.edit_membership(slug, k, action)
         return {"ok": True}
 

@@ -16,7 +16,7 @@ import httpx
 
 from . import __version__
 
-UA = f"PozzoLauncher/{__version__} (+https://github.com/)"
+UA = f"PozzoLauncher/{__version__} (+https://github.com/erpaffo/Pozzo-Launcher)"
 
 
 class RateLimiter:

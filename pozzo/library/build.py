@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections import Counter, defaultdict
 from functools import lru_cache
@@ -49,10 +50,39 @@ CREATE TABLE games(id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, platfo
                    verify TEXT, match_by TEXT);  -- verify: stato del dump rispetto al DAT (vedi libretro.Index.verify)
 CREATE TABLE collections(slug TEXT PRIMARY KEY, name TEXT);
 CREATE INDEX games_grp ON games(grp);
+CREATE INDEX IF NOT EXISTS games_store ON games(store);
 CREATE TABLE collection_games(slug TEXT, key TEXT, PRIMARY KEY(slug, key));
 CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE game_owners(key TEXT, owner TEXT, PRIMARY KEY(key, owner));  -- solo giochi non condivisi, vedi ownership.py
 """
+
+# una sola scrittura alla volta su library.db: build() (che la sostituisce), incremental e i patch dell'app.
+# RLock: lo stesso thread puo' riprenderlo (build -> funzioni che scrivono) senza bloccarsi
+LIBRARY_LOCK = threading.RLock()
+
+
+class _KvPreload:
+    """Vista della cache con i kv a prefisso (uno per gioco: ~280.000 letture su 140.000 giochi) gia' in memoria:
+    stessa API di kv_get, il resto passa alla cache vera."""
+    PREFIXES = ("netmeta:", "storemeta:", "hltb:")
+
+    def __init__(self, cache):
+        self._cache = cache
+        self._rows = {p: {k: (v, ts) for k, v, ts in cache.db.execute(
+            "SELECT k, v, ts FROM kv WHERE substr(k, 1, ?) = ?", (len(p), p))} for p in self.PREFIXES}
+
+    def kv_get(self, k: str, max_age: float | None = None):
+        for p, rows in self._rows.items():
+            if k.startswith(p):
+                r = rows.get(k)
+                if not r or (max_age is not None and time.time() - r[1] > max_age):
+                    return None
+                return json.loads(r[0])
+        return self._cache.kv_get(k, max_age)
+
+    def __getattr__(self, name):
+        return getattr(self._cache, name)
+
 
 # stessi franchise con nomi diversi tra libretro e IGDB
 DEFAULT_ALIASES = {"Sonic": "Sonic The Hedgehog", "Mario Bros.": "Mario", "Super Mario": "Mario",
@@ -317,14 +347,14 @@ def _store_entries(cfg, cache) -> list[dict]:
             "year": int(rd[:4]) if re.match(r"^\d{4}", rd) else None, "release_date": rd or None,
             "developer": s.get("developer") or None, "publisher": s.get("publisher") or None,
             "genres": s.get("genres") or [], "description": s.get("description") or None,
-            "media": {("cover" if k == "cover_wide" else k): v for k, v in (s.get("media") or {}).items()
-                      if k != "cover" or True},
+            "media": {("cover" if k == "cover_wide" else k): v for k, v in (s.get("media") or {}).items()},
             "files": [s["install_dir"]] if s.get("install_dir") else [],
             "store": s["store"], "installed": int(bool(s.get("installed"))), "launch": s.get("launch") or {},
             "install_uri": s.get("install_uri") or None, "page": s.get("page") or None,
             "store_playtime": s.get("playtime") or 0, "install_dir": s.get("install_dir") or None,
             "size": s.get("size") or None, "kind": s.get("kind") or "game", "content": content,
-            "grp": "windows/t:" + normalize(title), "owners": s.get("owners") or [],
+            # l'anno tra parentesi distingue "DOOM (1993)" da "DOOM" (normalize toglie le parentesi)
+            "grp": "windows/t:" + normalize(title) + "".join(re.findall(r"\((\d{4})\)", title)), "owners": s.get("owners") or [],
         })
     # metadati SOLO dalle fonti offline (LaunchBox/TheGamesDB), cercati col pulsante "Metadati store":
     # descrizioni/generi/valutazioni forniti online dagli store non si usano (tranne i dati fissi di Minecraft, Battle.net e Riot
@@ -885,6 +915,11 @@ def update_manual(cfg) -> bool:
         pc = _store_entries(cfg, cache)
     finally:
         cache.close()
+    with LIBRARY_LOCK:
+        return _update_manual_db(dest, pc)
+
+
+def _update_manual_db(dest: Path, pc: list[dict]) -> bool:
     db = sqlite3.connect(dest)
     try:
         # libreria costruita da una versione precedente: le colonne nuove (es. md5, sha1) si aggiungono qui,
@@ -948,49 +983,51 @@ def build(cfg, log=print, progress=None) -> dict:
         groups, primary = _regional_groups(cfg, merged, res)
         shared_ratings = _share_metadata(merged, groups, primary, res)
 
-        pc = _store_entries(cfg, cache)
-        net, owned_pages = _catalog_entries(cfg, cache, merged, pc)
+        kvc = _KvPreload(cache)  # i kv per gioco in memoria, non una query ciascuno
+        pc = _store_entries(cfg, kvc)
+        net, owned_pages = _catalog_entries(cfg, kvc, merged, pc)
         colls = compute_collections(cfg, list(merged.values()) + [e["obj"] for e in pc], franchises)
         from .sizes import game_size
 
-        dest = Path(cfg.cache) / "library.db"
-        tmp = dest.with_suffix(".tmp")
-        tmp.unlink(missing_ok=True)
-        db = sqlite3.connect(tmp)
-        db.executescript(SCHEMA)
-        rows = []
-        for key, g in merged.items():
-            rows.append(_game_row(g, files[key], groups[key], key in primary, shared_ratings.get(key) or {},
-                                  game_size(g.path, g.is_dir, cache) or None, owned_pages.get(key, [])))
-        rows.extend(_pc_row(e) for e in pc)
-        for e in net:  # disponibili online (non posseduti)
-            rc = e["ratings"]
-            rows.append((e["key"], e["pid"], e["title"], sort_title(e["title"]), e["year"], e["release_date"],
-                         e["developer"], e["publisher"], json.dumps(e["genres"], ensure_ascii=False), e["players"],
-                         rc.get("rating"), e["description"], e["region"], 1, "[]", json.dumps(e["media"]), None, e["name"],
-                         None, "{}", e["grp"], e["primary"], "online", 0,
-                         json.dumps({"magnet": e["magnet"], "kind": e.get("kind"),
-                                     "sources": e.get("sources") or []}),
-                         e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
-                         json.dumps(rc.get("ratings", [])), e["size"],
-                         json.dumps(e.get("sources") or [], ensure_ascii=False), e["content"], None, None))
-        _insert_games(db, rows, *_old_ids(dest))
-        db.executemany("UPDATE games SET verify=?, match_by=? WHERE key=?",
-                       [(g.verify_status or None, g.match_by or None, key) for key, g in merged.items()
-                        if g.verify_status or g.match_by])
-        from ..ownership import file_owners
-        db.executemany("INSERT OR IGNORE INTO game_owners VALUES(?,?)",
-                       [(k, o) for k, os_ in {**file_owners(cfg, files), **{e["key"]: e["owners"] for e in pc if e["owners"]}}.items()
-                        for o in os_])
-        _attach_hltb(db, cache)
-        db.executemany("INSERT INTO collections VALUES(?,?)", [(s, n) for s, (n, _) in colls.items()])
-        db.executemany("INSERT INTO collection_games VALUES(?,?)",
-                       [(s, k) for s, (_, ks) in colls.items() for k in ks])
-        db.executemany("INSERT INTO meta VALUES(?,?)", [("built_at", str(time.time())), ("games", str(len(rows)))])
-        db.commit()
-        db.close()
-        from ..config import _replace
-        _replace(tmp, dest)  # su Windows un lettore in quell'istante fa fallire os.replace: si riprova
+        with LIBRARY_LOCK:  # scrittura e scambio di library.db: add_games/patch aspettano e scrivono nel file nuovo
+            dest = Path(cfg.cache) / "library.db"
+            tmp = dest.with_suffix(".tmp")
+            tmp.unlink(missing_ok=True)
+            db = sqlite3.connect(tmp)
+            db.executescript(SCHEMA)
+            rows = []
+            for key, g in merged.items():
+                rows.append(_game_row(g, files[key], groups[key], key in primary, shared_ratings.get(key) or {},
+                                      game_size(g.path, g.is_dir, cache) or None, owned_pages.get(key, [])))
+            rows.extend(_pc_row(e) for e in pc)
+            for e in net:  # disponibili online (non posseduti)
+                rc = e["ratings"]
+                rows.append((e["key"], e["pid"], e["title"], sort_title(e["title"]), e["year"], e["release_date"],
+                             e["developer"], e["publisher"], json.dumps(e["genres"], ensure_ascii=False), e["players"],
+                             rc.get("rating"), e["description"], e["region"], 1, "[]", json.dumps(e["media"]), None, e["name"],
+                             None, "{}", e["grp"], e["primary"], "online", 0,
+                             json.dumps({"magnet": e["magnet"], "kind": e.get("kind"),
+                                         "sources": e.get("sources") or []}),
+                             e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
+                             json.dumps(rc.get("ratings", [])), e["size"],
+                             json.dumps(e.get("sources") or [], ensure_ascii=False), e["content"], None, None))
+            _insert_games(db, rows, *_old_ids(dest))
+            db.executemany("UPDATE games SET verify=?, match_by=? WHERE key=?",
+                           [(g.verify_status or None, g.match_by or None, key) for key, g in merged.items()
+                            if g.verify_status or g.match_by])
+            from ..ownership import file_owners
+            db.executemany("INSERT OR IGNORE INTO game_owners VALUES(?,?)",
+                           [(k, o) for k, os_ in {**file_owners(cfg, files), **{e["key"]: e["owners"] for e in pc if e["owners"]}}.items()
+                            for o in os_])
+            _attach_hltb(db, kvc)
+            db.executemany("INSERT INTO collections VALUES(?,?)", [(s, n) for s, (n, _) in colls.items()])
+            db.executemany("INSERT INTO collection_games VALUES(?,?)",
+                           [(s, k) for s, (_, ks) in colls.items() for k in ks])
+            db.executemany("INSERT INTO meta VALUES(?,?)", [("built_at", str(time.time())), ("games", str(len(rows)))])
+            db.commit()
+            db.close()
+            from ..config import _replace
+            _replace(tmp, dest)  # su Windows un lettore in quell'istante fa fallire os.replace: si riprova
         stats = {"games": len(rows), "files": len(games), "collections": len(colls),
                  "groups": len(primary) + sum(e["primary"] for e in pc), "pc": len(pc), "online": len(net),
                  "with_franchise": sum(1 for k in merged if franchises.get(k)), "seconds": round(time.time() - t0, 1)}

@@ -16,6 +16,8 @@ import sqlite3
 import time
 from pathlib import Path
 
+from .cachepolicy import ttls
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, size INT, mtime REAL, data TEXT);
 CREATE TABLE IF NOT EXISTS resources(key TEXT, source TEXT, field TEXT, value TEXT, ts REAL,
@@ -120,10 +122,14 @@ class Cache:
     # ------------------------------------------------------------ lookups
     def lookup_status(self, keys: list[str], source: str) -> dict[str, str]:
         out = {}
+        neg = ttls(source)[1]
         for i in range(0, len(keys), 900):
             chunk = keys[i:i + 900]
-            q = f"SELECT key, status FROM lookups WHERE source=? AND key IN ({','.join('?' * len(chunk))})"  # nosec B608 - solo nomi/placeholder fissi, valori via parametri
-            out.update(dict(self.db.execute(q, [source, *chunk])))
+            q = f"SELECT key, status, ts FROM lookups WHERE source=? AND key IN ({','.join('?' * len(chunk))})"  # nosec B608 - solo nomi/placeholder fissi, valori via parametri
+            # solo i negativi (notfound/nodata) scadono; found/done restano col TTL negativo della fonte: la fonte puo' aver aggiunto il gioco
+            for key, status, ts in self.db.execute(q, [source, *chunk]):
+                if status not in ("notfound", "nodata") or time.time() - (ts or 0) < neg:
+                    out[key] = status
         return out
 
     def set_lookup(self, key: str, source: str, status: str):

@@ -35,6 +35,16 @@ def test_sequel_diversi_sotto_soglia():
     assert score("Street Fighter II", "Street Fighter III") < 70
 
 
+def test_sottotitoli_diversi_non_sono_prefisso():
+    # stesso inizio ma sottotitoli diversi = giochi diversi (prima 85, sopra la soglia 70)
+    assert score("Mario Kart - Super Circuit", "Mario Kart: Double Dash!!") < 70
+
+
+def test_prefisso_con_un_solo_sottotitolo_resta_buono():
+    assert score("Sonic: The Hedgehog", "Sonic") >= 85
+    assert score("Sonic", "Sonic - Mania") >= 85
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
