@@ -63,3 +63,27 @@ docs/superpowers
 .superpowers/
 # graphify
 graphify-out/
+
+# istruzioni e artefatti per agenti AI (restano solo in locale)
+CLAUDE.md
+AGENTS.md
+.cursor/
+.cursorrules
+.windsurf/
+.aider*
+.codex/
+.gemini/
+GEMINI.md
+.continue/
+.roo/
+.kiro/
+.trae/
+.qwen/
+.junie/
+.specstory/
+.mcp.json
+
+# bozze e output temporanei (script di ispezione, batch di traduzione, ...)
+scratch/
+# runtime creati dai test e2e
+tests/e2e/.runtime-*/
