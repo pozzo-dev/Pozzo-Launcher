@@ -148,7 +148,7 @@ Facendo doppio clic su un download (oppure aprendo il pannello inferiore ridimen
 
 ### Torrent e Magnet integrati
 
-- I collegamenti magnet e i file `.torrent` vengono gestiti nativamente.
+- I collegamenti magnet e i file `.torrent` vengono gestiti nativamente. Finito il download il torrent smette subito di condividere (non c'è un rapporto o un tempo di condivisione da impostare).
 - Include supporto per tracker UDP e TCP, DHT (Distributed Hash Table), PEX (Peer Exchange), LSD (Local Peer Discovery) e inoltro automatico delle porte UPnP sul router.
 - Puoi impostare una porta fissa o lasciare che il launcher scelga una porta casuale stabile. La sessione salva su disco lo stato dei peer per riprendere subito la ricerca all'avvio.
 - **Spazio sul disco**: per un magnet la dimensione si conosce solo quando arrivano i metadati; a quel punto (per un `.torrent`, subito) il launcher controlla che i file scelti entrino nel disco, come per i download HTTP. Se non c'è spazio, o se il disco si riempie durante il download, il torrent va in pausa con «Disco pieno» (non in errore) e riprende da solo appena liberi spazio.

@@ -277,6 +277,6 @@ A friend can join your game session from their home: their phone becomes a **pla
    registered as **Player 2** (or the next available player slot).
 4. **Video**: your friend installs [Moonlight](https://moonlight-stream.org), adds your PC address (remote access requires
    a private network such as Tailscale), and enters the **4-digit PIN** displayed by Moonlight into the invite page: the PC
-   pairs automatically, without needing to open Sunshine's management interface.
+   pairs automatically, without needing to open Sunshine's management interface. Each guest gets one PIN only; the Moonlight client is unpaired when you remove the guest or after the 12 hours expire.
 
 The **Guests** list provides a **Remove** action, identical to paired phones: the guest is instantly disconnected from controller access.

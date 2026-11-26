@@ -2,7 +2,7 @@
 
 La modalità **Big Picture** include un mini-player integrato per **Spotify**, i controlli dei tasti multimediali di sistema e la gestione delle chiamate vocali con **Discord**.
 
-Puoi aprire o chiudere il pannello multimediale tramite l'icona in alto a destra o cliccando lo stick destro del controller (`R3`). Una volta aperto:
+Il pannello multimediale si apre dalla scheda **Musica** o dalla sua icona in alto a destra; con il pannello aperto `R3` (stick destro premuto) o **B** lo chiudono, mentre a pannello chiuso `R3` mostra o nasconde la barra dei comandi. Una volta aperto:
 - usa la croce direzionale o lo stick sinistro per navigare;
 - premi **A (✕)** per selezionare o cambiare stato;
 - premi **B (○)** per chiudere il pannello e tornare al gioco.

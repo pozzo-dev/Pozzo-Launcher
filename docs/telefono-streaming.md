@@ -302,6 +302,6 @@ Un amico entra nella tua partita da casa sua: il suo telefono fa da **secondo co
    controller del **giocatore 2** (o del primo posto libero).
 4. **Video**: l'amico installa [Moonlight](https://moonlight-stream.org), aggiunge il PC all'indirizzo che gli dai (da
    fuori casa serve una rete privata, per esempio Tailscale) e scrive nella pagina dell'invito il **PIN di 4 cifre** che
-   Moonlight mostra: il PC lo conferma da solo, senza aprire l'interfaccia di Sunshine.
+   Moonlight mostra: il PC lo conferma da solo, senza aprire l'interfaccia di Sunshine. È un solo PIN per ospite; il client Moonlight viene disabbinato quando lo togli o allo scadere delle 12 ore.
 
 La lista **Ospiti** ha **Togli**, come per i telefoni: l'ospite esce subito dal controller.

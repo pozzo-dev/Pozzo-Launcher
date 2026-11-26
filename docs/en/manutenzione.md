@@ -25,7 +25,7 @@ The following **always remain local to the individual PC**: ROM folders, emulato
 1. On the first PC, click **🔑 Show code for another PC**: a 6-digit code appears (valid for 10 minutes, single use) along with the PC's address;
 2. On the second PC, enter the address and code, then click **Pair**.
 
-From that point on, the second PC exchanges data with the first **bidirectionally** whenever both are powered on within the same network. Communication is encrypted (HTTPS) and the first PC's certificate is remembered during pairing: if it changes, data exchange stops and pairing must be repeated. A paired PC can only exchange synchronization data, nothing else. Paired PCs can be disconnected from the same section. Windows may prompt to allow the app on private networks.
+From that point on, the second PC exchanges data with the first **bidirectionally** whenever both are powered on within the same network. Communication is encrypted (HTTPS). The pairing is stored on both PCs and survives IP address or certificate changes; PCs paired before 0.21.0 may need to be paired again once. A paired PC can only exchange synchronization data, nothing else. Paired PCs can be disconnected from the same section. Windows may prompt to allow the app on private networks.
 
 ### How Data is Merged
 
@@ -43,7 +43,8 @@ In **Settings › Library › Data Backups**, favorites, playtime, statuses, not
 - **Credentials**: "Include credentials" is on by default. If you turn it off, API keys and tokens stay out of the zip (safe to keep in the cloud) and a restore leaves the current ones in place.
 - **Restore preview**: before confirming you see which files will be overwritten or created and, for data, how many rows exist now versus in the backup. If the backup contains before/after-game scripts, a warning is shown.
 - Not included: caches, metadata, images, screenshot files, the download queue, `config.toml` and emulators.
-- **Hot restore**: works while the app is running. Before restoring, a copy of the current data is saved so the restore operation can be undone.
+- **Hot restore**: works while the app is running. Before restoring, a copy of the current data is saved so the restore operation can be undone. Paired phones, guests, library invites and paired PCs stay as they are now: ones revoked after the backup do not come back.
+- **`settings.json` and profile copies**: each has a `.bak` file next to it, which the app uses automatically if the original gets damaged.
 
 There is no need to back up the library database (`library.db`): it rebuilds itself automatically. For game saves, see [Playing](giocare.md#save-management).
 

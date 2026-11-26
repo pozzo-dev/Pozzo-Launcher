@@ -48,6 +48,7 @@ docs/PozzoLauncher-manuale.pdf
 .github/hooks/
 .impeccable/
 docs/PARALLEL.md
+docs/COORDINATION-*.md
 docs/changelog.d/
 *.csv
 data-csv/

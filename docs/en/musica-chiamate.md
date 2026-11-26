@@ -2,7 +2,7 @@
 
 **Big Picture** mode includes a built-in mini-player for **Spotify**, system media key controls, and voice call management with **Discord**.
 
-You can open or close the media panel using the icon in the top right or by clicking the controller's right thumbstick (`R3`). Once open:
+The media panel opens from the **Music** tab or its icon in the top right; while it is open, `R3` (right thumbstick click) or **B** closes it, and when it is closed `R3` shows or hides the hints bar. Once open:
 - use the D-pad or left thumbstick to navigate;
 - press **A (✕)** to select or toggle states;
 - press **B (○)** to close the panel and return to the game.

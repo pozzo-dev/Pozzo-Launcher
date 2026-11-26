@@ -1,5 +1,43 @@
 # Changelog
 
+## Non rilasciato
+
+### Corretto
+
+- **Download**: le ROM zip di MAME/NeoGeo restano intere in libreria, gli archivi annidati (un .7z con uno .zip dentro) si estraggono fino alla ROM, e le cartelle di gioco (PS3, Wii U, Xbox 360, MS-DOS) e i file di corredo dei CD (.sbi, .sub) vengono spostati insieme.
+- **Download**: i pacchetti da installare (.pkg, .vpk, .cia) finiscono con la nota «Da installare nell'emulatore» invece di fallire in silenzio, e due giochi dallo stesso magnet completano entrambi senza l'errore «Torrent non aggiunto».
+- **Download**: più download DataNodes via ouo.io insieme si risolvono in una sola finestra nascosta, senza timeout in coda né link scaduti riusati.
+- **Download**: un server che non riprende i download non fa più ripartire il file da capo all'infinito, un torrent è completo solo dopo il controllo di tutti i pezzi, un download annullato durante lo spostamento finale non ricompare al riavvio, e rimuovere un vecchio download non cancella il file di uno nuovo con lo stesso nome.
+- **Download**: l'ingresso in libreria non sposta più cartelle o file dell'utente che non fanno parte del download (file sciolti, .cue/.m3u che puntano altrove, sottotitoli .sub nella stessa cartella).
+- **Overlay**: la schermata cattura il gioco e non la finestra dell'overlay, la pausa non porta davanti il launcher e congela il timer, e «Chiudi gioco» chiede conferma prima di chiudere.
+- **Overlay**: tema chiaro, «Riduci movimento», HUD e notifiche rispettano le impostazioni; la tastiera resta dentro la scheda, il pad naviga schede e azioni, e i controlli del volume in «Media e note» funzionano.
+- **Big Picture**: i temi Chiaro e Retrò sono leggibili, le quattro palette per il daltonismo e il testo molto grande non sovrappongono più le card, e B dalle impostazioni di Aspetto esce con un solo clic.
+- **Big Picture**: R3 non apre più il pannello Musica (si apre dalla scheda Musica; R3 o B lo chiudono) e, a pannello chiuso, mostra o nasconde la barra dei comandi; nel pannello si scende fino al volume e lo si regola con sinistra e destra.
+- **Big Picture**: nella sezione Media si possono usare card ed episodi col mouse, cambiare stagione, e i testi seguono la lingua dell'app.
+- **Libreria e ricerca dati**: la ricostruzione della libreria non può più partire due volte insieme (anche da telefono), e un download finito durante la ricostruzione non va perso.
+- **Libreria e ricerca dati**: la copertina e il preferito di una ROM restano dopo una nuova scansione (la ROM è riconosciuta dal suo contenuto), e «Correggi abbinamento» non propone più giochi di un'altra serie con un titolo simile.
+- **Libreria e ricerca dati**: due clic veloci su «Cerca nuovi giochi» avviano un solo lavoro, e la ricostruzione delle librerie molto grandi legge il database molte meno volte.
+- **Libreria e ricerca dati**: «DOOM (1993)» e «DOOM» dello stesso store restano due giochi distinti, un gioco «non trovato» viene cercato di nuovo dopo qualche giorno, e un file di Epic o Steam rovinato non blocca più l'importazione degli altri giochi.
+- **Libreria e ricerca dati**: una collezione cancellata non si riempie più da sola con i giochi di prima dopo la sincronizzazione.
+- **Sincronizzazione e telefono**: i salvataggi tra due PC abbinati ora si sincronizzano nei due sensi, perché l'abbinamento viene salvato su entrambi.
+- **Sincronizzazione e telefono**: l'abbinamento tra PC sopravvive al cambio di indirizzo IP o di certificato; i PC abbinati prima della 0.21.0 potrebbero doversi abbinare di nuovo una volta.
+- **Sincronizzazione e telefono**: la sincronizzazione delle impostazioni «tutto» non sovrascrive più le chiavi e il tema del PC di partenza con quelli di un PC appena installato.
+- **Sincronizzazione e telefono**: l'ospite a distanza può usare Moonlight con un solo PIN; il client Moonlight viene disabbinato alla revoca o dopo le 12 ore di validità dell'invito.
+- **Sincronizzazione e telefono**: un codice generato per il PC non abbina un telefono (e viceversa), e il telefono mostra e avvia sempre il gioco toccato anche con la rete lenta.
+- **Sicurezza**: le richieste al telefono da un altro sito (CSRF e WebSocket) vengono rifiutate, i percorsi di temi ed estensioni non possono uscire dalla loro cartella, e i messaggi relativi sono tradotti nelle 6 lingue.
+- **Sicurezza**: il proxy dei flussi video di ricette-web rifiuta indirizzi locali e tipi di contenuto non ammessi, con messaggi nella lingua dell'app.
+- **Sicurezza**: ripristinare un backup non riporta in vita telefoni, ospiti, inviti alla libreria e PC abbinati revocati, e mantiene quelli abbinati al momento.
+- **Impostazioni e profili**: settings.json e i profili hanno una copia .bak usata in automatico se il file si rovina, senza rifare la procedura guidata.
+- **Launcher ed emulatori**: «Chiudi gioco» e la pausa toccano solo il gioco (non altri programmi aperti dalla stessa cartella), e uscendo da Pozzo durante una partita tornano piano energetico, HDR e risoluzione di prima.
+- **Launcher ed emulatori**: il disco veloce copia tutte le tracce dei CD multitraccia e tutti i dischi di un .m3u, e disinstallare Eglantine con i dati non tocca quelli di Eden.
+- **Launcher ed emulatori**: un gioco di Epic o Battle.net che non parte non conta più tempo di gioco, un crash seguito dal nuovo tentativo automatico conta una partita sola, e disinstallare DuckStation tenendo i dati conserva anche impostazioni e cartelle portatili.
+- **Avvio**: aprire Pozzo due volte di seguito non lascia più una seconda copia nascosta in esecuzione.
+- **Estensioni**: ricette-web (Stream4Me e Kodi), Media server, Media locale, Notizie, Diario, Anniversari e Limite di tempo hanno controlli più rigidi su indirizzi e file, e le locandine di Plex e Jellyfin passano con un limite di dimensione e senza seguire redirect verso altri siti.
+
+### Rimosso
+
+- **Condivisione dei torrent**: finito il download il torrent smette subito di condividere; le impostazioni di rapporto e minuti di condivisione (anche per categoria) non ci sono più.
+
 ## 0.20.2 (2026-11-26)
 
 ### Aggiunto

@@ -33,8 +33,7 @@ se i PC non sono mai accesi insieme.
 2. sul secondo PC scrivi indirizzo e codice e premi **Abbina**.
 
 Da quel momento il secondo PC scambia i dati con il primo, **nei due sensi**, quando sono accesi sulla stessa rete. La
-comunicazione è cifrata (HTTPS) e il certificato del primo PC viene ricordato all'abbinamento: se cambia, lo scambio
-si ferma e va rifatto l'abbinamento. Un PC abbinato può solo scambiare i dati di sincronizzazione, nient'altro. I PC
+comunicazione è cifrata (HTTPS). L'abbinamento viene salvato su entrambi i PC e resiste al cambio di indirizzo IP o di certificato; i PC abbinati prima della 0.21.0 potrebbero doversi abbinare di nuovo una volta. Un PC abbinato può solo scambiare i dati di sincronizzazione, nient'altro. I PC
 abbinati si scollegano dalla stessa sezione. Windows può chiedere di consentire l'app sulle reti private.
 
 ### Come si uniscono i dati
@@ -60,7 +59,8 @@ stanno in `<cache>/backups`, con un `manifest.json` che elenca il contenuto.
 - **Anteprima del ripristino**: prima di confermare vedi quali file vengono sovrascritti o creati e, per i dati,
   quante righe ci sono ora e quante nella copia. Se la copia contiene script prima/dopo il gioco, compare l'avviso.
 - **Ripristino a caldo**: funziona con l'app aperta. Prima di ripristinare viene salvata una copia dei dati attuali,
-  così il ripristino si può annullare.
+  così il ripristino si può annullare. Telefoni, ospiti, inviti alla libreria e PC abbinati restano quelli di adesso: quelli revocati dopo la copia non tornano.
+- **Copia di `settings.json` e dei profili**: ognuno ha un file `.bak` accanto, che l'app usa da sola se il file originale si rovina.
 - Non sono incluse cache, metadati, immagini, file delle schermate, coda dei download, `config.toml` ed emulatori.
 
 La libreria (`library.db`) non serve copiarla: si ricostruisce da sola. Per i salvataggi dei giochi vedi
