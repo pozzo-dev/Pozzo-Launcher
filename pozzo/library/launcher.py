@@ -495,11 +495,13 @@ def _evict(d: Path):
 def _extract(cfg, target: Path, ident: str, on_status) -> Path:
     root = Path(cfg.cache) / "extract"
     dest = root / ident
+    from ..downloads import extract as X  # percorsi e scrittura a blocchi gia' protetti (zip slip, tetto dei byte)
     with zipfile.ZipFile(target) as z:
-        infos = [i for i in z.infolist() if not i.is_dir()]
+        infos = [(i, X._safe_rel(i.filename)) for i in z.infolist() if not i.is_dir()]
+        infos = [(i, r) for i, r in infos if r]  # "../x" e percorsi assoluti: scartati
         if not infos:
             raise LaunchError("ZIP vuoto")
-        main = max(infos, key=lambda i: i.file_size)
+        main = max(infos, key=lambda t: t[0].file_size)[0]
         out = dest / Path(main.filename).name
         mine = _played(dest)
         if out.exists() and (out.stat().st_size == main.file_size or out.name in mine):
@@ -507,14 +509,11 @@ def _extract(cfg, target: Path, ident: str, on_status) -> Path:
             return out
         dest.mkdir(parents=True, exist_ok=True)
         on_status(f"Estrazione di {main.filename} ({main.file_size / 2**30:.1f} GB)...")
-        for info in infos:  # estrae tutto (es. .cue + .bin)
-            if Path(info.filename).name in mine:
-                continue
-            z.extract(info, dest)
-            ex = dest / info.filename
-            if ex.parent != dest:
-                shutil.move(str(ex), dest / ex.name)
-        names, old = {Path(i.filename).name for i in infos}, _extracted(dest) or {}
+        # estrae tutto (es. .cue + .bin) appiattito nella cartella
+        todo = [(Path(r).name, lambda i=i: z.open(i)) for i, r in infos if Path(r).name not in mine]
+        total = sum(i.file_size for i, _ in infos)
+        X._copy_members(todo, dest, total, None, lambda: False, total)
+        names, old = {Path(r).name for _, r in infos}, _extracted(dest) or {}
         (dest / EXTRACT_LIST).write_text(json.dumps(
             {n: old[n] if n in mine else s for n, s in archiverun._snap(dest).items() if n in names}), encoding="utf-8")
     # tiene solo gli ultimi MAX_EXTRACTED giochi estratti
@@ -664,7 +663,9 @@ class _Job:
         self.k.TerminateJobObject(self.h, 1)
 
     def close(self):
-        self.k.CloseHandle(self.h)
+        h, self.h = self.h, None  # idempotente: chiuso a fine partita e di nuovo nel finally
+        if h:
+            self.k.CloseHandle(h)
 
 
 class _PgJob:
@@ -1008,8 +1009,10 @@ class Launcher:
         if not self.shots or not key or self.state.get("status") != "running":
             return False
         from . import screens
+        proc = getattr(self, "_proc", None)  # finestra del gioco, non quella in primo piano (puo' essere l'overlay)
+        pid = proc.pid if proc and proc.poll() is None else next(iter(self._session_pids()), None)
         try:
-            img = screens.capture_foreground()
+            img = screens.capture_foreground(pid)
             sid = self.shots.add_image(key, img)
         except Exception as e:
             self._set(message=f"Schermata non riuscita: {e}")
@@ -1161,8 +1164,9 @@ class Launcher:
                 pids.update(p.pid for p in self._game_procs(track))
         return sorted(pids - {os.getpid(), self._comp_pid})  # Pozzo e l'app abbinata restano attivi
 
-    def pause(self) -> bool:
-        """Congela il gioco (e i suoi figli): niente CPU/GPU, anche senza pausa nel gioco. Il tempo di gioco si ferma."""
+    def pause(self, focus_launcher: bool = True) -> bool:
+        """Congela il gioco (e i suoi figli): niente CPU/GPU, anche senza pausa nel gioco. Il tempo di gioco si ferma.
+        focus_launcher=False: non porta Pozzo davanti (l'overlay in gioco resta sopra il gioco)."""
         if self.state.get("status") != "running" or self._frozen:
             return False
         pids = self._session_pids()
@@ -1170,7 +1174,7 @@ class Launcher:
             return False
         try:  # Pozzo davanti: chi gioca a schermo intero non resta davanti a una finestra congelata
             from ..app.common import WINDOW_FOCUS
-            WINDOW_FOCUS["fn"] and WINDOW_FOCUS["fn"]()
+            focus_launcher and WINDOW_FOCUS["fn"] and WINDOW_FOCUS["fn"]()
         except Exception:
             pass
         done = [p for p in pids if _suspend(p, True)]
@@ -1229,7 +1233,9 @@ class Launcher:
             foreground.splash_timer(self.on_event)
 
     def running(self) -> dict:
-        return dict(self.state)
+        t0 = self._pause_t0
+        return {**self.state, "paused": bool(self._frozen),  # paused_total: secondi in pausa, compresa quella in corso
+                "paused_total": self._paused_total + (time.time() - t0 if t0 is not None else 0.0)}
 
     def launch(self, key: str, title: str, platform: P.Platform, path: Path, fast: bool = False, fallback: str | None = None,
                phone_touch: bool = False):
@@ -1481,7 +1487,7 @@ class Launcher:
         quiet = bool(lname and (self.cfg.app.get("launch") or {}).get("hide_launcher", True) and not _procs_named(lname))
         self._scripts(key, "before")
         ses = self._auto_begin(key, self.state.get("emulator") or "")
-        job = _Job.new()
+        job = raw_job = _Job.new()  # raw_job: se il gioco non entra nel Job, `job` diventa None ma l'handle va chiuso lo stesso
         comp = self._companion(key, job)
         self.on_event("game_launching", dict(self.state))  # sincrono: la copia dei salvataggi finisce prima del gioco
         try:
@@ -1507,9 +1513,11 @@ class Launcher:
             job = job if job and proc and job.add(proc) and Path(target).name.lower() not in self.LAUNCHER_EXES else None
             self._set(status="running", message=target)
             self._proc, self._job = proc, job
-            self._track = launch.get("track_dir") or install_dir
             via_launcher = proc is None or Path(target).name.lower() in self.LAUNCHER_EXES
             track = launch.get("track_dir") or install_dir
+            # gioco diretto: ci pensano Job e albero dei processi; la cartella (nei manuali e' quella dell'exe, anche Desktop) non va usata per chiudere
+            self._track = track if via_launcher else None
+            seen = True  # senza cartella da controllare non si sa: si conta come prima
             if not via_launcher:
                 self._wait_proc(proc, job, comp)  # gioco avviato direttamente: si aspetta il suo processo (e i figli, nel Job)
             elif track and Path(track).is_dir():
@@ -1542,11 +1550,13 @@ class Launcher:
                     resends = 0 if is_uri else LAUNCH_RESENDS.get(store_id, 0)
                 if lname and self._game_procs(track) and (self.cfg.app.get("launch") or {}).get("hide_launcher", True):
                     threading.Thread(target=hide_launcher_windows, args=(lname, 15), daemon=True).start()  # il gioco passa avanti
-                t0 = self._t0 = time.time() if self._game_procs(track) else t0
+                seen = bool(self._game_procs(track))  # launcher piantato (login, aggiornamento): il gioco non e' mai partito, nessuna partita
+                t0 = self._t0 = time.time() if seen else t0
                 while self._game_procs(track) and not self._stop_evt.is_set():
                     self._stop_evt.wait(3)
             played = self.played_since(t0) if (not via_launcher or track) else 0
-            self._record(key, played)
+            if not via_launcher or seen:
+                self._record(key, played)
             self._end_companion(comp, key)
             self._job = None
             job and job.close()
@@ -1566,6 +1576,7 @@ class Launcher:
             self._set(status="error", message=f"{type(e).__name__}: {e}")
         finally:
             self._unfreeze()
+            raw_job and raw_job.close()
             self._auto_end(ses)  # anche dopo un crash o un errore: risoluzione, piano energetico e HDR tornano come prima
 
     def _set(self, **kw):
@@ -1627,7 +1638,7 @@ class Launcher:
                 self._fast_remove(fc["dir"])
 
     def _run_emu(self, key: str, platform: P.Platform, path: Path, pl: dict, src: Path, fc: dict, retry: bool = False):
-        ses = None
+        ses = played = None
         try:
             target = resolve_target(platform, src)
             if _needs_extract(pl, platform, target):
@@ -1677,7 +1688,6 @@ class Launcher:
                 if code not in (0, None) and played < QUICK_CRASH_S and not stopped:
                     errf.seek(0)
                     log = "\n".join(errf.read().decode("utf-8", "replace").splitlines()[-50:])
-            self._record(key, played)
             self._end_companion(comp, key)
             self._job = None
             job and job.close()
@@ -1702,18 +1712,22 @@ class Launcher:
                     self._set(emulator=alt["emulator"], emulator_id=alt["emulator"], exe=alt["exe"])
                     alt["trial"] = True
                     self._t0, self._recorded = time.time(), False  # il ritentativo e' una partita nuova
-                    return self._run_emu(key, platform, path, alt, src, fc, retry=True)
+                    return self._run_emu(key, platform, path, alt, src, fc, retry=True)  # il tentativo fallito non si registra
+                self._record(key, played)
                 self._fast_done(fc)  # dopo la scelta: il ritentativo qui sopra riusa la copia veloce
                 self._set(status="error", played=played, code=code, message=f"{pl['emulator']} si e' chiuso subito (codice {code})",
                           crash={"code": code, "duration": run["duration"], "log": log}, fallback=fb)
                 return
             if pl.get("trial") and not _quick(run):  # l'alternativa funziona: si ricorda per questo gioco
                 _crash_update(self.cfg, key, lambda e: e.update(fallback=cand_id(pl)))
+            self._record(key, played)
             self._fast_done(fc)
             self._set(status="finished", played=played, code=code, crash=None, fallback=None)
         except LaunchError as e:
+            played is None or self._record(key, played)  # errore dopo la fine del gioco (after, plan...): il tempo non si perde
             self._set(status="error", message=str(e))
         except Exception as e:
+            played is None or self._record(key, played)
             self._set(status="error", message=f"{type(e).__name__}: {e}")
         finally:
             self._unfreeze()

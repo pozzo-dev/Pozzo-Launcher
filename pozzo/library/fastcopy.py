@@ -60,7 +60,11 @@ def same(a: Path, b: Path) -> bool:
 def _entries(src: Path) -> tuple[list[Path], list[Path]]:
     """Cartelle e file da copiare. Per un file: anche i siblings (stesso nome senza estensione)."""
     if src.is_file():
-        return [], [p for p in src.parent.iterdir() if p.is_file() and p.stem == src.stem]
+        from .wof import rom_files  # import locale: evita il ciclo
+        files = {p for p in src.parent.iterdir() if p.is_file() and p.stem == src.stem}
+        # tracce di .cue/.gdi e dischi di .m3u: senza, l'emulatore trova solo il foglio (Redump: "(Track 01).bin")
+        files |= {q for q in map(Path, rom_files([src])) if q.is_file() and q.is_relative_to(src.parent)}
+        return [], sorted(files)
     items = list(src.rglob("*"))
     return [src] + [p for p in items if p.is_dir()], [p for p in items if p.is_file()]
 

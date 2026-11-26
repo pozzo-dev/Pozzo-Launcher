@@ -191,8 +191,8 @@ def test_uninstall_appdata_non_condivisa(tmp_path, monkeypatch):
     sav = tmp_path / "ad" / "eden" / "salvataggio.bin"
     sav.parent.mkdir(parents=True)
     sav.write_text("s")
-    _fake_install(EI, cfg, tmp_path, "eglantine")
-    EI.uninstall(cfg, "eglantine", keep_data=False)
+    _fake_install(EI, cfg, tmp_path, "eden")
+    EI.uninstall(cfg, "eden", keep_data=False)
     assert not sav.parent.exists()  # nessun altro la usa: via
 
 

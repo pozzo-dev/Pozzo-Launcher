@@ -150,19 +150,17 @@ class UserData:
 
     def record_play(self, key: str, seconds: float):
         now = time.time()
-        with self.lock:
-            self.db.execute("INSERT INTO play_sessions VALUES(?, ?, ?)", (key, now - max(0.0, seconds), max(0.0, seconds)))
-            # un gioco avviato senza stato diventa "in corso"
-            self.db.execute("UPDATE user_games SET status='playing' WHERE key=? AND (status IS NULL OR status='' "
-                            "OR status='backlog')", (key,))
+        sec = max(0.0, seconds)
+        with self.lock:  # una sola transazione: un crash a meta' non lascia sessione senza contatori
+            self.db.execute("INSERT INTO play_sessions VALUES(?, ?, ?)", (key, now - sec, sec))
+            # un gioco avviato senza stato (o "da giocare") diventa "in corso"
+            self.db.execute("INSERT INTO user_games(key, last_played, play_count, playtime, status) VALUES(?, ?, 1, ?, 'playing') "
+                            "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
+                            "play_count=play_count+1, playtime=playtime+excluded.playtime, "
+                            "status=CASE WHEN status IS NULL OR status='' OR status='backlog' THEN 'playing' ELSE status END",
+                            (key, now, sec))
             self.db.commit()
-        self._exec("INSERT INTO user_games(key, last_played, play_count, playtime) VALUES(?, ?, 1, ?) "
-                   "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
-                   "play_count=play_count+1, playtime=playtime+excluded.playtime",
-                   (key, time.time(), max(0.0, seconds)))
-        with self.lock:
-            self.db.execute("UPDATE user_games SET status='playing' WHERE key=? AND (status IS NULL OR status='')", (key,))
-            self.db.commit()
+            self.rev += 1
         self._stamp("game", key, "last_played", "status")
 
     def sessions(self, since: float = 0) -> list[tuple[str, float, float]]:

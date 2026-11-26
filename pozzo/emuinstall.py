@@ -507,8 +507,9 @@ _USER_ENTRIES = {"portable", "portable.txt", "portable.ini", "user", "config", "
 # solo per alcuni: lo stesso nome (es. "data") in altri emulatori e' una cartella del programma
 _USER_EXTRA = {"flycast": {"data", "emu.cfg"}, "cemu": {"mlc01", "settings.xml", "controllerprofiles", "keys.txt"},
                "vita3k": {"ux0", "config.yml"}, "xenia": {"content", "xenia-canary.config.toml"},
-               "retroarch": {"retroarch.cfg", "playlists"}, "rpcs3": {"config.yml", "guiconfigs"}}
-APPDATA_DIRS = {"ryujinx": "Ryujinx", "eden": "eden", "eglantine": "eden", "cemu": "Cemu", "dolphin": "Dolphin Emulator",
+               "retroarch": {"retroarch.cfg", "playlists"}, "rpcs3": {"config.yml", "guiconfigs"},
+               "duckstation": {"settings.ini", "gamesettings", "inputprofiles", "cheats", "textures", "covers", "screenshots"}}
+APPDATA_DIRS = {"ryujinx": "Ryujinx", "eden": "eden", "cemu": "Cemu", "dolphin": "Dolphin Emulator",
                 "duckstation": "DuckStation", "pcsx2": "PCSX2", "ppsspp": "PPSSPP", "melonds": "melonDS"}
 
 
@@ -527,7 +528,7 @@ def _appdata(emu_id: str) -> Path | None:
     from .emuadapters import cemu, dolphin, duckstation, eden, pcsx2
     known = {"dolphin": lambda: dolphin._user_dir(None), "duckstation": lambda: duckstation._data_root(None),
              "pcsx2": lambda: pcsx2._data_root(None), "cemu": lambda: cemu._base(None),
-             "eden": lambda: eden._base(None), "eglantine": lambda: eden._base(None)}
+             "eden": lambda: eden._base(None)}
     if emu_id in known:
         return known[emu_id]()
     if sys.platform == "darwin":  # shortcut: PPSSPP/melonDS/Ryujinx su macOS non verificati dai sorgenti
@@ -556,8 +557,9 @@ def uninstall(cfg, emu_id: str, keep_data: bool = True) -> None:
         shutil.rmtree(dest, ignore_errors=True)
         if APPDATA_DIRS.get(emu_id):
             appdata = _appdata(emu_id)
-            # cartella condivisa con un altro emulatore installato (eden/eglantine): resta
-            shared = any(APPDATA_DIRS.get(o) == APPDATA_DIRS[emu_id] for o in installed(cfg) if o != emu_id)
+            # cartella condivisa con un altro emulatore installato o configurato a mano: resta
+            # (Eglantine non c'e': e' isolato nella sua cartella «user», vedi isolate_eglantine)
+            shared = any(APPDATA_DIRS.get(o) == APPDATA_DIRS[emu_id] for o in {*installed(cfg), *cfg.emulators} if o != emu_id)
             if appdata and not shared:
                 shutil.rmtree(appdata, ignore_errors=True)
     # emu_installed si riscrive intero (save_settings non unisce i dict annidati): gli altri emulatori restano

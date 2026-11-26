@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 
+from .. import onexit
 from . import padremap
 
 log = logging.getLogger(__name__)
@@ -220,9 +221,11 @@ class Session:
         self.conf, self.env_fn, self.report = conf, env_fn, report
         self.undo: list = []
         self.done = False
+        self._lock = threading.Lock()
 
     def begin(self):
         c = self.conf
+        onexit.register(self._undo)  # il thread di gioco e' daemon: all'uscita dell'app end() non arriverebbe mai
         if c.get("before_cmd"):
             if err := run(c["before_cmd"], c.get("before_cwd"), self.env_fn("before"), c.get("before_wait", True)):
                 self._err("Script «prima dell'avvio» non riuscito", err)
@@ -270,16 +273,21 @@ class Session:
             rm.start()  # se fallisce ripristina da solo (pad virtuale, HidHide)
             self.undo.append(rm.stop)
 
-    def end(self):
-        if self.done:  # chiamato sia a fine partita sia nel finally
-            return
-        self.done = True
-        for fn in reversed(self.undo):
+    def _undo(self):
+        """Solo il ripristino, una volta sola (anche dal gestore di uscita: lo script «dopo» no)."""
+        with self._lock:
+            undo, self.undo = self.undo, []
+        for fn in reversed(undo):
             try:
                 fn()
             except Exception as e:
                 log.warning("ripristino automazione fallito: %s", e)
-        self.undo.clear()
+
+    def end(self):
+        if self.done:  # chiamato sia a fine partita sia nel finally
+            return
+        self.done = True
+        self._undo()
         c = self.conf
         if c.get("after_cmd"):
             if err := run(c["after_cmd"], c.get("after_cwd"), self.env_fn("after"), c.get("after_wait", False)):

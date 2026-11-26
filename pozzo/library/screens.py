@@ -168,8 +168,32 @@ def _mac_capture(pid: int | None = None, runner=subprocess.run):
             pass
 
 
+def _win_of_pid(user32, pid: int) -> int:
+    """HWND visibile piu' grande del processo `pid` o dei suoi figli (0 se non c'e')."""
+    from ctypes import wintypes
+    pids = {pid}
+    try:
+        import psutil
+        pids |= {c.pid for c in psutil.Process(pid).children(recursive=True)}
+    except Exception:  # noqa: BLE001 - senza figli si guarda solo il processo
+        pass
+    best: list = [0, 0]  # [area, hwnd]
+
+    def cb(hwnd, _):
+        owner, r = wintypes.DWORD(), wintypes.RECT()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value in pids and user32.IsWindowVisible(hwnd) and user32.GetWindowRect(hwnd, ctypes.byref(r)):
+            area = (r.right - r.left) * (r.bottom - r.top)
+            if area > best[0]:
+                best[:] = [area, hwnd]
+        return True
+    user32.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(cb), 0)
+    return best[1]
+
+
 def capture_foreground(pid: int | None = None):
-    """Immagine della finestra in primo piano (Windows) o del gioco (macOS); su Linux tutto lo schermo."""
+    """Immagine della finestra del processo `pid` (se c'e'), altrimenti di quella in primo piano (Windows) o del gioco
+    (macOS); su Linux tutto lo schermo."""
     if sys.platform == "darwin":
         return _mac_capture(pid)
     from PIL import ImageGrab
@@ -181,7 +205,7 @@ def capture_foreground(pid: int | None = None):
             user32.SetProcessDPIAware()
         except Exception:
             pass
-        hwnd = user32.GetForegroundWindow()
+        hwnd = (pid and _win_of_pid(user32, pid)) or user32.GetForegroundWindow()  # senza finestra del gioco: come prima
         rect = wintypes.RECT()
         # bordi reali della finestra (senza ombra), poi in alternativa GetWindowRect
         DWMWA_EXTENDED_FRAME_BOUNDS = 9
