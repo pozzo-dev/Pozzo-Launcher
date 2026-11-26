@@ -117,5 +117,59 @@ const sample = { id: "z1", key: "snes/z1", title: "Zelda", platform: "snes", cov
   assert.ok((await saveLine(Math.floor(yesterdayAt(22, 14) / 1000))).includes("salvataggio di ieri 22:14"));
   assert.ok(!(await saveLine("nonvalida")).includes("salvataggio di"));
 
+  // 8. classicNav aggiorna classi in-place senza riscrivere innerHTML ad ogni passo D-pad
+  {
+    let navWrites = 0;
+    const mkTab = (i) => {
+      const cl = new Set();
+      return {
+        dataset: { tab: String(i) },
+        classList: { toggle: (c, on) => (on ? cl.add(c) : cl.delete(c)), has: (c) => cl.has(c) },
+        scrollIntoView() {},
+      };
+    };
+    let tabsDom = [];
+    const navEl = {
+      dataset: {},
+      set innerHTML(v) { navWrites++; tabsDom = [...v.matchAll(/data-tab="(\d+)"/g)].map((m) => mkTab(m[1])); },
+    };
+    const exitEl = { set innerHTML(v) { tabsDom.push(...[...v.matchAll(/data-tab="(\d+)"/g)].map((m) => mkTab(m[1]))); } };
+    const ctxNav = makeCtx({ items: [] });
+    ctxNav.TABS = [{ id: "home", label: "Home" }, { id: "foryou", label: "Per te" }, { id: "exit", label: "Esci" }];
+    ctxNav.stackTop = { tab: "foryou", navFocus: null };
+    ctxNav.$ = (s) => (s === "#bp-nav" ? navEl : s === "#bp-exit" ? exitEl : { style: {} });
+    ctxNav.document = {
+      querySelectorAll: (s) => (s.includes(".bp-tab") ? tabsDom : []),
+      querySelector: () => null,
+    };
+    ctxNav.BPLayouts.classic.nav();
+    assert.strictEqual(navWrites, 1, "prima costruzione nav");
+    assert(tabsDom[1].classList.has("active") && !tabsDom[0].classList.has("active"));
+    ctxNav.stackTop.navFocus = 0;
+    ctxNav.BPLayouts.classic.nav();
+    assert.strictEqual(navWrites, 1, "nessuna riscrittura innerHTML al cambio focus");
+    assert(tabsDom[0].classList.has("focus") && !tabsDom[1].classList.has("focus"));
+  }
+
+  // 9. classicTextCard escape sicuro di art/icon/img, classicCard senza .notinst
+  {
+    const ctxEsc = makeCtx({ items: [] });
+    const bad = ctxEsc.BPLayouts.classic.textCard("Titolo", "Sub", 0, "k", 'javascript:alert(1)', { art: '"/x" onerror="alert(1)', icon: 'https://ok/i.png"x' });
+    assert.ok(!bad.includes('onerror="alert'), "attributo art escapato");
+    assert.ok(!bad.includes("javascript:"), "URL non http/relativo scartato");
+    const cHtml = ctxEsc.BPLayouts.classic.card({ id: 1, title: "G", store: "steam", installed: false, platform: "windows" }, 0);
+    assert.ok(cHtml.includes("notinst"), "card store non installato: .notinst");
+  }
+
+  // 10. classicShelves Up dalla riga 0 usa tabIndex invece di 0 fisso
+  {
+    const ctxUp = makeCtx({ items: [] });
+    ctxUp.TABS = [{ id: "home" }, { id: "foryou" }];
+    ctxUp.tabIndex = (id) => ctxUp.TABS.findIndex((x) => x.id === id);
+    const sh = ctxUp.BPLayouts.classic.shelves(shelves0(), "foryou");
+    sh.move(0, -1);
+    assert.strictEqual(sh.navFocus, 1, "Up usa tabIndex della scheda corrente");
+  }
+
   console.log("test_bp_resume: ok");
 })().catch((e) => { console.error(e); process.exit(1); });

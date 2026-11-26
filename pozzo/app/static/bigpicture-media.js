@@ -8,6 +8,18 @@
   const SOURCES = [["locale", "/plugin-api/media-locale/list?limit=1000"], ["ricette", "/plugin-api/ricette-web/list?limit=1000"],
     ["server", "/plugin-api/media-server/list"]];
 
+  const tr = (k, it, p) => {
+    const fn = (typeof window !== "undefined" && typeof window.t === "function") ? window.t : (typeof t === "function" ? t : null);
+    if (fn) { const v = fn(k, p); if (v !== k) return v; }
+    return p ? it.replace(/\{(\w+)\}/g, (m, x) => (x in p ? p[x] : m)) : it;
+  };
+  const epCount = (n) => (n === 1 ? tr("c.bpm.ep.one", "{n} episodio", { n }) : tr("c.bpm.ep.many", "{n} episodi", { n }));
+  const motionReduced = () => {
+    if (typeof document === "undefined") return false;
+    const m = document.documentElement?.dataset?.motion;
+    return m === "off" || m === "reduced" || (m !== "normal" && typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  };
+
   /* ------------------------------------------------------------ logica pura */
   const items = (r) => (Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : []);
   const norm = (s) => String(s || "").trim().toLowerCase();
@@ -55,20 +67,20 @@
   }
 
   const itemCard = (it) => ({ type: "item", key: `${it.source || "l"}:${it.id}`, item: it, poster: it.poster || "", pct: pct(it), seen: !!it.seen,
-    label: isEpisode(it) && it.series ? it.series : it.title || "", sub: isEpisode(it) ? `${epTag(it)}${it.title ? " · " + it.title : ""}` : it.kind === "serie" ? "Serie" : it.year ? String(it.year) : "" });
+    label: isEpisode(it) && it.series ? it.series : it.title || "", sub: isEpisode(it) ? `${epTag(it)}${it.title ? " · " + it.title : ""}` : it.kind === "serie" ? tr("c.bpm.series", "Serie") : it.year ? String(it.year) : "" });
   const seriesCard = (s) => ({ type: "series", key: "s:" + s.key, series: s, poster: s.poster, pct: 0, seen: false, label: s.title,
-    sub: s.count != null ? `${s.count} ${s.count === 1 ? "episodio" : "episodi"}` : "Serie" });
+    sub: s.count != null ? epCount(s.count) : tr("c.bpm.series", "Serie") });
   const cardsFor = (list) => groupSeries(list).map(seriesCard).concat(list.filter((it) => !isEpisode(it)).sort((a, b) => String(a.title).localeCompare(String(b.title))).map(itemCard));
 
   /** Righe della schermata. wl = voci della watchlist. Le righe vuote non esistono. */
   function buildRows(list, wl = []) {
     const anime = list.filter(isAnime), rest = list.filter((it) => !isAnime(it));
     const rows = [
-      { id: "continue", title: "Continua a guardare", cards: continueItems(list).map(itemCard) },
-      { id: "film", title: "Film", cards: rest.filter((it) => !isEpisode(it) && it.kind !== "serie").sort((a, b) => String(a.title).localeCompare(String(b.title))).map(itemCard) },
-      { id: "serie", title: "Serie TV", cards: groupSeries(rest).map(seriesCard).concat(rest.filter((it) => it.kind === "serie").map(itemCard)) },
-      { id: "anime", title: "Anime", cards: cardsFor(anime) },
-      { id: "watchlist", title: "Watchlist", cards: items(wl).map((w) => ({ type: "wl", key: `w:${w.source || ""}:${w.item_id || w.title}`, wl: w, poster: w.poster || "",
+      { id: "continue", title: tr("c.bpm.row.continue", "Continua a guardare"), cards: continueItems(list).map(itemCard) },
+      { id: "film", title: tr("c.bpm.row.film", "Film"), cards: rest.filter((it) => !isEpisode(it) && it.kind !== "serie").sort((a, b) => String(a.title).localeCompare(String(b.title))).map(itemCard) },
+      { id: "serie", title: tr("c.bpm.row.series", "Serie TV"), cards: groupSeries(rest).map(seriesCard).concat(rest.filter((it) => it.kind === "serie").map(itemCard)) },
+      { id: "anime", title: tr("c.bpm.row.anime", "Anime"), cards: cardsFor(anime) },
+      { id: "watchlist", title: tr("c.bpm.row.watchlist", "Watchlist"), cards: items(wl).map((w) => ({ type: "wl", key: `w:${w.source || ""}:${w.item_id || w.title}`, wl: w, poster: w.poster || "",
         pct: 0, seen: false, label: w.title || "", sub: [w.year, w.kind].filter(Boolean).join(" · ") })) },
     ];
     return rows.filter((r) => r.cards.length);
@@ -78,7 +90,7 @@
   const matchWatch = (w, list) => list.find((it) => String(it.id) === String(w.item_id) && (!w.source || (it.source || "media-locale") === w.source))
     || list.find((it) => !isEpisode(it) && norm(it.title) === norm(w.title)) || null;
 
-  const epState = (it) => (it.seen ? "Visto" : pct(it) ? `${pct(it)}%` : "");
+  const epState = (it) => (it.seen ? tr("c.bpm.seen", "Visto") : pct(it) ? `${pct(it)}%` : "");
 
   /** Pulsante del pad -> comando del lettore (o null). st = getState(), hold = tenuto premuto (ripetizione). */
   function padCommand(action, st = {}, hold = false) {
@@ -146,23 +158,33 @@
     };
     async function play(item, episodes, back = () => scr.refresh()) {
       let mod;
-      try { mod = await imp(); } catch { ctx.beep?.("err"); return ctx.toast("Lettore Media non disponibile: controlla che «Media locale» sia attiva.", true); }
+      try { mod = await imp(); } catch { ctx.beep?.("err"); return ctx.toast(tr("c.bpm.noPlayer", "Lettore Media non disponibile: controlla che «Media locale» sia attiva."), true); }
       openedAt = Date.now();
-      try { await mod.play(gs, item, () => { openedAt = Date.now(); back(); }, { episodes }); } catch (e) { ctx.toast(e.message || "Impossibile avviare il video", true); }
+      try { await mod.play(gs, item, () => { openedAt = Date.now(); back(); }, { episodes }); } catch (e) { ctx.toast(e.message || tr("c.bpm.playError", "Impossibile avviare il video"), true); }
     }
     const scr = {
-      tab: "videos", title: "Media", row: 0, cols: [], navFocus: null,
-      hints: [["a", "Riproduci"], ["b", "Indietro"]],
+      tab: "videos", get title() { return tr("c.tab.videos", "Media"); }, row: 0, cols: [], navFocus: null,
+      get hints() { return [["a", tr("c.bpm.play", "Riproduci")], ["b", tr("c.action.back", "Indietro")]]; },
       async refresh() { // dopo il lettore: posizioni di ripresa aggiornate, fuoco dove era
         try { Object.assign(D, await loadAll(ctx.api), { loading: false }); D.rows = buildRows(D.list, D.wl); } catch { /* resta com'e' */ }
         if (ctx.cur() === scr) { scr.render(ctx.main()); }
       },
       render(el) {
-        const body = D.loading ? `<p class="bpm-msg">Caricamento…</p>` : !D.rows.length
-          ? `<div class="bpm-empty"><h2>Nessun contenuto da guardare</h2><p>${D.anySource ? "La libreria è vuota." : "Non si riesce a leggere la libreria Media."}</p>`
-            + `<p>Aggiungi le cartelle di film e serie da <b>Impostazioni › Estensioni › Media locale</b> e avvia la scansione; poi torna qui.</p></div>`
+        const body = D.loading ? `<p class="bpm-msg">${esc(tr("c.bpm.loading", "Caricamento…"))}</p>` : !D.rows.length
+          ? `<div class="bpm-empty"><h2>${esc(tr("c.bpm.empty.title", "Nessun contenuto da guardare"))}</h2><p>${esc(D.anySource ? tr("c.bpm.empty.lib", "La libreria è vuota.") : tr("c.bpm.empty.err", "Non si riesce a leggere la libreria Media."))}</p>`
+            + `<p>${tr("c.bpm.empty.hint", "Aggiungi le cartelle di film e serie da <b>Impostazioni › Estensioni › Media locale</b> e avvia la scansione; poi torna qui.")}</p></div>`
           : D.rows.map((r, ri) => `<section class="bpm-row" data-r="${ri}"><h2>${esc(r.title)}</h2><div class="bpm-strip">${r.cards.map((c, i) => cardHtml(c, ri, i)).join("")}</div></section>`).join("");
         el.innerHTML = `<div class="bpm">${body}</div>`;
+        el.querySelector?.(".bpm")?.addEventListener?.("click", (e) => {
+          const card = e.target.closest?.(".bpm-card[data-r][data-i]");
+          if (!card) return;
+          this.navFocus = null;
+          this.row = +card.dataset.r;
+          this.cols[this.row] = +card.dataset.i;
+          this.update(true);
+          ctx.beep?.("ok");
+          this.ok();
+        });
         this.cols = D.rows.map((_, i) => Math.min(this.cols[i] || 0, D.rows[i].cards.length - 1));
         this.row = Math.min(this.row, Math.max(0, D.rows.length - 1));
         if (D.loading) loadAll(ctx.api).then((d) => { Object.assign(D, d, { loading: false }); D.rows = buildRows(D.list, D.wl); if (ctx.cur() === scr) scr.render(ctx.main()); });
@@ -175,7 +197,7 @@
         const el = document.querySelector(`.bpm-card[data-r="${this.row}"][data-i="${this.cols[this.row] || 0}"]`);
         if (!el) return;
         el.classList.add("focus");
-        el.scrollIntoView({ block: "center", inline: "center", behavior: instant ? "auto" : "smooth" });
+        el.scrollIntoView({ block: "center", inline: "center", behavior: instant || motionReduced() ? "auto" : "smooth" });
       },
       move(dx, dy) {
         const n = ctx.tabsCount();
@@ -203,7 +225,7 @@
         if (c.type === "series") return ctx.push(seriesScreen(c.series));
         if (c.type === "wl") {
           const it = matchWatch(c.wl, D.list);
-          return it ? (isEpisode(it) ? ctx.push(seriesScreen(groupSeries(D.list).find((s) => s.key === norm(it.series)))) : play(it)) : ctx.toast("Non c'è un file da riprodurre per questa voce della watchlist.", true);
+          return it ? (isEpisode(it) ? ctx.push(seriesScreen(groupSeries(D.list).find((s) => s.key === norm(it.series)))) : play(it)) : ctx.toast(tr("c.bpm.wl.noFile", "Non c'è un file da riprodurre per questa voce della watchlist."), true);
         }
         play(c.item);
       },
@@ -218,24 +240,53 @@
       const eps = () => s.seasons[si].episodes;
       if (first >= 0) ei = Math.max(0, eps().findIndex((e) => !e.seen));
       const sc = {
-        tab: "videos", title: s.title, navFocus: null, hints: [["a", "Riproduci"], ["b", "Indietro"], ["lb", "Stagione"], ["rb", "Stagione"]],
+        tab: "videos", title: s.title, navFocus: null,
+        get hints() { return [["a", tr("c.bpm.play", "Riproduci")], ["b", tr("c.action.back", "Indietro")], ["lb", tr("c.bpm.season", "Stagione")], ["rb", tr("c.bpm.season", "Stagione")]]; },
         render(el) {
           const img = safeUrl(s.poster);
           el.innerHTML = `<div class="bpm bpm-series"><div class="bpm-side">${img ? `<img src="${esc(img)}" alt="" data-onerr="remove">` : ""}<h1>${esc(s.title)}</h1>`
-            + `<p>${s.count != null ? s.count + " episodi" : "Serie"}</p></div><div class="bpm-main"><div class="bpm-seasons">`
-            + s.seasons.map((x, i) => `<span class="bpm-season${i === si ? " on" : ""}">Stagione ${x.season}</span>`).join("")
+            + `<p>${esc(s.count != null ? epCount(s.count) : tr("c.bpm.series", "Serie"))}</p></div><div class="bpm-main"><div class="bpm-seasons">`
+            + s.seasons.map((x, i) => `<span class="bpm-season${i === si ? " on" : ""}" data-si="${i}">${esc(tr("c.bpm.season.n", "Stagione {n}", { n: x.season }))}</span>`).join("")
             + `</div><div class="bpm-eps">` + eps().map((e, i) => `<div class="bpm-ep${e.seen ? " seen" : ""}" data-i="${i}"><b>${e.episode ?? i + 1}</b><span class="t">${esc(e.title || epTag(e))}</span>`
               + `<span class="st">${esc(epState(e))}</span>${pct(e) ? `<span class="bpm-bar"><i style="width:${pct(e)}%"></i></span>` : ""}</div>`).join("") + `</div></div></div>`;
+          el.querySelector?.(".bpm")?.addEventListener?.("click", (e) => {
+            const seasonEl = e.target.closest?.(".bpm-season[data-si]");
+            if (seasonEl) {
+              this.navFocus = null;
+              si = +seasonEl.dataset.si;
+              ei = Math.max(0, eps().findIndex((ep) => !ep.seen));
+              this.render(ctx.main());
+              ctx.beep?.("move");
+              return;
+            }
+            const epEl = e.target.closest?.(".bpm-ep[data-i]");
+            if (epEl) {
+              this.navFocus = null;
+              ei = +epEl.dataset.i;
+              this.update(true);
+              ctx.beep?.("ok");
+              this.ok();
+            }
+          });
           this.update(true);
         },
         update(instant) {
           ctx.renderNav();
-          const el = document.querySelector(`.bpm-ep[data-i="${ei}"]`);
           document.querySelectorAll(".bpm-ep.focus").forEach((e) => e.classList.remove("focus"));
-          if (el) { el.classList.add("focus"); el.scrollIntoView({ block: "center", behavior: instant ? "auto" : "smooth" }); }
+          if (this.navFocus !== null) return;
+          const el = document.querySelector(`.bpm-ep[data-i="${ei}"]`);
+          if (el) { el.classList.add("focus"); el.scrollIntoView({ block: "center", behavior: instant || motionReduced() ? "auto" : "smooth" }); }
         },
         move(dx, dy) {
+          if (this.navFocus !== null) {
+            if (dy > 0) { this.navFocus = null; this.update(); return true; }
+            const k = this.navFocus + dx;
+            if (k < 0 || k >= ctx.tabsCount()) return false;
+            this.navFocus = k; ctx.renderNav(); return true;
+          }
+          if (dx) { const prev = si; this.season(dx); return si !== prev; }
           const k = ei + dy;
+          if (dy < 0 && (k < 0 || !eps().length)) { this.navFocus = ctx.tabIndex(); this.update(); return true; }
           if (!dy || k < 0 || k >= eps().length) return false;
           ei = k; this.update(); return true;
         },
@@ -245,7 +296,7 @@
           si = k; ei = Math.max(0, eps().findIndex((e) => !e.seen)); this.render(ctx.main()); ctx.beep?.("move");
         },
         lb() { this.season(-1); }, rb() { this.season(1); },
-        ok() { const e = eps()[ei]; if (e) play(e, s.episodes, () => sc.refresh()); },
+        ok() { if (this.navFocus !== null) return ctx.openTab(this.navFocus); const e = eps()[ei]; if (e) play(e, s.episodes, () => sc.refresh()); },
         async refresh() { // aggiorna visto/avanzamento dopo il lettore
           try { Object.assign(D, await loadAll(ctx.api), { loading: false }); D.rows = buildRows(D.list, D.wl); } catch { return; }
           const n = groupSeries(D.list).find((x) => x.key === s.key);

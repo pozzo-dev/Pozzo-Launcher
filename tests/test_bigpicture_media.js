@@ -76,4 +76,85 @@ assert.strictEqual(M.isAvailable(ext({ id: "media-locale", enabled: false })), f
 assert.strictEqual(M.isAvailable(ext({ id: "media-locale", enabled: true, error: "x" })), false);
 assert.strictEqual(M.isAvailable({ plugins: [] }), false);
 assert.strictEqual(M.isAvailable(null), false);
-M.available(async () => { throw new Error("giu"); }).then((v) => { assert.strictEqual(v, false); console.log("test_bigpicture_media ok"); });
+M.available(async () => { throw new Error("giu"); }).then((v) => {
+  assert.strictEqual(v, false);
+
+  // schermata Media: i18n, click mouse, seriesScreen move/navFocus/season, scrollIntoView data-motion
+  const calls = { nav: 0, openTab: [], pushed: [], scroll: [] };
+  const listeners = {};
+  const mkEl = (ds = {}) => {
+    const cl = new Set();
+    return {
+      dataset: ds,
+      classList: { add: (c) => cl.add(c), remove: (c) => cl.delete(c), has: (c) => cl.has(c) },
+      scrollIntoView: (opts) => calls.scroll.push(opts),
+      closest: (sel) => (sel.includes(ds._cls) ? { dataset: ds } : null),
+    };
+  };
+  const card0 = mkEl({ r: "0", i: "0", _cls: ".bpm-card" });
+  const ep0 = mkEl({ i: "0", _cls: ".bpm-ep" });
+  global.document = {
+    documentElement: { dataset: { motion: "reduced" } },
+    querySelectorAll: () => [],
+    querySelector: (sel) => (sel.startsWith(".bpm-card") ? card0 : sel.startsWith(".bpm-ep") ? ep0 : null),
+  };
+  const mainEl = {
+    _html: "",
+    set innerHTML(h) { this._html = h; },
+    get innerHTML() { return this._html; },
+    querySelector: (sel) => (sel === ".bpm" ? { addEventListener: (ev, fn) => { listeners[ev] = fn; } } : null),
+  };
+  const scr = M.screen({
+    api: async (u) => (u.includes("watchlist") ? [] : { items: list }),
+    toast() {},
+    esc: (s) => String(s),
+    push: (s) => calls.pushed.push(s),
+    cur: () => curScr,
+    main: () => mainEl,
+    renderNav: () => calls.nav++,
+    openTab: (i) => calls.openTab.push(i),
+    tabIndex: () => 5,
+    tabsCount: () => 8,
+    beep() {},
+    importPlayer: async () => ({ play: async () => {} }),
+  });
+  let curScr = scr;
+  return scr.refresh().then(() => {
+    // data-motion="reduced" -> behavior: "auto"
+    assert.strictEqual(calls.scroll[calls.scroll.length - 1].behavior, "auto", "scrollIntoView rispetta data-motion");
+
+    // click mouse su card serie apre seriesScreen
+    assert.ok(typeof listeners.click === "function", "click listener registrato su .bpm");
+    const serieRow = rows.findIndex((r) => r.id === "serie");
+    listeners.click({ target: { closest: (s) => (s.includes(".bpm-card") ? { dataset: { r: String(serieRow), i: "0" } } : null) } });
+    assert.strictEqual(calls.pushed.length, 1, "click su card apre seriesScreen");
+
+    const ser = calls.pushed[0];
+    curScr = ser;
+    ser.render(mainEl);
+    // move dx cambia stagione
+    assert.strictEqual(ser.move(1, 0), true, "dx cambia stagione");
+    assert.strictEqual(ser.move(-1, 0), true, "dx torna alla prima stagione");
+    // dy < 0 sul primo episodio sale alla barra tab (navFocus = tabIndex())
+    while (ser.move(0, -1) && ser.navFocus === null) {}
+    assert.strictEqual(ser.navFocus, 5, "Up da episodio 0 attiva navFocus");
+    assert.strictEqual(ser.move(1, 0), true, "navFocus dx sposta tab");
+    assert.strictEqual(ser.navFocus, 6);
+    ser.ok();
+    assert.deepStrictEqual(calls.openTab, [6], "ok su navFocus apre la scheda");
+    assert.strictEqual(ser.move(0, 1), true, "Down torna agli episodi");
+    assert.strictEqual(ser.navFocus, null);
+
+    // click su stagione e su episodio
+    listeners.click({ target: { closest: (s) => (s.includes(".bpm-season") ? { dataset: { si: "1" } } : null) } });
+    assert.ok(mainEl.innerHTML.includes('bpm-season on" data-si="1"'), "click su stagione attiva la stagione 2");
+
+    // traduzioni personalizzate via window.t
+    global.window.t = (k) => (k === "c.bpm.series" ? "SeriesEN" : k);
+    const enRows = M.buildRows(M.mergeSources([list]), []);
+    assert.strictEqual(enRows.find((r) => r.id === "serie").cards[1].sub, "SeriesEN");
+    delete global.window.t;
+    delete global.document;
+    console.log("test_bigpicture_media ok");
+  });
+});

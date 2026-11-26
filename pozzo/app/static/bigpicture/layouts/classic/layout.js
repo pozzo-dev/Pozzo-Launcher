@@ -2,6 +2,8 @@
 /* Stile TV "Classico": hero + scaffali orizzontali, pagina del gioco con copertina. Gli altri stili
  * ereditano da qui ogni pezzo che non ridefiniscono. Le funzioni usano gli helper di bigpicture.js. */
 (() => {
+  const safeUrl = (u) => (/^(\/|https?:\/\/)/i.test(String(u || "")) ? String(u) : "");
+
   function classicCard(g, i, extra = "", score = "") {
     const tag = g.store ? (STORE_SHORT[g.store] || "PC") : (SHORT[g.platform] || g.platform.toUpperCase());
     return `<div class="card${g.store && !g.installed ? " notinst" : ""}" data-i="${i}" ${extra}>`
@@ -11,14 +13,15 @@
   }
 
   function classicTextCard(label, sub, i, hueKey, img, it = {}) {
-    if (it.art) {  // collezione: copertina a tutto riquadro + logo
+    const art = safeUrl(it.art), icon = safeUrl(it.icon), sysImg = safeUrl(img);
+    if (art) {  // collezione: copertina a tutto riquadro + logo
       return `<div class="card tile-text coll-card" data-i="${i}"><div class="cv" style="--h:${hueOf(hueKey || label)}">`
-        + `<img class="art" src="${it.art}" alt="" loading="lazy" data-onerr="remove">`
-        + (it.icon ? `<img class="logo" src="${it.icon}" alt="" loading="lazy" data-onerr="remove">` : "")
+        + `<img class="art" src="${esc(art)}" alt="" loading="lazy" data-onerr="remove">`
+        + (icon ? `<img class="logo" src="${esc(icon)}" alt="" loading="lazy" data-onerr="remove">` : "")
         + `<div class="txt">${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ""}</div></div></div>`;
     }
-    return `<div class="card tile-text${img ? " with-img" : ""}" data-i="${i}"><div class="cv" style="--h:${hueOf(hueKey || label)}">`
-      + (img ? `<img class="sys" src="${img}" alt="" loading="lazy" data-onerr="remove">` : "")
+    return `<div class="card tile-text${sysImg ? " with-img" : ""}" data-i="${i}"><div class="cv" style="--h:${hueOf(hueKey || label)}">`
+      + (sysImg ? `<img class="sys" src="${esc(sysImg)}" alt="" loading="lazy" data-onerr="remove">` : "")
       + `<div class="txt">${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ""}</div></div></div>`;
   }
 
@@ -67,10 +70,21 @@
 
   function classicNav() {
     const s = cur();
-    const html = (t, i) => `<span data-tab="${i}" class="bp-tab${s.tab === t.id ? " active" : ""}${s.navFocus === i ? " focus" : ""}"${t.aria ? ` aria-label="${esc(t.aria)}"` : ""}>${t.icon ? `<span class="bp-tab-ico">${t.icon}</span>` : ""}${esc(t.label)}</span>`;
-    // «Esci» sta fuori dall'area scorrevole: resta sempre visibile e raggiungibile
-    $("#bp-nav").innerHTML = TABS.map((t, i) => (t.id === "exit" ? "" : html(t, i))).join("");
-    $("#bp-exit").innerHTML = TABS.map((t, i) => (t.id === "exit" ? html(t, i) : "")).join("");
+    const nav = $("#bp-nav"), exit = $("#bp-exit");
+    const key = TABS.map((tb) => `${tb.id}:${tb.label}`).join("|");
+    if (nav && exit && nav.dataset?.tabsKey !== key) {
+      const html = (tb, i) => `<span data-tab="${i}" class="bp-tab"${tb.aria ? ` aria-label="${esc(tb.aria)}"` : ""}>${tb.icon ? `<span class="bp-tab-ico">${tb.icon}</span>` : ""}${esc(tb.label)}</span>`;
+      // «Esci» sta fuori dall'area scorrevole: resta sempre visibile e raggiungibile
+      nav.innerHTML = TABS.map((tb, i) => (tb.id === "exit" ? "" : html(tb, i))).join("");
+      exit.innerHTML = TABS.map((tb, i) => (tb.id === "exit" ? html(tb, i) : "")).join("");
+      if (nav.dataset) nav.dataset.tabsKey = key;
+    }
+    document.querySelectorAll("#bp-top .bp-tab[data-tab]").forEach((el) => {
+      const i = +el.dataset.tab, tb = TABS[i];
+      if (!tb) return;
+      el.classList.toggle("active", s?.tab === tb.id);
+      el.classList.toggle("focus", s?.navFocus === i);
+    });
     (document.querySelector("#bp-nav .bp-tab.focus") || document.querySelector("#bp-nav .bp-tab.active"))?.scrollIntoView({ inline: "center", block: "nearest" });
     if (typeof updateNavFade === "function") updateNavFade();
   }
@@ -140,7 +154,7 @@
           hero.innerHTML = `<h1>${esc(g.title)}</h1><div class="meta">${esc([g.store ? STORE_SHORT[g.store] : platName(g.platform), g.year, g.dev].filter(Boolean).join("  ·  "))}</div>`;
           setBackground(g.id);
           detail(g.id).then((d) => {
-            if (d && d.media.logo && this.current() === g) hero.innerHTML = `<img class="logo-img" src="${d.media.logo}?w=700" data-onerr="text" data-onerr-tag="h1" data-onerr-text="${esc(g.title)}">`
+            if (d && d.media.logo && this.current() === g) hero.innerHTML = `<img class="logo-img" src="${esc(d.media.logo)}?w=700" data-onerr="text" data-onerr-tag="h1" data-onerr-text="${esc(g.title)}">`
               + `<div class="meta">${esc([d.store_name || d.platform_name, d.year, d.developer].filter(Boolean).join("  ·  "))}</div>`;
           });
         } else {
@@ -158,7 +172,7 @@
         }
         if (dy) {
           const r = this.row + dy;
-          if (r < 0) { this.navFocus = 0; this.update(); return true; }
+          if (r < 0) { this.navFocus = typeof tabIndex === "function" ? tabIndex(this.tab) : 0; this.update(); return true; }
           if (r >= shelves.length) return false;
           this.row = r;
         } else {
@@ -226,8 +240,8 @@
           [t("c.fact.size"), fmtSize(d.size)],
           [t("c.fact.rating"), d.rating != null ? `${(d.rating * 5).toFixed(1)} / 5${d.rating_count ? ` (${t("c.game.votes", { n: d.rating_count.toLocaleString(GSI18n.lang) })})` : ""}` : ""],
           [t("c.fact.critics"), d.rating_critics != null ? `${Math.round(d.rating_critics * 100)} / 100` : ""]].filter(([, v]) => v);
-        el.innerHTML = `<div class="bp-game"><div class="big-cover">${d.media.cover ? `<img src="${d.media.cover}?w=700">` : ""}</div>
-          <div class="info">${d.media.logo ? `<img class="logo-img" src="${d.media.logo}?w=700" data-onerr="text" data-onerr-tag="h1" data-onerr-text="${esc(d.title)}">` : `<h1>${esc(d.title)}</h1>`}
+        el.innerHTML = `<div class="bp-game"><div class="big-cover">${d.media.cover ? `<img src="${esc(d.media.cover)}?w=700">` : ""}</div>
+          <div class="info">${d.media.logo ? `<img class="logo-img" src="${esc(d.media.logo)}?w=700" data-onerr="text" data-onerr-tag="h1" data-onerr-text="${esc(d.title)}">` : `<h1>${esc(d.title)}</h1>`}
           <div class="meta">${esc([pc ? d.store_name : d.platform_name, d.year].filter(Boolean).join("  ·  "))}
             ${pc ? (d.installed ? " · " + t("c.game.installed") : " · " + t("c.game.notinstalled")) : d.emulator ? " · " + esc(d.emulator) : " · " + t("c.game.noemulator")}</div>
           <div class="bp-actions">${this.buttons.map((b, i) => `<div class="bp-btn ${b.cls || ""}${b.disabled ? " disabled" : ""}" data-i="${i}">${esc(b.label)}</div>`).join("")}</div>
@@ -246,7 +260,7 @@
           if (n < 0 || n >= TABS.length) return false;
           this.navFocus = n; renderNav(); return true;
         }
-        if (dy < 0) { this.navFocus = 0; this.update(); return true; }
+        if (dy < 0) { this.navFocus = typeof tabIndex === "function" ? tabIndex(this.tab) : 0; this.update(); return true; }
         const n = this.i + dx;
         if (n < 0 || n >= this.buttons.length) return false;
         this.i = n; this.update(); return true;

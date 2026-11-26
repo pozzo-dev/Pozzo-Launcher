@@ -69,8 +69,14 @@ function visibleGames() {
 
 
 /* ------------------------------------------------------------------ sfondo e dettagli */
+function cacheSet(map, k, v, max = 200) {
+  if (map.size >= max) map.delete(map.keys().next().value);
+  map.set(k, v);
+  return v;
+}
+
 async function detail(id) {
-  if (!BP.details.has(id)) BP.details.set(id, api(`/api/game/${id}`).catch(() => null));
+  if (!BP.details.has(id)) cacheSet(BP.details, id, api(`/api/game/${id}`).catch(() => null));
   return BP.details.get(id);
 }
 
@@ -81,7 +87,7 @@ const bpCoverAccentOn = () => GSUi.prefs(GSUi.saved()).coverAccent; // Aspetto >
 async function setGlow(id) {
   const bg = $("#bp-bg");
   if (!id || !bpCoverAccentOn()) { bg.style.removeProperty("--game-accent"); return; }
-  if (!accents.has(id)) accents.set(id, api(`/api/game/${id}/cover-accent`).then((r) => safeAccent(r?.accent)).catch(() => null));
+  if (!accents.has(id)) cacheSet(accents, id, api(`/api/game/${id}/cover-accent`).then((r) => safeAccent(r?.accent)).catch(() => null));
   const c = await accents.get(id);
   if (glowId !== id) return; // nel frattempo il fuoco e' passato altrove
   if (c && bpCoverAccentOn()) bg.style.setProperty("--game-accent", c); else bg.style.removeProperty("--game-accent");
@@ -98,11 +104,12 @@ function setBackground(id) {
   setGlow(glowId);
   bgTimer = setTimeout(async () => {
     const d = id ? await detail(id) : null;
+    if (glowId !== (id || null)) return;
     const m = d?.media || {};
     const src = m.hero || m.screenshot || m.fanart || m.header || m.title || m.cover;
     const layers = document.querySelectorAll("#bp-bg .bg-img");
     const next = layers[1 - bgFront];
-    if (m.video && glowId === id) GSVideo.attach($("#bp-bg"), id, { delay: 800 }); // il gioco selezionato, dopo una breve pausa
+    if (m.video) GSVideo.attach($("#bp-bg"), id, { delay: 800 }); // il gioco selezionato, dopo una breve pausa
     if (!src) { layers.forEach((l) => l.classList.remove("on")); return; }
     next.style.backgroundImage = `url("${src}?w=1280")`;
     next.classList.add("on");
@@ -141,6 +148,7 @@ const TABS = [
   { id: "exit", get label() { return t("c.tab.exit"); }, open: () => exitBigPicture() },
 ];
 const MEDIA_TAB = TABS.findIndex((t) => t.id === "media");
+function tabIndex(id = cur()?.tab) { const i = TABS.findIndex((x) => x.id === id); return i >= 0 ? i : 0; }
 // alla chiusura del pannello il focus torna sulla voce «Musica» della barra
 window.addEventListener("pozzo-media-close", () => { const s = cur(); if (s && "navFocus" in s) { s.navFocus = MEDIA_TAB; renderNav(); } });
 
@@ -191,19 +199,37 @@ function discoverScreen(title, base, tab, preset = store.get("bpDisc", ""), i = 
 }
 
 function gridScreen(title, items, tab = "all", opts = {}) {
+  const parseLen = (v, rem) => {
+    const s = String(v || "").trim();
+    if (!s) return 0;
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? (s.endsWith("rem") ? n * rem : n) : 0;
+  };
   const scr = {
-    tab, title, items, i: 0, navFocus: null, cols: 6, cw: 0, ch: 0,
+    tab, title, items, i: 0, navFocus: null, cols: 6, cw: 0, ch: 0, _pad: 48, _cardW: 0, _realW: 0, _realH: 0,
+    layout() {
+      const grid = $("#grid");
+      if (!grid || !items.length) return;
+      const cs = getComputedStyle(document.documentElement);
+      const rem = parseFloat(cs.fontSize) || 16;
+      const pad = parseLen(cs.getPropertyValue?.("--bp-safe-x"), rem) || 3 * rem;
+      const xl = document.documentElement?.dataset?.bptext === "xlarge";
+      const cardW = this._realW || (opts.text ? (xl ? 17 : 15) : (xl ? 12.5 : 11)) * rem;
+      const gap = 1.3 * rem;
+      const W = Math.max(cardW, grid.clientWidth - 2 * pad);
+      this._pad = pad;
+      this._cardW = cardW;
+      this.cols = Math.max(1, Math.floor((W + gap) / (cardW + gap)));
+      this.cw = cardW + gap;
+      this.ch = this._realH > 0 ? this._realH + (opts.text ? .9 : 1.1) * rem : (opts.text ? cardW * 9 / 16 : cardW * 4 / 3) + (opts.text ? 1.4 : 3.2) * rem;
+    },
+    onResize() { this._realW = 0; this._realH = 0; this.layout(); this._win = null; this.update(); },
     render(el) {
       el.innerHTML = `<div class="bp-grid-view"><div class="bp-grid-head"><h1>${esc(title)}</h1><span>${items.length.toLocaleString(GSI18n.lang)} ${opts.unit || t("c.unit.games")}</span>`
         + (opts.head || "") + `</div><div class="bp-grid" id="grid"><div class="bp-grid-inner" id="grid-inner"></div></div></div>`;
-      if (!items.length) { $("#grid-inner").innerHTML = `<p style="padding:0 3rem" class="muted">${t("c.grid.empty")}</p>`; return; }
-      const W = $("#grid").clientWidth - 6 * 16;
-      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      const cardW = (opts.text ? 15 : 11) * rem, gap = 1.3 * rem;
+      if (!items.length) { $("#grid-inner").innerHTML = `<p style="padding:0 var(--bp-safe-x,3rem)" class="muted">${t("c.grid.empty")}</p>`; return; }
       this._win = null; // il contenitore e' nuovo: serve una ricostruzione
-      this.cols = Math.max(1, Math.floor((W + gap) / (cardW + gap)));
-      this.cw = cardW + gap;
-      this.ch = (opts.text ? cardW * 9 / 16 : cardW * 4 / 3) + (opts.text ? 1.4 : 3.2) * rem;
+      this.layout();
       this.update();
     },
     update() {
@@ -225,15 +251,20 @@ function gridScreen(title, items, tab = "all", opts = {}) {
         return;
       }
       this._win = win;
-      const pad = 3 * parseFloat(getComputedStyle(document.documentElement).fontSize);
       let html = "";
       for (let k = from; k < to; k++) {
         const r = Math.floor(k / this.cols), c = k % this.cols, it = items[k];
-        const pos = `style="left:${pad + c * this.cw}px;top:${r * this.ch + 16}px"`;
+        const pos = `style="left:${this._pad + c * this.cw}px;top:${r * this.ch + 16}px"`;
         html += opts.text ? textCard(it.label, it.sub, k, it.key, it.img, it).replace(`data-i="${k}"`, `data-i="${k}" ${pos}`)
           : card(it, k, pos, opts.score ? scoreText(it, opts.score) : "");
       }
       inner.innerHTML = html;
+      const s0 = inner.firstElementChild;
+      if (s0?.offsetWidth > 0 && Math.abs(s0.offsetWidth - this._cardW) > 1) {
+        this._realW = s0.offsetWidth; this._realH = s0.offsetHeight;
+        this.layout(); this._win = null; this.update();
+        return;
+      }
       if (this.navFocus === null) inner.querySelector(`.card[data-i="${this.i}"]`)?.classList.add("focus");
       const cur = items[this.i];
       if (cur && !opts.text) setBackground(cur.id);
@@ -246,7 +277,7 @@ function gridScreen(title, items, tab = "all", opts = {}) {
         this.navFocus = n; renderNav(); return true;
       }
       let n = this.i + dx + dy * this.cols;
-      if (dy < 0 && n < 0) { this.navFocus = 0; this.update(); return true; }
+      if (dy < 0 && n < 0) { this.navFocus = typeof tabIndex === "function" ? tabIndex(this.tab) : 0; this.update(); return true; }
       if (dx && Math.floor(n / this.cols) !== Math.floor(this.i / this.cols)) return false;
       if (n < 0) return false;
       if (n >= items.length) { if (dy > 0 && Math.floor(this.i / this.cols) < Math.floor((items.length - 1) / this.cols)) n = items.length - 1; else return false; }
@@ -269,13 +300,20 @@ function gridScreen(title, items, tab = "all", opts = {}) {
 function lookScreen() {
   const items = [];
   const same = (a, b) => a === b;
+  const refresh = () => {
+    const idx = cur()?.i ?? 0;
+    const next = lookScreen();
+    next.i = Math.min(idx, next.items.length - 1);
+    BP.stack[BP.stack.length - 1] = next;
+    show();
+  };
   for (const p of PALETTES) {
     items.push({
       label: `${same(BP.palette, p.id) ? "●" : "○"} ${p.label}`, sub: same(BP.palette, p.id) ? t("c.look.inuse") : "",
       key: "pal:" + p.id,
       ok: () => {
         BP.palette = p.id; store.set("bpPalette", p.id); applyLook(); beep("ok");
-        toast(t("c.toast.palette", { name: p.label })); push(lookScreen());
+        toast(t("c.toast.palette", { name: p.label })); refresh();
       },
     });
   }
@@ -285,13 +323,13 @@ function lookScreen() {
       sub: same(BP.text, t.id) ? window.t("c.look.inuse") : "", key: "txt:" + t.id,
       ok: () => {
         BP.text = t.id; store.set("bpText", t.id); applyLook(); beep("ok");
-        toast(window.t("c.toast.textsize", { size: t.label })); push(lookScreen());
+        toast(window.t("c.toast.textsize", { size: t.label })); refresh();
       },
     });
   }
   items.push({
     label: `${Pad.sound ? "●" : "○"} ${t("c.look.sounds")}`, sub: Pad.sound ? t("c.look.sounds.on") : t("c.look.sounds.off"), key: "snd",
-    ok: () => { Pad.sound = !Pad.sound; store.set("bpSound", Pad.sound); beep("ok"); push(lookScreen()); },
+    ok: () => { Pad.sound = !Pad.sound; store.set("bpSound", Pad.sound); beep("ok"); refresh(); },
   });
   items.push({
     label: `${Pad.talk ? "●" : "○"} ${t("c.look.talk")}`, sub: Pad.talk ? t("c.look.talk.on") : t("c.look.talk.off"), key: "talk",
@@ -299,7 +337,7 @@ function lookScreen() {
       Pad.talk = !Pad.talk; store.set("bpTalk", Pad.talk);
       toast(Pad.talk ? t("c.toast.talk.on") : t("c.toast.talk.off"));
       announce(Pad.talk ? t("c.toast.talk.on") : t("c.toast.talk.off"));
-      push(lookScreen());
+      refresh();
     },
   });
   const scr = gridScreen(t("c.tab.look"), items, "look", { text: true, unit: t("c.unit.options") });
@@ -388,7 +426,7 @@ function shotsScreen(d) {
       const s = this.list[this.i];
       const el = document.querySelector(".bp-shots");
       if (!el) return;
-      el.innerHTML = s ? `<img src="${s.url}" alt=""><div class="bp-shots-bar"><b>${esc(d.title)}</b>
+      el.innerHTML = s ? `<img src="${esc(s.url)}" alt=""><div class="bp-shots-bar"><b>${esc(d.title)}</b>
         <span>${new Date(s.taken * 1000).toLocaleString(GSI18n.lang, { dateStyle: "medium", timeStyle: "short" })} · ${esc(s.source)}</span>
         <span>${this.i + 1} / ${this.list.length}</span></div>` : `<p class="muted">${t("c.shots.none")}</p>`;
     },
@@ -452,7 +490,7 @@ function searchScreen() {
         this.r = n; this.update(); return true;
       }
       const cols = 7;
-      if (dy < 0 && this.k < cols) { this.navFocus = 0; this.update(); return true; }
+      if (dy < 0 && this.k < cols) { this.navFocus = tabIndex(this.tab); this.update(); return true; }
       if (dx > 0 && (this.k % cols === cols - 1 || this.k === KEYS.length - 1) && this.results.length) { this.inResults = true; this.update(); return true; }
       const n = this.k + dx + dy * cols;
       if (n < 0 || n >= KEYS.length) return false;
@@ -507,35 +545,56 @@ async function playGame(d, body = {}) {
   pollRunning();
 }
 
+let pollTimer = 0, pollBusy = false;
 function showRunning(msg) {
   idle.close();
   const o = $("#bp-running");
   o.hidden = false;
-  o.innerHTML = `<div class="logo big" style="color:var(--accent);font-size:3rem">◆</div><h2>${esc(BP.running?.title || "")}</h2>`
-    + `<p class="muted">${esc(msg)}</p>${BP.canPause ? `<p><button class="btn" id="bp-pause">${BP.paused ? "▶ " + t("c.run.resume") : "⏸ " + t("c.run.pause")}</button></p>` : ""}<p class="muted">Per chiudere il gioco: ${t("c.run.hold", { back: glyph("back"), start: glyph("start") })}</p>`;
+  if (!o.querySelector("#bp-pause")) {
+    o.innerHTML = `<div class="logo big" style="color:var(--accent);font-size:3rem">◆</div><h2 id="bp-run-title"></h2>`
+      + `<p class="muted" id="bp-run-msg"></p><p id="bp-pause-wrap" hidden><button class="bp-btn main focus" id="bp-pause"></button></p>`
+      + `<p class="muted">${t("c.run.hold", { back: glyph("back"), start: glyph("start") })}</p>`;
+  }
+  const titleEl = o.querySelector("#bp-run-title"), msgEl = o.querySelector("#bp-run-msg"),
+    wrap = o.querySelector("#bp-pause-wrap"), pauseBtn = o.querySelector("#bp-pause");
+  if (titleEl) titleEl.textContent = BP.running?.title || "";
+  if (msgEl) msgEl.textContent = msg;
+  if (wrap) wrap.hidden = !BP.canPause;
+  if (pauseBtn) {
+    pauseBtn.textContent = BP.paused ? "▶ " + t("c.run.resume") : "⏸ " + t("c.run.pause");
+    pauseBtn.classList.toggle("focus", !!BP.canPause);
+  }
 }
 
 async function pollRunning() {
+  clearTimeout(pollTimer);
+  pollTimer = 0;
+  if (pollBusy) return;
+  pollBusy = true;
   let r;
-  try { r = await api("/api/running"); } catch { r = {}; }
-  if (["starting", "extracting", "running"].includes(r.status)) {
-    BP.paused = !!r.paused;
-    BP.canPause = !!r.can_pause;
-    showRunning(r.paused ? t("c.run.paused") : r.status === "extracting" ? (r.message || t("c.run.extracting")) : r.status === "starting" ? t("c.run.starting")
-      : `${t("c.run.running", { emulator: r.emulator })}${r.shots ? ` (${r.shots})` : ""}`);
-    if (BP.running && (r.shots || 0) > (BP.running.shots || 0)) toast(t("c.run.shot"));
-    if (BP.running) BP.running.shots = r.shots || 0;
-    setTimeout(pollRunning, 1500);
-    return;
-  }
-  $("#bp-running").hidden = true;
-  if (BP.running) {
-    if (r.status === "error") toast(r.message, true);
-    else if (r.status === "finished" && r.played > 30) toast(`${t("c.run.session", { time: fmtTime(r.played) })}${r.shots ? ` · 📷 ${r.shots}` : ""}`);
-    BP.running = null;
-    window.Dualsense?.led(cur().d?.id ?? null, true);
-    try { window.pywebview?.api?.focus_window?.(); } catch { /* browser */ }
-    await reloadLibrary();
+  try {
+    try { r = await api("/api/running"); } catch { r = {}; }
+    if (["starting", "extracting", "running"].includes(r.status)) {
+      BP.paused = !!r.paused;
+      BP.canPause = !!r.can_pause;
+      showRunning(r.paused ? t("c.run.paused") : r.status === "extracting" ? (r.message || t("c.run.extracting")) : r.status === "starting" ? t("c.run.starting")
+        : `${t("c.run.running", { emulator: r.emulator })}${r.shots ? ` (${r.shots})` : ""}`);
+      if (BP.running && (r.shots || 0) > (BP.running.shots || 0)) toast(t("c.run.shot"));
+      if (BP.running) BP.running.shots = r.shots || 0;
+      pollTimer = setTimeout(pollRunning, 1500);
+      return;
+    }
+    $("#bp-running").hidden = true;
+    if (BP.running) {
+      if (r.status === "error") toast(r.message, true);
+      else if (r.status === "finished" && r.played > 30) toast(`${t("c.run.session", { time: fmtTime(r.played) })}${r.shots ? ` · 📷 ${r.shots}` : ""}`);
+      BP.running = null;
+      window.Dualsense?.led(cur().d?.id ?? null, true);
+      try { window.pywebview?.api?.focus_window?.(); } catch { /* browser */ }
+      await reloadLibrary();
+    }
+  } finally {
+    pollBusy = false;
   }
 }
 
@@ -543,6 +602,8 @@ async function reloadLibrary() {
   const lib = await loadLibrary();
   BP.lib = lib;
   BP.details.clear();
+  accents.clear();
+  shotCache.clear();
   const s = cur();
   if (s.tab === "home") { BP.stack = [homeScreen()]; show(); }
 }
@@ -600,11 +661,16 @@ function input(action) {
   if (window.BPMedia?.handlePad(action)) return; // lettore Media aperto: il pad comanda il video, non la schermata
   const s = cur();
   if (helpOpen()) { // il pannello comandi cattura tutto: X cambia la legenda, il resto lo chiude
-    if (action === "up" || action === "down") $("#bp-help .bp-help-in")?.scrollBy({ top: (action === "up" ? -1 : 1) * 120, behavior: "smooth" });
+    const noAnim = GSUi.attractMotion(document.documentElement.dataset.motion, !!matchMedia?.("(prefers-reduced-motion: reduce)").matches) !== "full";
+    if (action === "up" || action === "down") $("#bp-help .bp-help-in")?.scrollBy({ top: (action === "up" ? -1 : 1) * 120, behavior: noAnim ? "auto" : "smooth" });
     else if (action === "x") { toggleHints(); closeHelp(); openHelp(); } else if (["a", "b", "select", "start", "y"].includes(action)) closeHelp();
     return;
   }
-  if (!$("#bp-running").hidden) return; // durante il gioco l'interfaccia ignora i comandi
+  if (!$("#bp-running").hidden) {
+    // col gioco in primo piano il pad arriva anche qui: niente pausa a ogni A
+    if (action === "a" && BP.canPause && document.hasFocus()) { beep("ok"); $("#bp-pause")?.click(); }
+    return; // durante il gioco il resto dell'interfaccia ignora i comandi
+  }
   switch (action) {
     case "select": beep("ok"); openHelp(); break;
     case "l3": if (BP.stack.length > 1 || s.tab !== "home") { beep("back"); openTab(0); } break;
@@ -668,7 +734,7 @@ function updateNavFade() {
   n.classList.toggle("more-r", n.scrollLeft + n.clientWidth < n.scrollWidth - 4);
 }
 $("#bp-nav").addEventListener("scroll", updateNavFade, { passive: true });
-window.addEventListener("resize", updateNavFade);
+window.addEventListener("resize", () => { updateNavFade(); cur()?.onResize?.(); });
 $("#bp-nav").addEventListener("wheel", (e) => {
   const n = $("#bp-nav");
   if (n.scrollWidth <= n.clientWidth) return;
@@ -706,7 +772,7 @@ let attractTimer = 0, attractIdx = 0, attractSlides = [], attractFront = 0, attr
 const ATTRACT_MS = 9000;
 const shotCache = new Map(); // id -> promessa dell'URL della prima schermata (null se non ce ne sono)
 const shotOf = (id) => {
-  if (!shotCache.has(id)) shotCache.set(id, api(`/api/game/${id}/shots`).then((r) => { const u = r?.shots?.[0]?.url; return typeof u === "string" && /^\/[^"'()\\\s]*$/.test(u) ? u : null; }).catch(() => null));
+  if (!shotCache.has(id)) cacheSet(shotCache, id, api(`/api/game/${id}/shots`).then((r) => { const u = r?.shots?.[0]?.url; return typeof u === "string" && /^\/[^"'()\\\s]*$/.test(u) ? u : null; }).catch(() => null));
   return shotCache.get(id);
 };
 async function attractNext() {
@@ -772,35 +838,38 @@ pollWhileVisible(() => { // pulsanti o stick non mappati dai comandi di Big Pict
 function initFpsMonitor() {
   if (typeof requestAnimationFrame === "undefined") return;
   const frames = [];
-  let last = null, lowSince = null, highSince = null, rafId = 0;
+  let last = null, lowSince = null, highSince = null, rafId = 0, stopped = false, autoReduced = false;
+  const hasManual = () => {
+    const v = typeof store !== "undefined" ? store.get("motion", null) : null;
+    return v === "off" || v === "normal" || v === "reduced";
+  };
   function tick(now) {
+    rafId = 0;
+    if (stopped || (typeof document !== "undefined" && document.hidden)) { last = null; return; }
     if (last !== null) {
       const delta = now - last;
       if (delta > 0) {
         frames.push(1000 / delta);
         if (frames.length > 60) frames.shift();
         const avg = frames.reduce((a, b) => a + b, 0) / frames.length;
+        const root = typeof document !== "undefined" ? document.documentElement : null;
         if (avg < 30) {
           highSince = null;
           if (lowSince === null) lowSince = now;
-          else if (now - lowSince >= 2000) {
-            if (typeof document !== "undefined" && document.body) {
-              if (!document.body.dataset) document.body.dataset = {};
-              if (document.body.dataset.motion !== "reduced") {
-                document.body.dataset.motion = "reduced";
-                toast(t("c.perf.on"));
-              }
+          else if (now - lowSince >= 2000 && root && !hasManual()) {
+            if (!root.dataset) root.dataset = {};
+            if (root.dataset.motion !== "reduced") {
+              root.dataset.motion = "reduced";
+              autoReduced = true;
+              toast(t("c.perf.on"));
             }
           }
         } else if (avg > 45) {
           lowSince = null;
           if (highSince === null) highSince = now;
-          else if (now - highSince >= 2000) {
-            if (typeof document !== "undefined" && document.body?.dataset) {
-              if (document.body.dataset.motion === "reduced") {
-                delete document.body.dataset.motion;
-              }
-            }
+          else if (now - highSince >= 2000 && autoReduced && root?.dataset) {
+            if (root.dataset.motion === "reduced") delete root.dataset.motion;
+            autoReduced = false;
           }
         } else {
           lowSince = null;
@@ -811,9 +880,24 @@ function initFpsMonitor() {
     last = now;
     rafId = requestAnimationFrame(tick);
   }
-  rafId = requestAnimationFrame(tick);
+  const onVis = () => {
+    if (stopped) return;
+    if (document.hidden) {
+      if (rafId && typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+      rafId = 0; last = null;
+    } else if (!rafId) {
+      rafId = requestAnimationFrame(tick);
+    }
+  };
+  if (typeof document !== "undefined") document.addEventListener?.("visibilitychange", onVis);
+  if (typeof document === "undefined" || !document.hidden) rafId = requestAnimationFrame(tick);
   return {
-    stop: () => (typeof cancelAnimationFrame === "function" ? cancelAnimationFrame(rafId) : null),
+    stop: () => {
+      stopped = true;
+      if (typeof document !== "undefined") document.removeEventListener?.("visibilitychange", onVis);
+      if (rafId && typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+      rafId = 0;
+    },
     getFps: () => (frames.length ? frames.reduce((a, b) => a + b, 0) / frames.length : 0),
   };
 }
@@ -823,6 +907,7 @@ BP.initFpsMonitor = initFpsMonitor;
 function clock() { $("#bp-clock").textContent = new Date().toLocaleTimeString(GSI18n.lang, { hour: "2-digit", minute: "2-digit" }); }
 
 (async function start() {
+  await window.GSI18n?.ready;
   clock(); setInterval(clock, 15000);
   applyLook(); // palette e dimensione dei testi scelte la volta prima
   initFpsMonitor();
@@ -837,7 +922,7 @@ function clock() { $("#bp-clock").textContent = new Date().toLocaleTimeString(GS
   GS.openGame = (id) => push(gameScreen(id));
   await loadExtensions();
   if (await BPMedia.available(api)) { // voce «Media» (video): solo con l'estensione Media locale attiva
-    TABS.splice(MEDIA_TAB + 1, 0, { id: "videos", label: "Media", open: () => push(BPMedia.screen({ api, toast, esc, push, cur, main: () => main, renderNav, openTab, beep,
+    TABS.splice(MEDIA_TAB + 1, 0, { id: "videos", get label() { const v = t("c.tab.videos"); return v === "c.tab.videos" ? "Media" : v; }, open: () => push(BPMedia.screen({ api, toast, esc, push, cur, main: () => main, renderNav, openTab, beep,
       tabIndex: () => TABS.findIndex((x) => x.id === "videos"), tabsCount: () => TABS.length })) });
   }
   $("#bp-loading").hidden = true;
@@ -849,7 +934,7 @@ function clock() { $("#bp-clock").textContent = new Date().toLocaleTimeString(GS
   idle.arm();
   // se un gioco e' gia' in esecuzione (es. avviato prima di entrare)
   const r = await api("/api/running").catch(() => ({}));
-  if (["starting", "extracting", "running"].includes(r.status)) { BP.running = { title: r.title }; pollRunning(); }
+  if (["starting", "extracting", "running"].includes(r.status)) { BP.running = { id: r.id || null, title: r.title }; pollRunning(); }
 })();
 
 if (typeof module !== "undefined" && module.exports) {

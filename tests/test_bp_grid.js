@@ -53,4 +53,24 @@ assert(inner.nodes.every((n) => !n.classList.has("focus")));
 // ritorno alla griglia: il focus torna sulla card corrente
 scr.move(0, 1);
 assert(inner.querySelector(`.card[data-i="${scr.i}"]`).classList.has("focus"));
+
+// Up dalla prima riga porta il focus sulla scheda attiva (tabIndex), non sempre 0
+ctx.TABS = [{ id: "home" }, { id: "fav" }];
+ctx.tabIndex = (id) => ctx.TABS.findIndex((x) => x.id === id);
+const scrFav = ctx.gridScreen("Fav", items, "fav");
+scrFav.render({ innerHTML: "" });
+scrFav.move(0, -1);
+assert.strictEqual(scrFav.navFocus, 1, "Up dalla prima riga usa tabIndex");
+
+// xlarge + rem != 16 + resize: nessuna sovrapposizione, padding 6*rem
+ctx.document.documentElement = { dataset: { bptext: "xlarge" } };
+ctx.getComputedStyle = () => ({ fontSize: "20px", getPropertyValue: () => "" });
+const scrXl = ctx.gridScreen("XL", items, "all");
+scrXl.render({ innerHTML: "" });
+assert(scrXl.cw >= 12.5 * 20, "xlarge: card step >= 12.5rem");
+assert.strictEqual(scrXl.cols, Math.floor((1200 - 6 * 20 + 1.3 * 20) / (12.5 * 20 + 1.3 * 20)), "padding usa 6*rem");
+const colsBefore = scrXl.cols;
+grid.clientWidth = 800;
+scrXl.onResize();
+assert(scrXl.cols < colsBefore, "onResize ricalcola cols");
 console.log("test_bp_grid ok");

@@ -134,6 +134,8 @@ html .card.focus .cv, html .bp-btn, html .bp-tab { transition: box-shadow var(--
   content: ""; position: absolute; top: 0; left: 0; right: 0; aspect-ratio: 3 / 4; border-radius: 12px;
   border: 3px solid var(--accent); pointer-events: none; animation: mo-ring calc(var(--mo-slow) * 1.6) var(--mo-ease-out) both;
 }
+.card.tile-text.focus::after { aspect-ratio: 16 / 9; }
+.card.resume-card.focus::after { bottom: 0; aspect-ratio: auto; border-radius: 16px; }
 
 /* ---------- Carattere decorativo per tema (singoli elementi, mai liste) ---------- */
 html[data-theme="notte-blu"] .brand { animation: mo-breathe 7s ease-in-out infinite; }

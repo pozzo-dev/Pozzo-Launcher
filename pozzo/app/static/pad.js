@@ -64,10 +64,12 @@ Pad.watchFocus = ({ focus, roots, section = ".shelf" }) => {
 
 /** Tasto di tastiera -> azione del pad ("" se non e' un tasto di navigazione). */
 Pad.keyAction = (e) => {
+  if (e.keyCode === 10009 || e.key === "10009") return "b";
   if (e.key === "Backspace") return "b";
   if (e.key === "Tab") return e.shiftKey ? "lb" : "rb";
   if (e.key === "f" || e.key === "F") return "x";
   return { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Enter: "a", Escape: "b",
+    XF86Back: "b", GoBack: "b", BrowserBack: "b",
     PageUp: "lt", PageDown: "rt", "/": "y", q: "lb", Q: "lb", e: "rb", E: "rb", s: "start", S: "start", " ": "a" }[e.key] || "";
 };
 

@@ -19,10 +19,14 @@
 
   function renderSpotify(data) {
     spotifyState = data;
-    const title = $("#bp-media-title"), artist = $("#bp-media-artist"), cover = $("#bp-media-cover");
+    const title = $("#bp-media-title"), artist = $("#bp-media-artist"), now = $(".media-now");
+    let cover = $("#bp-media-cover");
     if (title) title.textContent = data.track || (data.state === "no_device" ? t("i.media.noDevice") : t("i.media.noTrack"));
     if (artist) artist.textContent = (data.artists || []).join(", ") || data.message || t("i.media.spotifyNotLinked");
-    if (cover) { cover.hidden = !data.cover; if (data.cover) cover.src = data.cover; else cover.removeAttribute("src"); }
+    if (data.cover) {
+      if (!cover && now && typeof document.createElement === "function") { cover = document.createElement("img"); cover.id = "bp-media-cover"; cover.alt = ""; now.prepend(cover); }
+      if (cover) { cover.src = data.cover; cover.hidden = false; }
+    } else if (cover) cover.remove?.();
     const progress = $("#bp-media-progress");
     if (progress) progress.style.width = `${data.duration_ms ? Math.min(100, 100 * data.progress_ms / data.duration_ms) : 0}%`;
     const volume = $("#bp-media-volume");
@@ -34,8 +38,8 @@
     const channel = $("#bp-discord-channel"), participants = $("#bp-discord-participants");
     if (channel) channel.textContent = data.in_call ? t("i.media.voice", { c: data.channel }) : (data.message || t("i.media.noCall"));
     if (participants) {
-      const names = (data.participants || []).map((p) => `${p.speaking ? "?? " : ""}${p.name}`).join(" ? ");
-      const speakers = data.speakers?.length ? ` ? ${t("i.media.speaking", { list: data.speakers.join(", ") })}` : "";
+      const names = (data.participants || []).map((p) => `${p.speaking ? "🔊 " : ""}${p.name}`).join(" · ");
+      const speakers = data.speakers?.length ? ` · ${t("i.media.speaking", { list: data.speakers.join(", ") })}` : "";
       participants.textContent = `${names}${speakers}`;
     }
     const mute = $("[data-media-action='mute']"), deaf = $("[data-media-action='deafen']");
@@ -116,16 +120,19 @@
     catch (error) { feedback(error.message, true); }
   }
 
-  function controls() { return [...document.querySelectorAll("#bp-media-widget .media-action")].filter((el) => !el.disabled); }
+  function controls() { return [...document.querySelectorAll("#bp-media-widget .media-action, #bp-media-volume")].filter((el) => !el.disabled); }
   function handlePad(action) {
     const widget = $("#bp-media-widget");
-    if (!widget) return false;
-    if (action === "r3") { openWidget(widget.hidden); return true; }
-    if (widget.hidden) return false;
-    if (action === "b") { openWidget(false); return true; }
+    if (!widget || widget.hidden) return false;
+    if (action === "r3" || action === "b") { openWidget(false); return true; }
     if (["left", "right", "up", "down"].includes(action)) {
-      const volume = $("#bp-media-volume"), step = action === "left" || action === "down" ? -5 : 5;
-      if (document.activeElement === volume) { volume.value = Math.max(0, Math.min(100, Number(volume.value) + step)); volume.dispatchEvent(new Event("change", { bubbles: true })); return true; }
+      const volume = $("#bp-media-volume");
+      if (document.activeElement === volume && (action === "left" || action === "right")) {
+        const step = action === "left" ? -5 : 5;
+        volume.value = Math.max(0, Math.min(100, Number(volume.value) + step));
+        volume.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      }
       const list = controls(), current = Math.max(0, list.indexOf(document.activeElement));
       const delta = action === "left" || action === "up" ? -1 : 1;
       list[(current + delta + list.length) % list.length]?.focus();
