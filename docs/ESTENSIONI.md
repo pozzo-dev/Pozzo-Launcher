@@ -465,7 +465,7 @@ installano da lì, nella cartella `plugins/` accanto a `config.toml`. Installazi
 
 Le estensioni arrivano dalle **fonti**, elencate in *Fonti delle estensioni* in cima alla pagina:
 
-- la prima è sempre lo **store ufficiale** ([cartella `extensions/` del repository dell'app](https://github.com/erpaffo/Pozzo-Launcher/tree/main/extensions)) e non si toglie;
+- la prima è sempre lo **store ufficiale** ([repository `pozzo-store-extension`](https://github.com/erpaffo/pozzo-store-extension)) e non si toglie;
 - **Aggiungi** accetta il link di un repository GitHub (`https://github.com/utente/repo`, anche `/tree/<tag>`) o
   l'indirizzo https di un `index.json`. Se il link è il repository di un'estensione si aggiunge quell'estensione,
   se è un altro store si aggiunge tutto il suo elenco. L'app controlla che il link risponda e contenga estensioni;
@@ -498,30 +498,39 @@ Per provare uno store diverso al posto di quello ufficiale, anche da disco prima
 
 ### Pubblicare un'estensione
 
-Ogni estensione vive nel **proprio repository** (per esempio `pozzo-ext-diario`): in cima ci sono
-`plugin.toml`, i file dell'estensione (niente sottocartelle) e `index.json`. Lo store ufficiale è un altro repository
-con un solo `index.json`, che elenca i repository e la versione approvata di ciascuno:
+Lo **store ufficiale** è il repository [`erpaffo/pozzo-store-extension`](https://github.com/erpaffo/pozzo-store-extension):
+un `index.json` alla radice e una cartella per estensione con i suoi file. I sorgenti stanno in `extensions/` del
+repository dell'app; lo store se ne copia una fotografia a ogni pubblicazione.
 
 ```json
-{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-diario", "ref": "v1.0"}]}
+{"version": 1, "extensions": [{"id": "diario", "version": "2.0", "base": "diario/",
+  "files": {"plugin.toml": "<sha256>", "frontend.js": "<sha256>", "locales.json": "<sha256>"}}]}
 ```
 
-L'app legge l'`index.json` di ogni repository a quel tag. Una voce può anche indicare `"url"` al posto di
-`repo`/`ref`, per un indice che non sta su GitHub.
+L'app scarica ogni file da `base` e lo installa solo se lo sha256 coincide con quello dell'indice.
 
 Per pubblicare una versione:
 
-1. In `plugin.toml` alza `version` e, se usa funzioni nuove dell'app, `min_app = "x.y.z"`.
-2. Rigenera l'indice dal repository dell'estensione: `python <Pozzo Launcher>/tools/extensions.py index .`
-3. Commit, tag `v<versione>` e push.
-4. Nello store porta `ref` al tag nuovo (una pull request sul repository dello store). Chi ha aggiunto il repository
-   dell'estensione come fonte la vede invece subito, perché quel link segue il ramo principale.
+1. Nel repository dell'app, in `extensions/<id>/plugin.toml` alza `version` e, se usi funzioni nuove dell'app,
+   `min_app = "x.y.z"`.
+2. Rigenera l'indice: `python tools/extensions.py index` (aggiorna `extensions/index.json`), poi fai il commit.
+3. Clona `pozzo-store-extension` e sostituisci le cartelle delle estensioni con i file elencati nell'indice, presi
+   **dal commit** (`git show HEAD:extensions/<id>/<file>`) e non dalla cartella di lavoro, più `index.json`.
+   Un'estensione tolta dall'app va tolta anche dallo store.
+4. Commit e push sullo store: le nuove versioni compaiono subito a tutti. Se `min_app` è una versione non ancora
+   rilasciata, chi ha l'app vecchia le vede ma non le può installare: pubblica lo store insieme alla release.
 
-I repository hanno i fine riga fissati a LF (`.gitattributes`): lo sha256 nell'indice è quello dei file come li serve GitHub.
+I repository hanno i fine riga fissati a LF (`.gitattributes`): lo sha256 nell'indice è quello dei file come li serve
+GitHub. Per controllare, scarica i file da `https://raw.githubusercontent.com/erpaffo/pozzo-store-extension/<commit>/`
+e confronta gli sha256 con l'indice.
 
-**Dal repository dell'app ai repository separati**: `python tools/extensions.py export <cartella> <utente>` crea in
-`<cartella>` un repository pronto per ogni estensione di `extensions/` (file, `index.json`, README, licenza) e quello
-dello store, che punta a `<utente>/pozzo-ext-<id>` al tag `v<versione>`.
+**Estensioni di terzi**: chi non pubblica nello store ufficiale mette l'estensione in un proprio repository, con in
+cima `plugin.toml`, i file (niente sottocartelle) e un `index.json` con `"base": "./"`, generato da
+`python <Pozzo Launcher>/tools/extensions.py index .`. Gli utenti aggiungono il link del repository come fonte (vedi
+sopra) e ricevono gli aggiornamenti a ogni push. Un indice può anche elencare altri repository, ognuno a un tag:
+`{"version": 1, "repos": [{"repo": "utente/pozzo-ext-diario", "ref": "v1.0"}]}` (oppure `"url"` per un indice
+fuori da GitHub). `python tools/extensions.py export <cartella> <utente>` crea questi repository separati, uno per
+estensione, e l'indice che li elenca.
 
 Per provare un'estensione nell'app, `python tools/extensions.py install [<cartella>]` la **copia** nella tua cartella
 `plugins/`: senza argomento quelle di `extensions/`, altrimenti quelle della cartella indicata (una cartella con i
