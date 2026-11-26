@@ -12,7 +12,6 @@ Velocita' all'avvio:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import http
 import json
 import os
@@ -33,7 +32,6 @@ from .. import config as C
 from ..errors import explain as explain_error, where as error_where
 from .. import ownership as OW
 from .. import profilecfg as PC
-from .. import platforms as P
 from .. import storelinks as SL
 from ..library import launcher as L
 from . import extensions as X
@@ -41,13 +39,10 @@ from ..boot import BOOT
 from ..onexit import hard_exit
 from . import jobs as J
 from . import browserdl
+from .assets import STATIC
 from .. import stores as STORES
+from .common import QUIT, WINDOW_FOCUS
 
-STORE_NAMES = {p.id: p.name for p in STORES.PROVIDERS}
-STORE_NAMES["online"] = "Store online"
-_REMOTE_SEM = threading.Semaphore(4)  # immagini remote scaricate al massimo 4 alla volta
-_REMOTE_DOWN: dict[str, float] = {}  # host che non risponde -> fino a quando non si riprova (secondi)
-_REMOTE_MISS: dict[str, float] = {}  # copertina della griglia non scaricabile -> fino a quando non si riprova
 from ..library.userdata import UserData
 from .library_service import Library, _ActiveUser  # noqa: F401  (Library riesportata: la usano i test)
 
@@ -100,81 +95,7 @@ def _silence_proactor_pipe_reset() -> None:
 
 _silence_proactor_pipe_reset()
 
-STATIC = Path(__file__).parent / "static"
 CSP = "script-src 'self'; object-src 'none'; base-uri 'self'"
-THUMB_WIDTHS = (200, 300, 450, 700, 1280)
-
-
-_ASSET_V: list[str] = []
-
-
-def _asset_version() -> str:
-    """Hash per rompere la cache del browser. Nel build congelato i file non cambiano finche' il processo vive: una
-    volta sola. Da sorgenti si ricalcola a ogni pagina (shortcut: ~100 file letti, solo in sviluppo, dove i file
-    cambiano; se pesa, chiave = mtime piu' recente dell'albero static)."""
-    if C.FROZEN and _ASSET_V:
-        return _ASSET_V[0]
-    v = _hash_assets()
-    if C.FROZEN:
-        _ASSET_V[:] = [v]
-    return v
-
-
-def _hash_assets() -> str:
-    from .. import __version__
-
-    digest = hashlib.sha256()
-    assets = [*STATIC.glob("*.css"), *STATIC.glob("*.js")]
-    assets.extend(path for path in STATIC.joinpath("js").rglob("*.js") if path.is_file())
-    assets.extend(path for path in STATIC.joinpath("experiences").rglob("*")
-                  if path.is_file() and path.suffix in (".css", ".js"))
-    assets.extend(path for path in STATIC.joinpath("settings").rglob("*.html") if path.is_file())
-    for path in sorted(assets):
-        digest.update(path.name.encode("utf-8"))
-        digest.update(path.read_bytes())
-    return f"{__version__}.{digest.hexdigest()[:12]}"
-
-
-def _players(v, platform: str = "") -> int:
-    """Numero massimo di giocatori IN LOCALE (stesso schermo/console), 0 se sconosciuto.
-    '1-4', '2', 'Up to 8'... -> il massimo. Valori da gioco online (es. 16, 64) vengono scartati:
-    per i PC oltre 4 (le schede PC indicano quasi sempre i giocatori online), per le console oltre 8.
-    Portatili (P.NO_SPLIT): 0, il multiplayer richiede piu' console."""
-    if platform in P.NO_SPLIT:
-        return 0
-    n =[int(x) for x in re.findall(r"\d+", str(v or ""))]
-    m = max(n) if n else 0
-    if m > (4 if platform == "windows" else 8):
-        return 0
-    return m
-
-
-def _hltb_main(v) -> float | None:
-    """Ore per finire la storia (o storia + extra) da HowLongToBeat, None se sconosciuto."""
-    if not v:
-        return None
-    try:
-        h = json.loads(v) if isinstance(v, str) else v
-    except ValueError:
-        return None
-    return h.get("main") or h.get("extra") or h.get("complete")
-
-
-def _json(o) -> bytes:
-    """Gli stessi byte di JSONResponse, ma le liste lunghe a blocchi: json.dumps tiene un pezzo di testo per ogni
-    valore fino alla fine (~200 MB in piu' per i 26 MB delle 150.000 righe di /api/library)."""
-    if isinstance(o, dict):
-        return b"{" + b",".join(_json(str(k)) + b":" + _json(v) for k, v in o.items()) + b"}"
-    if isinstance(o, list) and len(o) > 2000:
-        return b"[" + b",".join(_json(o[i:i + 2000])[1:-1] for i in range(0, len(o), 2000)) + b"]"
-    return json.dumps(o, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
-
-
-def _players_label(v, platform: str = "") -> str:
-    m = _players(v, platform)
-    return "" if not m else "1 (solo giocatore)" if m == 1 else f"1–{m} in locale"
-
-
 # codice stabile per ogni errore: i client esterni di /api/v1 lo usano per capire il caso senza leggere il testo
 ERROR_CODES = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
                405: "method_not_allowed", 409: "conflict", 413: "too_large", 422: "invalid_request",
@@ -567,11 +488,6 @@ def create_app(cfg) -> FastAPI:
     return app
 
 
-def _plain(s: str) -> str:
-    import re
-    return re.sub(r"\[/?[a-z ]*\]", "", s)
-
-
 def _port_free(port: int, host: str = "127.0.0.1") -> bool:
     import socket
     with socket.socket() as sk:
@@ -629,20 +545,6 @@ class LocalGuard:
             # chiusura dell'app con stream SSE ancora aperti: uvicorn li cancella dopo il timeout e
             # non deve stampare un traceback per un'uscita normale
             return None
-
-
-WINDOW_FOCUS = {"fn": None}  # impostata quando l'app gira in una finestra nativa
-QUIT = {"fn": None}  # chiusura ordinata (la imposta run()): finestra o server, secondo come gira l'app
-
-
-def quit_app(delay: float):
-    """Chiude l'app tra `delay` secondi (il tempo di rispondere alla pagina) passando dallo spegnimento ordinato."""
-    def go():
-        guard = threading.Timer(15, hard_exit)  # se resta appesa si esce lo stesso
-        guard.daemon = True
-        guard.start()
-        (QUIT["fn"] or hard_exit)()
-    threading.Timer(delay, go).start()
 
 
 def _theme_bg(cfg, bigpicture: bool = False) -> str:

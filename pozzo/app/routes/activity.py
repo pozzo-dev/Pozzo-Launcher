@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import HTMLResponse
 
 from ... import i18n as I, platforms as P
-from ..server import STATIC, _asset_version
+from ..assets import STATIC, _asset_version
 
 
 MAX_SUBTASKS = 12  # le righe arrivano anche al telefono: niente elenchi lunghi

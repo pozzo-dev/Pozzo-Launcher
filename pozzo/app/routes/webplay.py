@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ... import i18n as I, webplay as W
-from ..server import STATIC
+from ..assets import STATIC
 from .images import file_response
 
 MIME = {".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".json": "application/json",

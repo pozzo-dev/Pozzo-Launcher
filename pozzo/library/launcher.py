@@ -1169,7 +1169,7 @@ class Launcher:
         if not pids:
             return False
         try:  # Pozzo davanti: chi gioca a schermo intero non resta davanti a una finestra congelata
-            from ..app.server import WINDOW_FOCUS
+            from ..app.common import WINDOW_FOCUS
             WINDOW_FOCUS["fn"] and WINDOW_FOCUS["fn"]()
         except Exception:
             pass

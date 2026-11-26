@@ -19,7 +19,7 @@ from ...downloads.manager import Duplicate
 from ...downloads.engines.http import safe_name as _safe_name
 from ...library import automation as A, launcher as L
 from ..icons import CREDIT
-from ..server import STORE_NAMES, _hltb_main, _json, _players, _players_label
+from ..common import STORE_NAMES, _hltb_main, _json, _players, _players_label
 
 
 class ApiError(HTTPException):

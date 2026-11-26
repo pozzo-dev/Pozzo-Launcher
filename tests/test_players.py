@@ -3,7 +3,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pozzo.app.server import _json, _players, _players_label
+from pozzo.app.common import _json, _players, _players_label
 from starlette.responses import JSONResponse
 
 # /api/library scritto a blocchi: byte identici a JSONResponse

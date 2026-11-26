@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pozzo import config as C  # noqa: E402
-from pozzo.app import server as S  # noqa: E402
+from pozzo.app import assets as S  # noqa: E402
 
 
 def main():

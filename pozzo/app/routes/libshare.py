@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from ... import platforms as P, webplay as W
 from ...remote import libshare as LS
 from ...remote.phone import COOKIE, _qr_svg
-from ..server import STATIC
+from ..assets import STATIC
 
 NOSNIFF = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"}
 

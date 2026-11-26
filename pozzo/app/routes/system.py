@@ -16,7 +16,7 @@ from fastapi.responses import PlainTextResponse
 from ... import backup as BK, config as C, platforms as P, telemetry
 from ... import i18n as I
 from ...library.build import build
-from ..server import WINDOW_FOCUS, _REMOTE_DOWN, _plain, quit_app
+from ..common import WINDOW_FOCUS, _REMOTE_DOWN, _plain, quit_app
 
 
 def build_router(ctx) -> APIRouter:

@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from ... import config as C, i18n as I
 from ... import overlay as OV
 from ...emuadapters import retroarch as RA
-from ..server import STATIC, _asset_version
+from ..assets import STATIC, _asset_version
 
 
 def build_router(ctx) -> APIRouter:

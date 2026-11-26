@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
-from ..server import STATIC, _asset_version
+from ..assets import STATIC, _asset_version
 
 
 def build_router(ctx) -> APIRouter:

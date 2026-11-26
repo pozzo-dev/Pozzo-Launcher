@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from .. import extensions as X
-from ..server import quit_app
+from ..common import quit_app
 from ... import config as C, profilecfg as PC
 from ...library import automation as A, fastcopy as FC, launcher as L
 from ... import i18n as I
