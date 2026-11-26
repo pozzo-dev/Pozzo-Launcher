@@ -492,7 +492,7 @@ async function loadRA(d, force = false) {
   let box = $("#d-ra");
   if (!box) { $("#d-ext").insertAdjacentHTML("beforebegin", `<div id="d-ra"></div>`); box = $("#d-ra"); }
   if (r.error) { box.innerHTML = `<div class="d-h">🏆 RetroAchievements</div><p class="muted small">${esc(r.error)}</p>`; return; }
-  if (!r.found) { box.innerHTML = `<div class="d-h">🏆 RetroAchievements</div><p class="muted small">Gioco non trovato su RetroAchievements (o senza obiettivi).</p>`; return; }
+  if (!r.found) { box.innerHTML = `<div class="d-h">🏆 RetroAchievements</div><p class="muted small">${t("g.ra.notFound")}</p>`; return; }
   const g = r.game, done = g.achievements.filter((a) => a.unlocked).length, tot = g.achievements.length || g.num_achievements;
   const pct = tot ? Math.round(done / tot * 100) : 0;
   box.innerHTML = `<div class="d-h">🏆 RetroAchievements <span class="muted small">${done}/${tot} · ${pct}%${g.highest_award_kind ? ` · ${esc(g.highest_award_kind)}` : ""}</span>
@@ -704,15 +704,15 @@ async function loadGameLinks(d, force = false) {
 }
 
 /** il torrent accanto a «Scarica»: la pagina lo elenca tra i link, quindi il pulsante compare dopo la lettura */
-function dlMagnetButton(d) {
-  const acts = $("#detail .d-actions"), mag = dlMagnetUrl();
-  if (!acts || !mag || d.platform !== "pc" || $("#d-magnet") || !$("#d-download")) return;
+function dlMagnetButton(d, mag = dlMagnetUrl()) {
+  const dl = $("#d-download"), acts = $("#detail .d-actions") || dl?.parentElement;
+  if (!acts || !mag || d.platform !== "windows" || $("#d-magnet") || !dl) return;
   const b = document.createElement("button");
   b.className = "btn";
   b.id = "d-magnet";
   b.textContent = "🧲 Torrent";
   b.title = t("f.dl.magnet_title");
-  $("#d-download").after(b);
+  dl.after(b);
 }
 
 /** apre l'elenco dei file di un paste dei filehoster; la seconda volta resta in memoria */
@@ -963,7 +963,7 @@ function onGameDownloaded(ev) {
   toast(plan.toast);
   if (plan.open != null) openDetail(plan.open);
 }
-if (typeof module !== "undefined") module.exports = { svSkipped, coverTransition, safeAccent, downloadedPlan, dlRows, dlPick, linkUrlsOf, DL_PARTS, dlRank, dlSortRows, dlMagnetOf };
+if (typeof module !== "undefined") module.exports = { svSkipped, coverTransition, safeAccent, downloadedPlan, dlRows, dlPick, linkUrlsOf, DL_PARTS, dlRank, dlSortRows, dlMagnetOf, dlMagnetButton };
 
 /* Tasto destro su un link di download (giochi di ogni console): copia l'indirizzo per aprirlo a mano nel browser.
    I magnet non c'entrano: si copiano dal torrent. Vale per i pulsanti con data-dl / data-dparts / data-mu / data-open / data-paste. */

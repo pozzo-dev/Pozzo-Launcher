@@ -1,8 +1,21 @@
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// pagina senza core.js: copia identica all'esc di core.js
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
   return (h ? `${h}:${String(m).padStart(2, "0")}` : `${m}`) + `:${String(x).padStart(2, "0")}`; };
 const LABEL = () => ({ running: t("a.act.st.running"), done: t("a.act.st.done"), error: t("a.act.st.error"), cancelled: t("a.act.st.cancelled") });
-let data = { jobs: [], now: 0 }, skew = 0;
+let data = { jobs: [], now: 0 }, skew = 0, held = false, inflight = 0, err = "";
+// con il mouse premuto la lista non si ricostruisce: mousedown e mouseup devono cadere sullo stesso bottone
+for (const ev of ["pointerdown"]) addEventListener(ev, () => { held = true; }, true);
+for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { held = false; }, true);
+// aggiorna i dati solo se la risposta e' ok, altrimenti mostra il motivo (niente {detail} al posto dei job)
+async function post(url, body) {
+  inflight++;  // durante la richiesta niente render: ricostruire la lista cancellerebbe disabled (doppio invio)
+  try {
+    const r = await fetch(url, { method: "POST", ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && Array.isArray(j.jobs)) { data = j; err = ""; } else err = j.detail || t("a.act.err");
+  } catch { /* si vede al prossimo giro */ } finally { inflight--; }
+}
 
 // sotto-attivita' (scansione, hash, una per fonte…): barra propria; senza totale non si sa quanto manca
 function sub(s) {
@@ -14,9 +27,10 @@ function sub(s) {
 }
 
 function render() {
+  if (held || inflight) return;
   const now = Date.now() / 1000 - skew;
   const run = data.jobs.filter((j) => j.status === "running").length;
-  document.getElementById("sum").textContent = run ? t("a.act.runningCount", { n: run }) : "";
+  document.getElementById("sum").textContent = err || (run ? t("a.act.runningCount", { n: run }) : "");
   document.getElementById("list").innerHTML = data.jobs.length ? data.jobs.map((j) => {
     const end = j.status === "running" ? now : (j.finished || now);
     const el = j.started ? end - j.started : null;
@@ -41,8 +55,8 @@ function render() {
 
 async function poll() {
   try {
-    data = await (await fetch("/api/activity")).json();
-    skew = Date.now() / 1000 - data.now;
+    const r = await fetch("/api/activity");
+    if (r.ok) { data = await r.json(); skew = Date.now() / 1000 - data.now; }
   } catch { /* server non raggiungibile: si riprova */ }
   render();
 }
@@ -51,21 +65,19 @@ document.body.onclick = async (e) => {
   const clear = e.target.closest("[data-clear]");
   if (clear) {
     clear.disabled = true;
-    try { data = await (await fetch("/api/activity/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: clear.dataset.clear === "done-error" ? "done-error" : "finished" }) })).json(); } catch {}
-    render();
-    return;
+    await post("/api/activity/clear", { mode: clear.dataset.clear === "done-error" ? "done-error" : "finished" });
+    return render();
   }
   const remove = e.target.closest("[data-remove]");
   if (remove) {
     remove.disabled = true;
-    try { data = await (await fetch(`/api/activity/${remove.dataset.remove}/remove`, { method: "POST" })).json(); } catch {}
-    render();
-    return;
+    await post(`/api/activity/${remove.dataset.remove}/remove`);
+    return render();
   }
   const b = e.target.closest(".stop");
   if (!b) return;
   b.disabled = true;
-  try { data = await (await fetch(`/api/activity/${b.dataset.id}/stop`, { method: "POST" })).json(); } catch { /* si vede al prossimo giro */ }
+  await post(`/api/activity/${b.dataset.id}/stop`);
   render();
 };
 

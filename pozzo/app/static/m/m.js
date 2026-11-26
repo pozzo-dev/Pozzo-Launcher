@@ -144,7 +144,9 @@ function renderLibTools() {
 }
 
 /* ------------------------------------------------------------------ scheda del gioco */
+let gameSeq = 0;  // un /api/game lento non deve riempire la scheda di un gioco aperto dopo
 async function openGame(id) {
+  const my = ++gameSeq;
   const g = L.byId.get(id);
   const box = $(".sheet-box");
   $("#sheet").hidden = false;
@@ -153,7 +155,8 @@ async function openGame(id) {
     : `<div class="g-nocover">${esc(g ? g.title : "")}</div>`}<div><h2>${esc(g ? g.title : "")}</h2>
     <div class="muted" id="g-meta">…</div></div></div><div class="g-btns" id="g-btns"></div><div class="g-desc" id="g-desc"></div>`;
   let d;
-  try { d = await api(`/api/game/${id}`); } catch (e) { return toast(e.message, true); }
+  try { d = await api(`/api/game/${id}`); } catch (e) { return my === gameSeq ? toast(e.message, true) : undefined; }
+  if (my !== gameSeq || $("#sheet").hidden) return;
   const pc = !!d.store;
   $("#g-meta").innerHTML = esc([pc ? d.store_name : d.platform_name, d.year].filter(Boolean).join(" · "))
     + (d.user.playtime ? `<br>${Math.round(d.user.playtime / 3600 * 10) / 10} ${t("k.m.hours")}` : "")
@@ -224,7 +227,6 @@ $(".sheet-bg").onclick = closeSheet;
 /* ------------------------------------------------------------------ gioco in esecuzione */
 let runT = 0, RUN = {}, touchOpened = "";
 async function pollRun(soon = false) {
-  clearTimeout(runT);
   try { RUN = await api("/api/running"); } catch { RUN = {}; }
   const active = ["starting", "extracting", "running"].includes(RUN.status);
   const m = $("#run-mini");
@@ -239,6 +241,7 @@ async function pollRun(soon = false) {
     openPad();
   }
   if (!$("#pad").hidden) applyLayout(); // gioco cambiato: aspetto automatico (PlayStation, Switch)
+  clearTimeout(runT); // dopo l'await: due poll sovrapposti non devono lasciare due timer
   runT = setTimeout(pollRun, active || soon ? 2000 : 6000);
 }
 $("#run-mini").onclick = async (e) => {
@@ -1100,11 +1103,11 @@ function renderActivity(d) {
 }
 
 async function loadActivity() {
-  clearTimeout(actT);
   let d;
   try { d = await api("/api/mobile/state"); } catch (e) { return toast(e.message, true); }
   renderActivity(d);
   const busy = (d.jobs || []).some((j) => j.status === "running") || ["starting", "running"].includes((d.running || {}).status);
+  clearTimeout(actT); // dopo l'await: due caricamenti sovrapposti non devono lasciare due timer
   actT = setTimeout(() => { if (!$("#v-act").hidden) loadActivity(); }, busy ? 2000 : 8000);
 }
 
@@ -1186,8 +1189,8 @@ function renderMedia(s) {
   }
 }
 async function loadMedia() {
-  clearTimeout(mrT);
   try { renderMedia(await api("/api/media/remote/state")); } catch { renderMedia(null); }
+  clearTimeout(mrT); // dopo l'await: due caricamenti sovrapposti non devono lasciare due timer
   mrT = setTimeout(() => { if (!$("#v-media").hidden) loadMedia(); }, 1500);  // solo mentre il pannello e' visibile
 }
 async function mrSend(cmd, arg) {

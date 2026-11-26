@@ -64,14 +64,16 @@ async function renderWishlist(pv) {
       ${w.key_url ? `<button class="btn" data-open="${esc(w.key_url)}" title="${t("h.wl.keyCompare")}">🔑 ↗</button>` : ""}
       <button class="icon-btn" data-del="${esc(w.id)}" title="${t("h.wl.removeFromList")}">✕</button></div>`, { gap: 6 });
   if (d.unseen) { api("/api/wishlist/seen", { body: {} }).then(() => pollWishBadge()); }
-  let tmr = 0;
+  let tmr = 0, seq = 0;
   $("#wl-q").oninput = (e) => {
     clearTimeout(tmr);
+    const my = ++seq;  // una risposta lenta non deve coprire una ricerca piu' recente ne' il box svuotato
     const q = e.target.value.trim();
     if (q.length < 2) { $("#wl-res").innerHTML = ""; return; }
     tmr = setTimeout(async () => {
       let r;
-      try { r = await api("/api/wishlist/search", { body: { q } }); } catch (err) { return toast(err.message, true); }
+      try { r = await api("/api/wishlist/search", { body: { q } }); } catch (err) { return my === seq ? toast(err.message, true) : undefined; }
+      if (my !== seq) return;
       $("#wl-res").innerHTML = r.results.map((x, i) => `<div class="wl-hit" data-i="${i}">${x.cover ? `<img src="${remoteImg(x.cover)}" alt="" data-onerr="remove">` : ""}<span>${esc(x.title)}</span><b>＋</b></div>`).join("")
         || `<div class="muted small" style="padding:8px">${t("h.wl.noResults")}</div>`;
       $("#wl-res").onclick = async (ev) => {
@@ -379,7 +381,7 @@ async function renderShots(pv) {
       <div class="row"><button class="btn" id="sh-steam">⬇ ${t("h.common.importSteam")}</button><button class="btn" id="sh-folder">📁 ${t("h.shots.folder")}</button>
         <button class="btn" id="sh-set">⚙</button></div></div>
     <div class="wl-settings" id="sh-settings" hidden>
-      <label>Scorciatoia da tastiera <input class="field" id="sh-hotkey" value="${esc(st.hotkey || "")}" placeholder="es. ctrl+shift+s, f10"></label>
+      <label>${t("h.shots.hotkey")} <input class="field" id="sh-hotkey" value="${esc(st.hotkey || "")}" placeholder="${t("h.shots.hotkeyPh")}"></label>
       <label>${t("h.shots.pauseHotkey")} <input class="field" id="sh-pause-hotkey" value="${esc(st.pause_hotkey || "")}" placeholder="ctrl+shift+p"></label>
       <label>${t("h.overlay.hotkey")} <input class="field" id="sh-ov-hotkey" value="${esc(d.overlay?.hotkey || "")}" placeholder="ctrl+shift+o"></label>
       <p class="muted small">${t("h.overlay.hint")}</p>

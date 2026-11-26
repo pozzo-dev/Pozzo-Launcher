@@ -75,7 +75,7 @@ function collCard(x) {
 
 function shelfGame(g) {
   const meta = [g.year, g.store ? (STORE_SHORT[g.store] || "PC") : platName(g.platform)].filter(Boolean).join(" · ");
-  return `<button class="shelf-game" type="button" data-shelf-game="${g.id}" aria-label="Apri ${esc(g.title)}">
+  return `<button class="shelf-game" type="button" data-shelf-game="${g.id}" aria-label="${t("g.dash.shelf.open", {title: esc(g.title)})}">
     <span class="shelf-cover" style="--h:${hue(g.title)}"><img src="/img/${g.id}/cover?w=300" alt="" loading="lazy"><span>${esc(g.title)}</span></span>
     <span class="shelf-game-title">${esc(g.title)}</span><span class="shelf-game-meta">${esc(meta)}</span></button>`;
 }
@@ -84,18 +84,18 @@ function shelfGame(g) {
 function resumeLeftText(sec) {
   if (!(sec > 0)) return "";
   const m = Math.round(sec / 60);
-  if (m < 60) return `circa ${Math.max(1, m)} min rimasti`;
+  if (m < 60) return t("g.dash.resume.left_min", {n: Math.max(1, m)});
   const h = Math.round(m / 60);
-  return `circa ${h} h rimast${h === 1 ? "a" : "e"}`;
+  return t(h === 1 ? "g.dash.resume.left_h_one" : "g.dash.resume.left_h_many", {n: h});
 }
 function resumeSaveText(save, now = Date.now() / 1000) {
   if (!save || !save.time) return "";
-  const t = new Date(save.time * 1000), n = new Date(now * 1000);
+  const dt = new Date(save.time * 1000), n = new Date(now * 1000);
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round((day(n) - day(t)) / 86400000);
-  const when = diff <= 0 ? "oggi" : diff === 1 ? "ieri" : `${diff} giorni fa`;
-  const hm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-  return `salvataggio di ${when} ${hm}`;
+  const diff = Math.round((day(n) - day(dt)) / 86400000);
+  const when = diff <= 0 ? t("g.dash.save.today") : diff === 1 ? t("g.dash.save.yesterday") : t("g.dash.save.days_ago", {n: diff});
+  const hm = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+  return t("g.dash.save.line", {when, hm});
 }
 /* items: risposta di GET /api/home/resume; il primo diventa la card grande, gli altri le righe piccole */
 function resumeHtml(items) {
@@ -104,15 +104,15 @@ function resumeHtml(items) {
   return `<article class="resume-hero" style="--h:${hue(top.title)}">
       <div class="resume-cover"><img src="/img/${top.id}/cover?w=640" alt="" loading="lazy" data-onerr="remove"></div>
       <div class="resume-body">
-        <div class="shelves-kicker">Riprendi</div>
+        <div class="shelves-kicker">${t("g.dash.resume.title")}</div>
         <h3>${esc(top.title)}</h3>
         <p class="muted">${esc(platName(top.platform))}</p>
         ${left ? `<p>${esc(left)}</p>` : ""}
         ${save ? `<p class="muted">${esc(save)}</p>` : ""}
-        <button class="btn primary" type="button" data-resume-play="${top.id}">▶ Riprendi</button>
+        <button class="btn primary" type="button" data-resume-play="${top.id}">▶ ${t("g.dash.resume.title")}</button>
       </div></article>
-    ${rest.length ? `<section class="shelf-section resume-row"><h2>Continua a giocare</h2><div class="shelf-lane">
-      ${rest.map((g) => `<div class="resume-mini">${shelfGame(g)}<button class="btn" type="button" data-resume-play="${g.id}" aria-label="Riprendi ${esc(g.title)}">▶ Riprendi</button></div>`).join("")}
+    ${rest.length ? `<section class="shelf-section resume-row"><h2>${t("h.app.heroContinue")}</h2><div class="shelf-lane">
+      ${rest.map((g) => `<div class="resume-mini">${shelfGame(g)}<button class="btn" type="button" data-resume-play="${g.id}" aria-label="${t("h.home.resumeGame", {title: esc(g.title)})}">▶ ${t("g.dash.resume.title")}</button></div>`).join("")}
     </div></section>` : ""}`;
 }
 async function loadResume(pv) {
@@ -126,7 +126,7 @@ async function loadResume(pv) {
   if (!recent) return;
   recent.querySelectorAll("[data-shelf-game]").forEach((b) => { if (shown.has(b.dataset.shelfGame)) b.remove(); });
   if (!recent.querySelector("[data-shelf-game]")) recent.remove();
-  else recent.querySelector("h2").textContent = "Giocati di recente";
+  else recent.querySelector("h2").textContent = t("h.title.recent");
 }
 
 /* scaffali delle estensioni (GS.addShelf): si riempiono quando arrivano, vuoti restano nascosti */

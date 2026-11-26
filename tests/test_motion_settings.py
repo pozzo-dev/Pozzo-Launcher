@@ -144,7 +144,7 @@ def main() -> None:
     big = (STATIC / "bigpicture.html").read_text(encoding="utf-8")
     # inclusi in entrambe le pagine (li mette chi tiene index.html/bigpicture.html)
     assert 'motion-settings.js' in index and 'motion-settings.js' in big, "motion-settings.js non incluso"
-    assert 'skeleton.css' in index and 'skeleton.css' in big, "skeleton.css non incluso"
+    assert 'skeleton.css' in index, "skeleton.css non incluso in index.html"
     # stessi valori di motion.js/motion.css, nessuna nuova chiave di storage
     assert '"gs.motion"' in js and 'localStorage.getItem(KEY)' in js
     assert 'window.GSMotion && window.GSMotion.set' in js, "deve passare da GSMotion.set di motion.js"

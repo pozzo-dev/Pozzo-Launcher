@@ -559,6 +559,9 @@ table.emu td.num.warn { color: var(--warn); }
 .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .plugin-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .small-dlg { width: min(560px, 92vw); }
+/* i dialoghi .small-dlg senza .dlg-body (es. #smeta) hanno figli diretti: padding interno per evitare testo sul bordo */
+.small-dlg:not(:has(> .dlg-body)) { padding: 18px 22px; }
+#smeta h3 { margin: 0 0 8px; }
 /* immagini del gioco: una casella per tipo, quella scelta evidenziata */
 .md-dlg { width: min(760px, 94vw); }
 .md-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
@@ -903,7 +906,8 @@ kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
 .lb-arr.l { left: 18px; } .lb-arr.r { right: 18px; }
 #d-profile { margin-left: 10px; font-size: 12px; }
 #prof-dlg { width: min(720px, 94vw); padding: 20px 24px; }
-#prof-dlg h3 { margin: 0 0 4px; }
+#prof-dlg h2, #prof-dlg h3 { margin: 0 0 4px; }
+#prof-dlg h2 { font-size: 1.17em; }
 .pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 12px 0; }
 .pf-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .pf-grid .wide { grid-column: 1 / -1; }
@@ -1764,9 +1768,7 @@ th[aria-sort="ascending"] .dl-th, th[aria-sort="descending"] .dl-th { color: var
 .dl-row[data-status="paused"] .dl-bar i { background: var(--warn); }
 .dl-row[data-status="completed"] .dl-bar i { background: var(--good); }
 .dl-row[data-status="error"] .dl-bar i { background: var(--bad); }
-.dl-row[data-seed="1"] .dl-bar i { background: var(--good); animation: dl-seed 1.8s ease-in-out infinite; }
-@keyframes dl-seed { 50% { opacity: .6; } }
-@media (prefers-reduced-motion: reduce) { .dl-row[data-seed="1"] .dl-bar i, .dl-bar i { animation: none; transition: none; } }
+@media (prefers-reduced-motion: reduce) { .dl-bar i { animation: none; transition: none; } }
 .dl-type { font-size: var(--type-xs); color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 6px; margin-left: 6px; }
 .dl-type.hi { color: var(--accent); border-color: var(--accent); }
 .dl-st { font-size: var(--type-xs); color: var(--muted); white-space: nowrap; }

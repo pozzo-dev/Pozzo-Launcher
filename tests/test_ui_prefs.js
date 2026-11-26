@@ -196,8 +196,8 @@ const GOOD = { bg: "#0f1115", "bg-2": "#151821", "bg-3": "#1c2030", panel: "#171
   assert.match(bp, /:root \{ --ui-zoom: 1;/);
   assert.match(app, /html\[data-ui-zoom\]:not\(\[data-mode="bigpicture"\]\) body \{ zoom: var\(--ui-zoom\)/);
   assert.match(bp, /font-size: calc\(clamp\(15px, 1\.15vw, 24px\) \* var\(--ui-zoom, 1\)\)/);
-  assert.match(bp, /html\[data-bptext="large"\] body \{ font-size: calc\(clamp\(18px, 1\.4vw, 28px\) \* var\(--ui-zoom, 1\)\); \}/);
-  assert.match(bp, /html\[data-bptext="xlarge"\] body \{ font-size: calc\(clamp\(21px, 1\.7vw, 33px\) \* var\(--ui-zoom, 1\)\); \}/);
+  assert.match(bp, /html\[data-bptext="large"\] \{ font-size: calc\(clamp\(18px, 1\.4vw, 28px\) \* var\(--ui-zoom, 1\)\); \}/);
+  assert.match(bp, /html\[data-bptext="xlarge"\] \{ font-size: calc\(clamp\(21px, 1\.7vw, 33px\) \* var\(--ui-zoom, 1\)\); \}/);
   assert.match(js, /idle\.activity\(\)\) attractClosedAt/);
   assert.match(js, /capture: true, passive: false/);
   assert.match(js, /idle\.close\(\);\r?\n\s*const o = \$\("#bp-running"\)/);
@@ -250,6 +250,20 @@ const GOOD = { bg: "#0f1115", "bg-2": "#151821", "bg-3": "#1c2030", panel: "#171
   assert.match(app, /#detail\[data-game-accent\]/);
   assert.ok(det.includes("/api/game/${id}/cover-accent") && bp.includes("/api/game/${id}/cover-accent"), "endpoint cover-accent");
   assert.ok(!/\/accent`/.test(det + bp), "vecchio endpoint rimosso");
+}
+
+// --- A4: i18n desktop (home.js, pages.js) e accessibilita'/padding dialoghi (index.html, app.css)
+{
+  const idx = read("index.html"), app = read("app.css"), home = read("js/home.js"), pages = read("js/pages.js");
+  assert.ok(!idx.includes('<h3 id="pf-title"'), "index.html: niente h3 subito dopo h1 per Profilo di avvio");
+  assert.ok(idx.includes('<h2 id="pf-title"'), "index.html: Profilo di avvio usa h2");
+  assert.match(app, /\.small-dlg:not\(:has\(>\s*\.dlg-body\)\)\s*\{\s*padding:\s*(1[2-9]|[2-9]\d)px/, "small-dlg senza .dlg-body ha padding >= 12px");
+  assert.match(app, /#prof-dlg h2\b/, "app.css mantiene lo stile visivo di #prof-dlg h2");
+  assert.ok(!pages.includes("Scorciatoia da tastiera") && !pages.includes("es. ctrl+shift+s, f10"), "pages.js:382 usa chiavi i18n");
+  assert.ok(pages.includes('t("h.shots.hotkey")') && pages.includes('t("h.shots.hotkeyPh")'), "pages.js usa h.shots.hotkey*");
+  for (const s of ['"Riprendi"', "Continua a giocare", "Giocati di recente", "salvataggio di ", "min rimasti"]) {
+    assert.ok(!home.includes(s), "home.js non contiene testo fisso italiano: " + s);
+  }
 }
 
 console.log("test_ui_prefs: ok");

@@ -20,7 +20,7 @@ function askText(anchor, placeholder, initial = "") {
   return new Promise((resolve) => {
     const p = $("#popover");
     p.innerHTML = `<input placeholder="${esc(placeholder)}" value="${esc(initial)}"><div style="display:flex;gap:6px;justify-content:flex-end">
-      <button class="btn" data-a="cancel">Annulla</button><button class="btn primary" data-a="ok">OK</button></div>`;
+      <button class="btn" data-a="cancel">${t("a.common.cancel")}</button><button class="btn primary" data-a="ok">OK</button></div>`;
     placePopover(anchor);
     const inp = $("input", p);
     inp.focus(); inp.select();
@@ -32,7 +32,7 @@ function askText(anchor, placeholder, initial = "") {
 
 function pickCollection(anchor, gameId, current) {
   const p = $("#popover");
-  p.innerHTML = `<input placeholder="Cerca o crea collezione…"><div class="opts"></div>`;
+  p.innerHTML = `<input placeholder="${esc(t("g.coll.search"))}"><div class="opts"></div>`;
   placePopover(anchor);
   const inp = $("input", p), opts = $(".opts", p);
   const cur = new Set(current);
@@ -41,7 +41,7 @@ function pickCollection(anchor, gameId, current) {
     const list = S.colls.filter((c) => !cur.has(c.slug) && !c.hidden && (!f || fold(c.name).includes(f)))
       .sort((a, b) => (S.collCounts.get(b.idx) || 0) - (S.collCounts.get(a.idx) || 0)).slice(0, 60);
     const exact = S.colls.some((c) => fold(c.name) === f);
-    opts.innerHTML = (f && !exact ? `<div class="opt hl" data-new="1">＋ Nuova collezione «${esc(inp.value.trim())}»</div>` : "")
+    opts.innerHTML = (f && !exact ? `<div class="opt hl" data-new="1">＋ ${t("g.coll.new", { name: esc(inp.value.trim()) })}</div>` : "")
       + list.map((c) => `<div class="opt" data-slug="${esc(c.slug)}"><span>${esc(c.name)}</span><span class="muted">${S.collCounts.get(c.idx) || 0}</span></div>`).join("");
   };
   draw();

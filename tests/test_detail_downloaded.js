@@ -73,8 +73,42 @@ assert.deepStrictEqual(linkUrlsOf({ dataset: { dl: "magnet:?xt=urn:btih:aa" } })
 assert.deepStrictEqual(linkUrlsOf({ dataset: { dparts: "0" } }), ["https://a/1.rar", "https://a/2.rar"]);
 assert.deepStrictEqual(linkUrlsOf({ dataset: { open: "https://nxbrew.net/g" } }), ["https://nxbrew.net/g"]);
 // ripristino salvataggi: i file fuori dalle cartelle del gioco vanno detti, non saltati in silenzio
-const { svSkipped } = require("../pozzo/app/static/js/detail.js");
+const { svSkipped, dlMagnetButton } = require("../pozzo/app/static/js/detail.js");
 assert.strictEqual(svSkipped({ written: 3, skipped: [] }), "", "niente saltati: nessun avviso");
 assert.strictEqual(svSkipped({ written: 3 }), "", "risposta senza il campo");
 assert.strictEqual(svSkipped({ skipped: ["C:/x/a", "C:/x/b"] }), "2 file saltati: fuori dalle cartelle dei salvataggi del gioco");
+
+// dlMagnetButton: usa platform === "windows" (non "pc") e funziona anche senza #detail .d-actions (cockpit/editorial)
+{
+  const makeEnv = ({ withDActions = true } = {}) => {
+    const parent = {
+      children: [],
+      after(anchor, node) {
+        const idx = this.children.indexOf(anchor);
+        this.children.splice(idx + 1, 0, node);
+      },
+    };
+    const dlBtn = { id: "d-download", parentElement: parent, after(node) { parent.after(this, node); } };
+    parent.children.push(dlBtn);
+    const bySel = {
+      "#d-download": dlBtn,
+      "#detail .d-actions": withDActions ? parent : null,
+      "#d-magnet": () => parent.children.find((c) => c.id === "d-magnet") || null,
+    };
+    global.$ = (s) => (typeof bySel[s] === "function" ? bySel[s]() : bySel[s] || null);
+    global.document = { createElement: () => ({ id: "", className: "", textContent: "", title: "" }) };
+    return parent;
+  };
+  const pcParent = makeEnv({ withDActions: true });
+  dlMagnetButton({ id: 1, platform: "pc" }, "magnet:?xt=urn:btih:aa");
+  assert.strictEqual(pcParent.children.length, 1, "platform 'pc' non è il nome reale (è 'windows')");
+
+  const winClassic = makeEnv({ withDActions: true });
+  dlMagnetButton({ id: 2, platform: "windows" }, "magnet:?xt=urn:btih:aa");
+  assert.strictEqual(winClassic.children[1]?.id, "d-magnet", "classic: #d-magnet inserito dopo #d-download");
+
+  const winNoDActions = makeEnv({ withDActions: false });
+  dlMagnetButton({ id: 3, platform: "windows" }, "magnet:?xt=urn:btih:aa");
+  assert.strictEqual(winNoDActions.children[1]?.id, "d-magnet", "cockpit/editorial senza .d-actions: #d-magnet inserito dopo #d-download");
+}
 console.log("test_detail_downloaded.js: ok");

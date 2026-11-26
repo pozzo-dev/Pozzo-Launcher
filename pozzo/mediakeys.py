@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 
+from . import i18n as I
+
 VK = {"play_pause": 0xB3, "next": 0xB0, "previous": 0xB1, "volume_up": 0xAF,
       "volume_down": 0xAE, "mute": 0xAD}
 LINUX_KEYS = {"play_pause": "XF86AudioPlay", "next": "XF86AudioNext", "previous": "XF86AudioPrev",
@@ -21,27 +23,27 @@ def send(action: str, *, platform: str | None = None, runner=subprocess.run, key
          which=shutil.which) -> dict:
     platform = platform or sys.platform
     if action not in VK:
-        return {"ok": False, "code": "invalid_action", "message": "Comando multimediale non valido."}
+        return {"ok": False, "code": "invalid_action", "message": I.tr("o.overlay.mediaInvalid")}
     try:
         if platform == "win32":
             event = keybd_event or ctypes.windll.user32.keybd_event
             event(VK[action], 0, 0, 0)
             event(VK[action], 0, 2, 0)
-            return {"ok": True, "message": "Tasto multimediale inviato."}
+            return {"ok": True, "message": I.tr("i.media.keySent")}
         if platform == "darwin":
             app_command = {"play_pause": "playpause", "next": "next track", "previous": "previous track"}
             if action in app_command:
                 for app in ("Spotify", "Music"):
                     result = _run(["osascript", "-e", f'tell application "{app}" to {app_command[action]}'], runner)
                     if result.returncode == 0:
-                        return {"ok": True, "message": "Comando inviato al player."}
+                        return {"ok": True, "message": I.tr("i.media.playerSent")}
             if action.startswith("volume_"):
                 op = "up" if action == "volume_up" else "down"
                 script = f'tell application "System Events" to set volume output volume (output volume of (get volume settings) {"+" if op == "up" else "-"} 5)'
                 result = _run(["osascript", "-e", script], runner)
                 if result.returncode == 0:
-                    return {"ok": True, "message": "Volume aggiornato."}
-            return {"ok": False, "code": "unavailable", "message": "Nessun player compatibile trovato."}
+                    return {"ok": True, "message": I.tr("i.media.volumeUpdated")}
+            return {"ok": False, "code": "unavailable", "message": I.tr("i.media.noPlayer")}
         if platform.startswith("linux"):
             playerctl = which("playerctl")
             if playerctl:
@@ -49,12 +51,12 @@ def send(action: str, *, platform: str | None = None, runner=subprocess.run, key
                             "volume_up": ["volume", "0.05+"], "volume_down": ["volume", "0.05-"], "mute": ["volume", "0"]}
                 result = _run([playerctl, *commands[action]], runner)
                 if result.returncode == 0:
-                    return {"ok": True, "message": "Comando inviato al player."}
+                    return {"ok": True, "message": I.tr("i.media.playerSent")}
             xdotool = which("xdotool")
             if xdotool:
                 result = _run([xdotool, "key", "--clearmodifiers", LINUX_KEYS[action]], runner)
                 if result.returncode == 0:
-                    return {"ok": True, "message": "Tasto multimediale inviato."}
-        return {"ok": False, "code": "unavailable", "message": "Tasti multimediali non disponibili su questo sistema."}
+                    return {"ok": True, "message": I.tr("i.media.keySent")}
+        return {"ok": False, "code": "unavailable", "message": I.tr("i.media.keysUnavailable")}
     except (OSError, subprocess.SubprocessError) as error:
-        return {"ok": False, "code": "unavailable", "message": f"Controllo multimediale non riuscito: {error}"}
+        return {"ok": False, "code": "unavailable", "message": I.tr("i.media.controlFailed", error=error)}

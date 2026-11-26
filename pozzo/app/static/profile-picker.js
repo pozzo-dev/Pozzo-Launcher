@@ -8,6 +8,7 @@
   const root = typeof window !== "undefined" ? window : globalThis;
   const AVATARS = ["🙂", "😎", "🦊", "🐱", "🐶", "🐼", "🦄", "🐙", "🚀", "👾", "🎮", "⭐"];
   const COLORS = ["#5b8cff", "#8b72ff", "#3ecf8e", "#f5b84a", "#ff6b6b", "#ff8fd0", "#36c5d6", "#9aa3b8"];
+  // copia identica all'esc di core.js: il modulo gira anche nei test node senza core.js
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   /* ---- rete e messaggi (testabili senza DOM) */

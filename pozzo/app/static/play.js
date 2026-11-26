@@ -12,12 +12,14 @@ window.PLAY = PLAY;
   try {
     if (P.needBios && !P.bios) return say(T.noBios);
     say(T.preparing);
-    let st = await (await fetch(`${base}/prepare`, { method: "POST" })).json();
+    // risposta non ok = {detail}: senza questo il ciclo sotto girava per sempre a «0%»
+    const getSt = async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.detail || r.status); return j; };
+    let st = await getSt(await fetch(`${base}/prepare`, { method: "POST" }));
     while (st.status !== "ready") {
       if (st.status === "error") throw new Error(st.error);
       say(fmt(T.downloading, { pct: Math.round((st.pct || 0) * 100) }));
       await new Promise((r) => setTimeout(r, 700));
-      st = await (await fetch(`${base}/status`)).json();
+      st = await getSt(await fetch(`${base}/status`));
     }
     const load = (src) => new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error(src)); document.head.appendChild(s); });
     const rom = `${base}/rom/${encodeURIComponent(P.name)}`;

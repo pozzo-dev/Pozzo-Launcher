@@ -59,9 +59,11 @@ async function loadGameMods(d) {
     }).join("");
     $q(".d-gm-list").innerHTML = list || `<p class="muted small">${t("f.mods.g.empty")}</p>`;
   };
+  let seq = 0;
   const reload = async () => {
-    try { data = await api(`${base}?q=${encodeURIComponent($q(".d-gm-q").value.trim())}`); } catch (e) { toast(e.message, true); }
-    if (alive()) draw();
+    const my = ++seq;  // risposta vecchia di una ricerca superata: scartata
+    try { data = await api(`${base}?q=${encodeURIComponent($q(".d-gm-q").value.trim())}`); } catch (e) { if (my === seq) toast(e.message, true); return; }
+    if (my === seq && alive()) draw();
   };
 
   const install = async (id, name) => {

@@ -37,7 +37,7 @@
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof document === "undefined" || typeof window === "undefined") return;
 
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // esc: quello globale di core.js (caricato prima in index.html)
   const call = async (path, body) => {
     const init = { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" } };
     if (body !== undefined) init.body = JSON.stringify(body);
