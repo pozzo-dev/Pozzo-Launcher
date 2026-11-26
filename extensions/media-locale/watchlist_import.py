@@ -173,7 +173,7 @@ def parse_mal_xml(text: str, report=None) -> list[dict]:
     if re.search(r"<!\s*(doctype|entity)", text or "", re.I):
         raise ValueError(tr("wi.xmlEntity"))
     try:
-        root = ET.fromstring((text or "").lstrip("﻿").strip())
+        root = ET.fromstring((text or "").lstrip("﻿").strip())  # nosec B314 - expat>=2.4 non risolve entita' esterne, DOCTYPE gia' rifiutato sopra, export scelto dall'utente
     except ET.ParseError as e:
         raise ValueError(tr("wi.xml", err=e)) from e
     out = _Out("mal")
@@ -390,7 +390,7 @@ def bulk_save(conn, entries, now=None, profile="default") -> dict:
                    "notes": notes,
                    "added_at": now, "updated_at": now, "category": cat, "progress": progress, "total": total,
                    "linked_key": linked, "ext_ids": json.dumps(ext), "import_source": src, **extra}
-            conn.execute(f"INSERT INTO watchlist({','.join(new)}) VALUES({','.join('?' * len(new))})", list(new.values()))
+            conn.execute(f"INSERT INTO watchlist({','.join(new)}) VALUES({','.join('?' * len(new))})", list(new.values()))  # nosec B608 - solo nomi fissi, valori via parametri
             rows[key] = new
             index(key, new)
             added += 1
@@ -418,7 +418,7 @@ def bulk_save(conn, entries, now=None, profile="default") -> dict:
             skipped += 1
             continue
         upd["updated_at"] = now
-        conn.execute(f"UPDATE watchlist SET {','.join(k + '=?' for k in upd)} WHERE profile=? AND item_key=?", [*upd.values(), profile, key])
+        conn.execute(f"UPDATE watchlist SET {','.join(k + '=?' for k in upd)} WHERE profile=? AND item_key=?", [*upd.values(), profile, key])  # nosec B608 - solo nomi fissi, valori via parametri
         old.update(upd)
         index(key, old)
         updated += 1

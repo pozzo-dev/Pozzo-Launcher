@@ -58,9 +58,18 @@ class Http:
     def __init__(self, timeout: float = 20.0):
         self._client = httpx.Client(timeout=timeout, follow_redirects=True)
 
-    def request(self, method: str, url: str, **kw):
+    def request(self, method: str, url: str, max_bytes: int = 0, **kw):
         try:
-            return self._client.request(method, url, **kw)
+            if not max_bytes:
+                return self._client.request(method, url, **kw)
+            # corpo letto a pezzi con tetto: un server ostile non ci riempie la RAM
+            with self._client.stream(method, url, **kw) as r:
+                body = b""
+                for chunk in r.iter_bytes():
+                    body += chunk
+                    if len(body) > max_bytes:
+                        raise HTTPException(502, tr("err.imageBig"))
+                return httpx.Response(r.status_code, headers=r.headers, content=body)
         except httpx.HTTPError as e:  # server spento, DNS, timeout: 502 invece di un 500 con lo stack
             # solo il tipo di errore: l'URL (per Plex e Jellyfin) contiene il token e non deve finire nei messaggi
             raise HTTPException(502, tr("err.down", errore=type(e).__name__))
@@ -380,14 +389,19 @@ def register(gs):
         if not path.startswith("/") or path.startswith("//") or ".." in path or len(path) > 500:
             raise HTTPException(400, tr("err.badImage"))
         params = {"X-Plex-Token": server.token} if server.id == "plex" else {"api_key": server.token}
-        resp = http.request("GET", server.base + path, params=params, headers={"Accept": "image/*"})
-        if getattr(resp, "status_code", 200) >= 400:
+        # niente redirect: il token (in query) non deve seguirli verso un altro host
+        resp = http.request("GET", server.base + path, params=params, headers={"Accept": "image/*"},
+                            follow_redirects=False, max_bytes=MAX_IMAGE)
+        if getattr(resp, "status_code", 200) >= 300:
             raise HTTPException(502, tr("err.imageStatus", status=resp.status_code))
         body = resp.content or b""
         if len(body) > MAX_IMAGE:
             raise HTTPException(502, tr("err.imageBig"))
-        return Response(content=body, media_type=resp.headers.get("content-type") or "image/jpeg",
-                        headers={"Cache-Control": "max-age=3600"})
+        ctype = (resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip().lower()
+        if not ctype.startswith("image/") or "svg" in ctype:  # SVG puo' contenere script
+            raise HTTPException(502, tr("err.badImage"))
+        return Response(content=body, media_type=ctype,
+                        headers={"Cache-Control": "max-age=3600", "X-Content-Type-Options": "nosniff"})
 
     @gs.route("config")
     def media_config():

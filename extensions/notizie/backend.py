@@ -146,7 +146,7 @@ def _image(e, raw_html: str) -> str:
 def parse_feed(xml_bytes: bytes, source: dict, log=print) -> list[dict]:
     """RSS 2.0 e Atom. Feed non valido -> [] (e una riga di log)."""
     try:
-        root = ET.fromstring(xml_bytes)
+        root = ET.fromstring(xml_bytes)  # nosec B314 - expat>=2.4 non risolve entita' esterne, feed scelti dall'utente
     except ET.ParseError as e:
         log(f"notizie: feed {source.get('id')} non valido: {e}")
         return []
@@ -165,7 +165,7 @@ def parse_feed(xml_bytes: bytes, source: dict, log=print) -> list[dict]:
         raw = _text(e, "encoded", "content", "description", "summary")
         short = _text(e, "description", "summary") or raw
         guid = _text(e, "guid", "id") or link or title
-        item = {"id": hashlib.sha1(guid.encode()).hexdigest()[:16], "source": source.get("id", ""), "casa": source.get("casa", ""),
+        item = {"id": hashlib.sha1(guid.encode(), usedforsecurity=False).hexdigest()[:16], "source": source.get("id", ""), "casa": source.get("casa", ""),
                 "title": title, "link": link, "summary": _clean(short), "image": _image(e, raw or short),
                 "published": _date(_text(e, "pubdate", "published", "updated", "date")),
                 "tags": [(c.text or c.get("term") or "").strip() for c in e if _ln(c) == "category" and (c.text or c.get("term"))][:8]}
@@ -259,7 +259,7 @@ def validate_settings(body: dict) -> dict:
             raise ValueError("err.url", url[:80])  # codice del testo in locales.json e dettaglio
         if not nome:
             raise ValueError("err.name", "")
-        cid = "c-" + hashlib.sha1(url.encode()).hexdigest()[:8]
+        cid = "c-" + hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()[:8]
         if cid not in {x["id"] for x in custom}:
             custom.append({"id": cid, "casa": str(c.get("casa", "")).strip()[:40] or "Personali", "nome": nome, "url": url})
     known = {s["id"] for s in SOURCES} | {c["id"] for c in custom}
@@ -290,7 +290,7 @@ def parse_steam_news(data: dict) -> list[dict]:
         title = _clean(str(n.get("title") or ""), 300)
         if not title:
             continue
-        item = {"id": hashlib.sha1(str(n.get("gid") or n.get("url") or title).encode()).hexdigest()[:16],
+        item = {"id": hashlib.sha1(str(n.get("gid") or n.get("url") or title).encode(), usedforsecurity=False).hexdigest()[:16],
                 "source": "steam", "casa": "Steam", "title": title, "link": str(n.get("url") or ""),
                 "summary": _clean(str(n.get("contents") or "")), "image": "",
                 "published": iso(int(n["date"])) if n.get("date") else "", "tags": []}

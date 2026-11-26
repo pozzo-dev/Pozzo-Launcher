@@ -16,6 +16,7 @@ import runpy
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import types
 import urllib.parse
@@ -156,7 +157,7 @@ def _year(value) -> int | None:
 def parse_addon_xml(xml_text: str) -> dict:
     """Legge addon.xml di Kodi. ValueError su XML malformato o id/name mancanti."""
     try:
-        root = ET.fromstring(xml_text or "")
+        root = ET.fromstring(xml_text or "")  # nosec B314 - expat>=2.4 non risolve entita' esterne, il parser e' quello della stdlib
     except ET.ParseError as exc:
         raise ValueError(f"addon.xml malformato: {exc}") from exc
     if _localname(root.tag) != "addon":
@@ -704,6 +705,10 @@ def _channel_items(paths: list[Path], addon_id: str, query: str, hosts: dict[str
     return items
 
 
+_ADDON_LOCK = threading.Lock()
+ADDON_TIMEOUT = 30.0
+
+
 def run_kodi_addon_directory(
     addon_dir: Path, handle_url: str = "plugin://addon/", query: str = ""
 ) -> list[dict]:
@@ -735,6 +740,31 @@ def run_kodi_addon_directory(
         sep = "&" if "?" in target else "?"
         target = f"{target}{sep}{urllib.parse.urlencode({'q': query})}"
 
+    # codice di terzi nello stesso processo: uno alla volta (sys.modules/argv sono globali) e con un tetto di tempo
+    # shortcut: nessun sandbox/sottoprocesso (le shim xbmc vivono in-process); un addon bloccato resta in un thread daemon finche' non termina
+    if not _ADDON_LOCK.acquire(timeout=ADDON_TIMEOUT):
+        raise TimeoutError("un altro addon Kodi e' ancora in esecuzione")
+    out: dict = {}
+
+    def work() -> None:
+        try:
+            out["v"] = _run_entrypoint(root, meta, addon_id, script, target)
+        except BaseException as e:  # noqa: BLE001 - rilanciata al chiamante
+            out["e"] = e
+        finally:
+            _ADDON_LOCK.release()
+
+    t = threading.Thread(target=work, daemon=True, name="kodi-addon")
+    t.start()
+    t.join(ADDON_TIMEOUT)
+    if t.is_alive():
+        raise TimeoutError(f"addon Kodi {addon_id} oltre {ADDON_TIMEOUT:.0f}s")
+    if "e" in out:
+        raise out["e"]
+    return out["v"]
+
+
+def _run_entrypoint(root: Path, meta: dict, addon_id: str, script: Path, target: str) -> list[dict]:
     captured: list = []
     shims = _build_shims(root, meta, captured)
     saved = {name: sys.modules.get(name) for name in shims}
@@ -770,7 +800,7 @@ def normalize_github_zip_url(url: str) -> str:
 
 def _safe_name(addon_id: str) -> str:
     name = str(addon_id).strip()
-    if not name or name in (".", "..") or any(ch in name for ch in ("/", "\\", ":", "\0")):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):  # niente "." / ".." / separatori
         raise ValueError(f"id addon non valido: {addon_id!r}")
     return name
 
@@ -874,82 +904,7 @@ def install_kodi_addon(source: str | Path, addons_root: Path, fetcher=None) -> d
 
 
 # ---------------------------------------------------------------- sezioni Stream4me
-_STREAM4ME_SIMULATED: dict[str, list[dict]] = {
-    "film": [
-        {
-            "id": "stream4me:film:nuove-uscite",
-            "kind": "film",
-            "title": "Nuove Uscite Film",
-            "poster": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400",
-            "overview": "Film in streaming: nuove uscite, novità cinema e prime visioni",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/film/nuove-uscite",
-            "stream_url": "",
-        },
-        {
-            "id": "stream4me:film:top-visti",
-            "kind": "film",
-            "title": "Top Film Più Visti",
-            "poster": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400",
-            "overview": "I film più visti e popolari della settimana su Stream4me",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/film/top-visti",
-            "stream_url": "",
-        },
-    ],
-    "serie": [
-        {
-            "id": "stream4me:serie:serie-popolari",
-            "kind": "film",
-            "title": "Serie TV Popolari",
-            "poster": "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=400",
-            "overview": "Serie TV in streaming complete di stagioni ed episodi",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/serie/popolari",
-            "stream_url": "",
-        },
-        {
-            "id": "stream4me:serie:aggiornamenti",
-            "kind": "film",
-            "title": "Nuove Stagioni ed Episodi",
-            "poster": "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=400",
-            "overview": "Ultimi episodi e nuove stagioni aggiunte a Stream4me",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/serie/novita",
-            "stream_url": "",
-        },
-    ],
-    "canali": [
-        {
-            "id": "stream4me:canali:live-tv",
-            "kind": "film",
-            "title": "Canali TV Nazionali",
-            "poster": "https://images.unsplash.com/photo-1461151304267-38535e780c79?w=400",
-            "overview": "Canali TV italiani e internazionali in diretta streaming",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/canali/live",
-            "stream_url": "https://cdn.example/live/canali.m3u8",
-        },
-    ],
-    "animazione": [
-        {
-            "id": "stream4me:animazione:anime-streaming",
-            "kind": "film",
-            "title": "Anime e Cartoni",
-            "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
-            "overview": "Serie anime giapponesi e cartoni animati in streaming",
-            "source": SOURCE,
-            "source_label": "Stream4me",
-            "url": "https://stream4me.example/anime",
-            "stream_url": "",
-        },
-    ],
-}
+_S4ME_SECTIONS = ("film", "serie", "canali", "animazione")
 
 
 def _classify_channel(categories: list[str], name: str) -> list[str]:
@@ -968,8 +923,8 @@ def _classify_channel(categories: list[str], name: str) -> list[str]:
 
 
 def _get_stream4me_sections(addon_dir: Path | str | None = None) -> dict[str, list[dict]]:
-    """Estrae o simula le categorie principali di Stream4me (film, serie, canali, animazione)."""
-    sections: dict[str, list[dict]] = {k: [] for k in _STREAM4ME_SIMULATED}
+    """Estrae le categorie principali di Stream4me (film, serie, canali, animazione)."""
+    sections: dict[str, list[dict]] = {k: [] for k in _S4ME_SECTIONS}
     root = Path(addon_dir) if addon_dir is not None else None
     if root is not None:
         if not (root / "addon.xml").is_file():
@@ -1016,11 +971,6 @@ def _get_stream4me_sections(addon_dir: Path | str | None = None) -> dict[str, li
                         sections["canali"].append(item)
                     else:
                         sections["film"].append(item)
-
-    # shortcut: se una sezione non ha elementi estratti, usa i preset simulati, espandibile con repository remoto
-    for sec, default_items in _STREAM4ME_SIMULATED.items():
-        if not sections[sec]:
-            sections[sec] = [dict(it) for it in default_items]
 
     return sections
 
@@ -1649,7 +1599,7 @@ def scrape_channel_items(
         if norm_u in seen_urls:
             continue
         seen_urls.add(norm_u)
-        uid_hash = hashlib.sha1(norm_u.encode("utf-8")).hexdigest()[:12]
+        uid_hash = hashlib.sha1(norm_u.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
         ut_low = f"{u} {t}".lower()
         cid_low = cid.lower()
@@ -1763,7 +1713,7 @@ def scrape_channel_episodes(
                     continue
                 seen_se.add(se_key)
                 u = f"{au_host.rstrip('/')}/embed-url/{eid}"
-                uid_hash = hashlib.sha1(f"{u}:1:{ep_num}".encode("utf-8")).hexdigest()[:12]
+                uid_hash = hashlib.sha1(f"{u}:1:{ep_num}".encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
                 au_name = _clean_title(str(ep_obj.get("name") or ""))
                 if re.fullmatch(r"(?i)(?:episodio|episode|ep\.?)?\s*[\d.]*", au_name):
                     au_name = ""  # AnimeUnity spesso mette solo il numero
@@ -1797,7 +1747,7 @@ def scrape_channel_episodes(
                     continue
                 n = int(ep_obj.get("number") or len(episodes) + 1)
                 u = f"{host}/it/titles/{sc_title['id']}-{slug}?episode_id={ep_obj['id']}"
-                uid_hash = hashlib.sha1(f"{u}:{season}:{n}".encode("utf-8")).hexdigest()[:12]
+                uid_hash = hashlib.sha1(f"{u}:{season}:{n}".encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
                 episodes.append({
                     "id": f"s4me:{cid}:ep:{uid_hash}",
                     "kind": "episodio",
@@ -1892,7 +1842,7 @@ def scrape_channel_episodes(
         seen_se.add(se_key)
 
         ep_title = text if text and not re.fullmatch(r"\d{1,4}", text) and not ep_re_href.search(u) else f"Episodio {ep_num}"
-        uid_hash = hashlib.sha1(f"{norm_u}:{season_num}:{ep_num}".encode("utf-8")).hexdigest()[:12]
+        uid_hash = hashlib.sha1(f"{norm_u}:{season_num}:{ep_num}".encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
         stream_u = u if _classify(u) in ("direct", "hls") else ""
         episodes.append({
             "id": f"s4me:{cid}:ep:{uid_hash}",

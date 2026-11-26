@@ -72,6 +72,9 @@ BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 _VIX_MARKS = ("vixcloud.", "vixsrc.")
 _PROXY_HOSTS: set[str] = set()  # solo host visti in un flusso risolto da noi o in una playlist gia' servita
 _PROXY_PATH = "/plugin-api/ricette-web/hls.m3u8"
+MAX_PROXY = 64 * 1024 * 1024  # tetto per risposta (un segmento HLS sta ben sotto)
+_HLS_TYPES = ("video/", "audio/", "image/", "application/octet-stream", "binary/", "application/vnd.apple.mpegurl",
+              "application/x-mpegurl", "application/mp2t", "application/mpegurl")  # i CDN travestono i segmenti anche da immagini
 
 
 def _host(url: str) -> str:
@@ -330,7 +333,7 @@ def _find_xml_val(elem, path: str) -> str:
 
 def _mini_addon_xml(xml_text: str) -> dict:
     """addon.xml letto senza kodi_bridge: solo i campi che servono all'elenco."""
-    root = ET.fromstring(xml_text)
+    root = ET.fromstring(xml_text)  # nosec B314 - expat>=2.4 non risolve entita' esterne, il parser e' quello della stdlib
     return {"id": root.get("id", ""), "name": root.get("name", ""), "version": root.get("version", ""),
             "summary": _find_xml_val(root, "summary")}
 
@@ -478,7 +481,7 @@ def apply_recipe(recipe: dict, html_o_json: str | bytes | dict | list) -> list[d
             if cover and not cover.startswith(("http://", "https://")):
                 cover = urllib.parse.urljoin(base_url, cover)
 
-            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode()).hexdigest()[:16]
+            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode(), usedforsecurity=False).hexdigest()[:16]
             if link:
                 _URL_MAP[item_id] = link
 
@@ -501,7 +504,7 @@ def apply_recipe(recipe: dict, html_o_json: str | bytes | dict | list) -> list[d
     elif rtype == "rss":
         text = html_o_json.decode("utf-8", "ignore") if isinstance(html_o_json, bytes) else str(html_o_json)
         try:
-            root = ET.fromstring(text)
+            root = ET.fromstring(text)  # nosec B314 - expat>=2.4 non risolve entita' esterne, il parser e' quello della stdlib
         except ET.ParseError:
             root = ET.Element("rss")
 
@@ -525,7 +528,7 @@ def apply_recipe(recipe: dict, html_o_json: str | bytes | dict | list) -> list[d
             ep_str = _find_xml_val(el, "itunes:episode")
             dur_str = _find_xml_val(el, "itunes:duration")
 
-            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode()).hexdigest()[:16]
+            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode(), usedforsecurity=False).hexdigest()[:16]
             target_url = stream_url or link
             if target_url:
                 _URL_MAP[item_id] = target_url
@@ -576,7 +579,7 @@ def apply_recipe(recipe: dict, html_o_json: str | bytes | dict | list) -> list[d
             if cover and not cover.startswith(("http://", "https://")):
                 cover = urllib.parse.urljoin(base_url, cover)
 
-            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode()).hexdigest()[:16]
+            item_id = hashlib.sha1(f"{recipe.get('host', '')}:{link or title}".encode(), usedforsecurity=False).hexdigest()[:16]
             if link:
                 _URL_MAP[item_id] = link
 
@@ -653,7 +656,7 @@ def apply_detail(recipe: dict, html_o_json: str | bytes | dict, base_url: str = 
                 if ep_stream and not ep_stream.startswith(("http://", "https://")):
                     ep_stream = urllib.parse.urljoin(base_url, ep_stream)
 
-                ep_id = hashlib.sha1(f"{recipe.get('host', '')}:{ep_stream or ep_title}".encode()).hexdigest()[:16]
+                ep_id = hashlib.sha1(f"{recipe.get('host', '')}:{ep_stream or ep_title}".encode(), usedforsecurity=False).hexdigest()[:16]
                 if ep_stream:
                     _STREAM_MAP[ep_id] = ep_stream
                     _URL_MAP[ep_id] = ep_stream
@@ -740,7 +743,7 @@ def fetch_url(url: str, recipe: dict, cache_dir: Path, ttl: int = TTL,
     if host != allowed_host and not host.endswith("." + allowed_host):
         raise ValueError(tr("err.host", host=host, recipe=recipe.get('name'), allowed=allowed_host))
 
-    url_hash = hashlib.sha1(url.encode()).hexdigest()[:16]
+    url_hash = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()[:16]
     meta_p = cache_dir / f"{url_hash}.json"
     body_p = cache_dir / f"{url_hash}.bin"
 
@@ -808,11 +811,11 @@ def migrate_progress(conn, profile: str) -> None:
     """Sposta nel profilo i valori delle vecchie colonne, per gli elementi che non hanno ancora alcuna riga in progress."""
     for tbl in ("items", "episodes"):
         conn.execute(
-            f"INSERT OR IGNORE INTO progress (profile, item_id, pos, seen, updated) SELECT ?, id, resume_pos, seen, ? FROM {tbl} "
+            f"INSERT OR IGNORE INTO progress (profile, item_id, pos, seen, updated) SELECT ?, id, resume_pos, seen, ? FROM {tbl} "  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             "WHERE (COALESCE(resume_pos, 0) > 0 OR COALESCE(seen, 0) = 1) AND id NOT IN (SELECT item_id FROM progress)",
             (profile, time.time()))
         # i valori passati al profilo si azzerano nelle vecchie colonne: le letture successive non li rivedono piu'
-        conn.execute(f"UPDATE {tbl} SET resume_pos=0, seen=0 WHERE (COALESCE(resume_pos, 0) > 0 OR COALESCE(seen, 0) = 1) "
+        conn.execute(f"UPDATE {tbl} SET resume_pos=0, seen=0 WHERE (COALESCE(resume_pos, 0) > 0 OR COALESCE(seen, 0) = 1) "  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
                      "AND id IN (SELECT item_id FROM progress)")
     conn.commit()
 
@@ -824,9 +827,16 @@ def load_progress(conn, profile: str) -> dict:
         "SELECT item_id, pos, seen FROM progress WHERE profile=?", (profile,))}
 
 
+def _connect(path) -> sqlite3.Connection:
+    """Unico punto in cui si apre ricette.db: attesa sui lock invece di 'database is locked', WAL per leggere durante le scritture."""
+    conn = sqlite3.connect(path, timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
 def _db_init(db_path: Path, profile: str = "default") -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = _connect(db_path)
     try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS items (
@@ -896,7 +906,7 @@ def _db_init(db_path: Path, profile: str = "default") -> None:
         migrate_progress(conn, profile)
         for tbl in ("items", "episodes"):
             conn.execute(
-                f"UPDATE {tbl} SET stream_url='' WHERE stream_url LIKE '%a-ads.com%' OR stream_url LIKE '%size=300x250%' OR stream_url LIKE '%exoclick%' OR stream_url LIKE '%popads%'"
+                f"UPDATE {tbl} SET stream_url='' WHERE stream_url LIKE '%a-ads.com%' OR stream_url LIKE '%size=300x250%' OR stream_url LIKE '%exoclick%' OR stream_url LIKE '%popads%'"  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             )
         conn.execute(
             "DELETE FROM items WHERE (recipe_id LIKE 's4me:%' OR source='stream4me') AND (LOWER(TRIM(title)) IN ('dub', 'dub movie', 'dub ova', 'sub', 'ita', 'sub ita', 'anime casuale', 'telegram', 'instagram', 'sfondi scaricabili', 'aggiornamenti al sito') OR url LIKE '%animeunity.so%' OR url LIKE '%animeunity.tv%')"
@@ -910,6 +920,10 @@ def _db_init(db_path: Path, profile: str = "default") -> None:
         conn.execute(
             "UPDATE items SET genre=CASE WHEN (series IS NOT NULL AND series != '') OR kind='episodio' THEN 'Serie TV' ELSE 'Film' END WHERE (recipe_id LIKE '%streamingcommunity%' OR recipe_id LIKE '%altadefinizione%' OR url LIKE '%streamingcommunity%' OR url LIKE '%altadefinizione%') AND (genre IS NULL OR genre='Anime')"
         )
+        # voci finte (host .example) scritte dalle versioni <=0.20: non sono titoli veri
+        for rid, u1, u2 in conn.execute("SELECT id, url, stream_url FROM items WHERE recipe_id='stream4me'").fetchall():
+            if any(_host(u or "").endswith(".example") for u in (u1, u2)):
+                conn.execute("DELETE FROM items WHERE id=?", (rid,))
         conn.commit()
     finally:
         conn.close()
@@ -1020,7 +1034,7 @@ def register(gs) -> None:
             try:
                 body, _ = fetch_url(r["start_url"], r, cache, ttl=TTL, log=log)
                 items = apply_recipe(r, body)
-                conn = sqlite3.connect(db_path)
+                conn = _connect(db_path)
                 try:
                     for it in items:
                         link = _URL_MAP.get(it["id"], "")
@@ -1050,7 +1064,7 @@ def register(gs) -> None:
         kind = kind.strip() if kind in KINDS else ""
         term = (query or q or "").strip()[:200]
         _auto_refresh()  # in background: la risposta legge solo il DB locale
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             sql = "SELECT * FROM items"
@@ -1110,7 +1124,7 @@ def register(gs) -> None:
         item_id = str((body if isinstance(body, dict) else {}).get("id") or id or "").strip()
         if not item_id:
             return {"ok": False, "warming": False}
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             row, _t = find_row(conn, item_id)
@@ -1124,7 +1138,7 @@ def register(gs) -> None:
             _warming.add(item_id)
 
         def work():
-            c = sqlite3.connect(db_path)
+            c = _connect(db_path)
             c.row_factory = sqlite3.Row
             try:
                 r, tbl = find_row(c, item_id)
@@ -1154,7 +1168,7 @@ def register(gs) -> None:
         if not item_id:
             raise HTTPException(400, tr("err.noId"))
 
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             prog = load_progress(conn, profile_id(request))
@@ -1307,7 +1321,7 @@ def register(gs) -> None:
     def find_row(conn, item_id: str):
         """Riga dell'elemento e nome della tabella che la contiene."""
         for table in ("items", "episodes"):
-            row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)).fetchone()
+            row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)).fetchone()  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             if row is not None:
                 return row, table
         return None, "items"
@@ -1375,7 +1389,7 @@ def register(gs) -> None:
                     gs.log(f"ricette-web: errore estrazione stream per {item_url}: {e}")
 
             if stream and not is_vix(stream):  # i link VixCloud hanno un token che scade: mai in cache
-                conn.execute(f"UPDATE {table} SET stream_url=?, updated=? WHERE id=?", (stream, time.time(), row["id"]))
+                conn.execute(f"UPDATE {table} SET stream_url=?, updated=? WHERE id=?", (stream, time.time(), row["id"]))  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
                 conn.commit()
             return stream
 
@@ -1389,7 +1403,7 @@ def register(gs) -> None:
             gs.log(f"ricette-web: flusso non risolto per {row['id']}: {e}")
             return ""
         if stream and not is_vix(stream):
-            conn.execute(f"UPDATE {table} SET stream_url=?, updated=? WHERE id=?", (stream, time.time(), row["id"]))
+            conn.execute(f"UPDATE {table} SET stream_url=?, updated=? WHERE id=?", (stream, time.time(), row["id"]))  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             conn.commit()
         return stream
 
@@ -1399,7 +1413,7 @@ def register(gs) -> None:
         if not item_id:
             raise HTTPException(400, tr("err.noId"))
 
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             row, table = find_row(conn, item_id)
@@ -1444,7 +1458,7 @@ def register(gs) -> None:
         if not item_id:
             raise HTTPException(400, tr("err.noId"))
 
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             row, table = find_row(conn, item_id)
@@ -1476,31 +1490,60 @@ def register(gs) -> None:
             webbrowser.open(url)
         return {"ok": True, "player": player or ""}
 
+    def _hls_check(url: str) -> None:
+        """Host ammesso e risolto a un indirizzo pubblico: vale per l'URL iniziale e per ogni redirect."""
+        host = _host(url)
+        if not url.startswith(("http://", "https://")) or not (host in _PROXY_HOSTS or is_vix(url)):
+            raise HTTPException(403, tr("err.hostDenied"))
+        try:
+            if not ipaddress.ip_address(host).is_global:
+                raise HTTPException(403, tr("err.hostDenied"))
+        except ValueError:
+            pass
+        try:
+            from pozzo.downloads.hosts import assert_public  # SSRF: risolve il DNS e rifiuta loopback/LAN/link-local
+            assert_public(url)
+        except ValueError:
+            raise HTTPException(403, tr("err.hostDenied"))
+
     @gs.route("hls.m3u8")
     def hls_proxy(u: str = ""):
         """Playlist e segmenti VixCloud con Referer/User-Agent giusti; le playlist sono riscritte verso questa rotta."""
         target = urllib.parse.unquote(u or "").strip()
-        host = _host(target)
-        if not target.startswith(("http://", "https://")) or not (host in _PROXY_HOSTS or is_vix(target)):
-            raise HTTPException(403, tr("err.hostDenied"))
-        try:  # shortcut: controlla solo gli IP scritti per esteso, non la risoluzione DNS; da rafforzare se il proxy esce dal PC
-            if ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback:
-                raise HTTPException(403, tr("err.hostDenied"))
-        except ValueError:
-            pass
+        _hls_check(target)
         headers = vix_headers(target)
         try:
-            r = httpx.get(target, headers=headers, timeout=20.0, follow_redirects=True)
+            with httpx.Client(timeout=20.0, follow_redirects=False) as client:
+                for _ in range(5):  # redirect a mano: ogni salto ricontrollato
+                    with client.stream("GET", target, headers=headers) as r:
+                        if r.is_redirect and r.headers.get("location"):
+                            target = urllib.parse.urljoin(target, r.headers["location"])
+                            _hls_check(target)
+                            continue
+                        status, rh, final = r.status_code, r.headers, str(r.url)
+                        body = b""
+                        if status < 400:
+                            for chunk in r.iter_bytes():
+                                body += chunk
+                                if len(body) > MAX_PROXY:
+                                    raise HTTPException(502, tr("err.hlsTooBig"))
+                        break
+                else:
+                    raise HTTPException(502, tr("err.vixDown", err="troppi redirect"))
         except httpx.HTTPError as e:
             raise HTTPException(502, tr("err.vixDown", err=e))
-        if r.status_code >= 400:
-            gs.log(f"ricette-web: VixCloud ha risposto {r.status_code} per {host}")
-            raise HTTPException(r.status_code, f"VixCloud: {r.status_code}")
-        if r.content[:7] == b"#EXTM3U":
-            text = rewrite_playlist(r.text, str(r.url))
-            return Response(text, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-store"})
-        keep = {k: v for k, v in r.headers.items() if k.lower() in ("content-type", "content-range", "accept-ranges")}
-        return Response(r.content, status_code=r.status_code, headers=keep)
+        if status >= 400:
+            gs.log(f"ricette-web: VixCloud ha risposto {status} per {_host(target)}")
+            raise HTTPException(status, f"VixCloud: {status}")
+        safe = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+        if body[:7] == b"#EXTM3U":
+            text = rewrite_playlist(body.decode("utf-8", "replace"), final)
+            return Response(text, media_type="application/vnd.apple.mpegurl", headers=safe)
+        ctype = rh.get("content-type", "application/octet-stream").split(";")[0].strip().lower()
+        if not ctype.startswith(_HLS_TYPES) or "svg" in ctype:  # niente html/js serviti da questa origine
+            raise HTTPException(502, tr("err.hlsType", type=ctype))
+        keep = {k: v for k, v in rh.items() if k.lower() in ("content-type", "content-range", "accept-ranges")}
+        return Response(body, status_code=status, headers={**keep, **safe})
 
 
     @gs.route("set_progress", methods=("POST",))
@@ -1515,7 +1558,7 @@ def register(gs) -> None:
         flag = data.get("seen", seen)
         length = float(data.get("duration", duration) or 0.0)
 
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone()
@@ -1536,11 +1579,11 @@ def register(gs) -> None:
             new_pos = 0.0 if watched else max(0.0, position)
             new_seen = 1 if watched else 0
 
-            conn.execute(f"UPDATE {table} SET duration=COALESCE(?, duration), updated=? WHERE id=?", (known or None, time.time(), item_id))
+            conn.execute(f"UPDATE {table} SET duration=COALESCE(?, duration), updated=? WHERE id=?", (known or None, time.time(), item_id))  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             conn.execute("INSERT OR REPLACE INTO progress (profile, item_id, pos, seen, updated) VALUES (?, ?, ?, ?, ?)",
                          (pid, item_id, new_pos, new_seen, time.time()))
             conn.commit()
-            updated_row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)).fetchone()
+            updated_row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)).fetchone()  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
             return {"ok": True, "item": to_item(updated_row, {item_id: (new_pos, new_seen)})}
         finally:
             conn.close()
@@ -1572,10 +1615,11 @@ def register(gs) -> None:
 
         if body.get("remove"):
             addon_id = str(body["remove"]).strip()
-            if not re.fullmatch(r"[A-Za-z0-9._-]+", addon_id):
+            # niente "." / ".." / sottopercorsi: rmtree non deve uscire da kodi-addons/
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", addon_id) or                     (addons_root / addon_id).resolve().parent != addons_root.resolve():
                 raise HTTPException(400, tr("err.addonId"))
-            shutil.rmtree(addons_root / addon_id, ignore_errors=True)  # solo addon dentro kodi-addons/
-            conn = sqlite3.connect(db_path)
+            shutil.rmtree(addons_root / addon_id, ignore_errors=True)
+            conn = _connect(db_path)
             try:
                 conn.execute("DELETE FROM items WHERE recipe_id=?", (f"kodi:{addon_id}",))
                 conn.commit()
@@ -1595,7 +1639,7 @@ def register(gs) -> None:
             raise HTTPException(400, tr("err.addonNoId"))
 
         count = 0
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             for ch in addon.get("channels") or []:
                 if not isinstance(ch, dict):
@@ -1609,7 +1653,7 @@ def register(gs) -> None:
                     VALUES (?, ?, 'film', ?, ?, ?, ?, ?, ?, 'kodi', ?)
                     ON CONFLICT(id) DO UPDATE SET title=excluded.title, overview=excluded.overview,
                         poster=COALESCE(NULLIF(excluded.poster, ''), items.poster), updated=excluded.updated
-                """, (hashlib.sha1(f"kodi:{addon_id}:{ch.get('id') or name}".encode()).hexdigest()[:16],
+                """, (hashlib.sha1(f"kodi:{addon_id}:{ch.get('id') or name}".encode(), usedforsecurity=False).hexdigest()[:16],
                       f"kodi:{addon_id}", name, str(ch.get("summary") or ch.get("overview") or ""), poster, poster,
                       str(ch.get("search_url") or ch.get("host") or ""), str(ch.get("stream_url") or ""), time.time()))
                 count += 1
@@ -1802,12 +1846,12 @@ def register(gs) -> None:
     def _purge_inactive_s4me() -> int:
         """Cancella titoli e schede-canale dei provider rimossi; i preferiti (pinned) restano."""
         active = _active_s4me_ids()
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             n = conn.execute("DELETE FROM items WHERE recipe_id='stream4me'").rowcount
             if active is not None:
                 n += conn.execute(
-                    "DELETE FROM items WHERE recipe_id LIKE 's4me:%' AND substr(recipe_id, 6) NOT IN (" + ",".join("?" * len(active)) + ")",
+                    "DELETE FROM items WHERE recipe_id LIKE 's4me:%' AND substr(recipe_id, 6) NOT IN (" + ",".join("?" * len(active)) + ")",  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
                     sorted(active),
                 ).rowcount
             conn.execute("DELETE FROM episodes WHERE parent_id NOT IN (SELECT id FROM items)")
@@ -1861,7 +1905,7 @@ def register(gs) -> None:
     def _save_s4me_items(items: list[dict], recipe_tag: str) -> None:
         if not items:
             return
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             now_ts = time.time()
             for it in items:
@@ -1981,7 +2025,7 @@ def register(gs) -> None:
 
     @gs.route("stream4me/pinned")
     def stream4me_pinned():
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
@@ -2001,7 +2045,7 @@ def register(gs) -> None:
         url = str(raw.get("url") or raw.get("stream_url") or "").strip()
         item_id = str(raw.get("id") or "").strip()
         if not item_id and (url or title):
-            item_id = "s4me:pin:" + hashlib.sha1(f"{url}:{title}".encode("utf-8")).hexdigest()[:12]
+            item_id = "s4me:pin:" + hashlib.sha1(f"{url}:{title}".encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
         if not item_id or not title:
             raise HTTPException(400, tr("err.idTitle"))
         kind = str(raw.get("kind") or "film")
@@ -2059,7 +2103,7 @@ def register(gs) -> None:
         year = _extract_year(str(raw.get("year") or "")) if raw.get("year") else None
         stream_url = str(raw.get("stream_url") or "")
 
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("""
@@ -2093,7 +2137,7 @@ def register(gs) -> None:
         item_id = str((body or {}).get("id") or "").strip()
         if not item_id:
             raise HTTPException(400, tr("err.noId"))
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             conn.execute("DELETE FROM items WHERE id=? AND recipe_id='stream4me:pinned'", (item_id,))
             conn.commit()
@@ -2111,30 +2155,6 @@ def register(gs) -> None:
             if bridge and hasattr(bridge, "get_stream4me_sections")
             else {}
         )
-        if not sec_map:
-            sec_map = {
-                "film": [
-                    {"id": "stream4me:film:nuove-uscite", "kind": "film", "title": "Stream4me: Nuove Uscite",
-                     "poster": "", "overview": "Film in streaming", "source": "ricette-web", "source_label": "Stream4me",
-                     "url": "https://stream4me.example/film", "stream_url": ""},
-                ],
-                "serie": [
-                    {"id": "stream4me:serie:popolari", "kind": "film", "title": "Stream4me: Serie Popolari",
-                     "poster": "", "overview": "Serie TV in streaming", "source": "ricette-web", "source_label": "Stream4me",
-                     "url": "https://stream4me.example/serie", "stream_url": ""},
-                ],
-                "canali": [
-                    {"id": "stream4me:canali:live", "kind": "film", "title": "Stream4me: Canali TV Live",
-                     "poster": "", "overview": "Canali TV in diretta streaming", "source": "ricette-web", "source_label": "Stream4me",
-                     "url": "https://stream4me.example/canali", "stream_url": "https://cdn.example/live/master.m3u8"},
-                ],
-                "animazione": [
-                    {"id": "stream4me:animazione:anime", "kind": "film", "title": "Stream4me: Anime e Cartoni",
-                     "poster": "", "overview": "Anime e animazione", "source": "ricette-web", "source_label": "Stream4me",
-                     "url": "https://stream4me.example/anime", "stream_url": ""},
-                ],
-            }
-
         _store_sections(sec_map)
 
         return {
@@ -2155,7 +2175,7 @@ def register(gs) -> None:
     refresh_state = {"refreshing": False, "progress": ""}
 
     def _meta_get(key: str) -> str | None:
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             r = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
             return r[0] if r else None
@@ -2163,7 +2183,7 @@ def register(gs) -> None:
             conn.close()
 
     def _meta_set(**kv) -> None:
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             for k, v in kv.items():
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (k, None if v is None else str(v)))
@@ -2172,7 +2192,7 @@ def register(gs) -> None:
             conn.close()
 
     def _catalog_status() -> dict:
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             total = conn.execute("SELECT COUNT(*) FROM items WHERE recipe_id != 'stream4me'").fetchone()[0]
         finally:
@@ -2187,7 +2207,7 @@ def register(gs) -> None:
         }
 
     def _store_sections(sec_map: dict) -> None:
-        conn = sqlite3.connect(db_path)
+        conn = _connect(db_path)
         try:
             for sec_items in sec_map.values():
                 for it in sec_items:
@@ -2238,10 +2258,10 @@ def register(gs) -> None:
                         _save_s4me_items(found, f"s4me:{p['id']}")
                         ok_tags.append(f"s4me:{p['id']}")
             if ok_tags:  # elimina i titoli non rivisti in questa run (updated < t0)
-                conn = sqlite3.connect(db_path)
+                conn = _connect(db_path)
                 try:
                     conn.execute(
-                        "DELETE FROM items WHERE source='stream4me' AND recipe_id IN (" + ",".join("?" * len(ok_tags)) + ") AND updated < ?",
+                        "DELETE FROM items WHERE source='stream4me' AND recipe_id IN (" + ",".join("?" * len(ok_tags)) + ") AND updated < ?",  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
                         [*ok_tags, t0],
                     )
                     conn.execute("DELETE FROM episodes WHERE parent_id NOT IN (SELECT id FROM items)")

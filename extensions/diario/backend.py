@@ -28,7 +28,7 @@ def _group(lib: sqlite3.Connection, gid: int, msg: str = "Gioco non trovato"):
 
 def sessioni(user: sqlite3.Connection, keys: list[str]) -> list[tuple[float, float]]:
     q = ",".join("?" * len(keys))
-    return user.execute(f"SELECT start, seconds FROM play_sessions WHERE key IN ({q}) ORDER BY start DESC", keys).fetchall()
+    return user.execute(f"SELECT start, seconds FROM play_sessions WHERE key IN ({q}) ORDER BY start DESC", keys).fetchall()  # nosec B608 - solo placeholder ?, valori via parametri
 
 
 def register(gs):

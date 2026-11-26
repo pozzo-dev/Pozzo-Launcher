@@ -13,7 +13,6 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from fastapi import Body, HTTPException
 

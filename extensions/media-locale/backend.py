@@ -520,7 +520,7 @@ def connect(path: Path, active: str = "default") -> sqlite3.Connection:
         cols = ",".join(WATCHLIST_COLS)
         if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='watchlist_old'").fetchone():
             # una migrazione precedente si e' interrotta tra il cambio di nome e la copia: si completa, senza perdere la watchlist
-            c.execute(f"INSERT OR IGNORE INTO watchlist(profile,{cols}) SELECT ?,{cols} FROM watchlist_old", (active,))
+            c.execute(f"INSERT OR IGNORE INTO watchlist(profile,{cols}) SELECT ?,{cols} FROM watchlist_old", (active,))  # nosec B608 - solo nomi fissi, valori via parametri
             c.execute("DROP TABLE watchlist_old")
         if "profile" not in colonne:  # chiave (profile, item_key): le voci esistenti erano del profilo attivo
             try:  # copia di sicurezza una volta sola, prima di toccare la struttura della watchlist
@@ -532,7 +532,7 @@ def connect(path: Path, active: str = "default") -> sqlite3.Connection:
                 pass  # niente copia (disco pieno, permessi): la migrazione resta protetta dal recupero qui sopra
             c.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
             c.executescript(SCHEMA)
-            c.execute(f"INSERT INTO watchlist(profile,{cols}) SELECT ?,{cols} FROM watchlist_old", (active,))
+            c.execute(f"INSERT INTO watchlist(profile,{cols}) SELECT ?,{cols} FROM watchlist_old", (active,))  # nosec B608 - solo nomi fissi, valori via parametri
             c.execute("DROP TABLE watchlist_old")
         # avanzamento che viveva in items: passa al profilo attivo, poi la colonna non si usa piu'
         c.execute("INSERT OR IGNORE INTO progress(profile,item_id,pos,seen,updated) SELECT ?,id,coalesce(pos,0),"
@@ -572,7 +572,7 @@ def scan(path: Path, roots: list[str], log=print) -> int:
                     p = Path(dirpath) / fn
                     if p.suffix.lower() not in MEDIA:
                         continue
-                    item_id = hashlib.sha1(str(p).encode("utf-8")).hexdigest()[:12]
+                    item_id = hashlib.sha1(str(p).encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
                     try:
                         st = p.stat()
                     except OSError:  # file sparito mentre si legge la cartella

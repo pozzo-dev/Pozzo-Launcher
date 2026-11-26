@@ -1,6 +1,6 @@
 [plugin]
 name = "Media locale"
-version = "1.1"
+version = "1.2"
 author = "Pozzo Launcher"
 icon = "🎬"
 description = "Film, serie e musica che hai già sul disco, sfogliati come una libreria: nomi riconosciuti alla maniera di Jellyfin/Plex, poster locali, ripresa da dove eri rimasto."

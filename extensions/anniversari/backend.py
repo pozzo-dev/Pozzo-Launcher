@@ -6,7 +6,7 @@ GET /plugin-api/anniversari/prossimi[?giorni=30&da=AAAA-MM-GG]
 """
 
 import sqlite3
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from fastapi import HTTPException

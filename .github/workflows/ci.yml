@@ -77,10 +77,10 @@ jobs:
       - name: Ruff (regole minime, vedi pyproject.toml)
         env:
           PYTHONUTF8: "1"
-        run: ruff check pozzo
+        run: ruff check pozzo extensions
 
       - name: Bandit (sicurezza, solo severità media/alta)
-        run: bandit -ll -r pozzo -x pozzo/vendor
+        run: bandit -ll -r pozzo extensions -x pozzo/vendor
 
       - name: pip-audit (vulnerabilità nelle dipendenze)
         run: pip-audit -r requirements.txt

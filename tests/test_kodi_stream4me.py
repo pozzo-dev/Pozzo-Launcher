@@ -15,7 +15,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
 
 # Caricamento dinamico dei moduli di estensione
 _EXT_DIR = Path(__file__).resolve().parent.parent / "extensions" / "ricette-web"
@@ -135,21 +134,11 @@ def test_stream4me_default_url():
     assert "Stream4me" in kb.STREAM4ME_DEFAULT_URL
 
 
-def test_get_stream4me_sections_preset_simulato():
-    """Senza cartella addon, get_stream4me_sections restituisce le categorie simulate."""
-    sections = kb.get_stream4me_sections(None)
-    assert isinstance(sections, dict)
+def test_get_stream4me_sections_senza_addon_sono_vuote():
+    """Senza cartella addon non si inventano voci: le sezioni restano vuote."""
+    sections = kb.get_stream4me_sections(None, force=True)
     assert set(sections.keys()) == {"film", "serie", "canali", "animazione"}
-
-    for key, items in sections.items():
-        assert len(items) > 0
-        for item in items:
-            assert item["source"] == "ricette-web"
-            assert item["source_label"] == "Stream4me"
-            assert "id" in item and item["id"]
-            assert "title" in item and item["title"]
-            assert item.get("kind") in ("film", "episodio")
-            assert "url" in item or "stream_url" in item
+    assert not any(sections.values())
 
 
 def test_get_stream4me_sections_da_cartella_canali(tmp_path):
@@ -172,8 +161,8 @@ def test_get_stream4me_sections_da_cartella_canali(tmp_path):
     assert "Anime Land" in anime_titles
 
 
-def test_get_stream4me_sections_fallback_sezioni_vuote(tmp_path):
-    """Se l'addon ha solo canali film, le altre sezioni non restano vuote (preset fallback)."""
+def test_get_stream4me_sections_solo_film(tmp_path):
+    """Se l'addon ha solo canali film, le altre sezioni restano vuote (niente preset finti)."""
     addon_dir = tmp_path / "solo_film"
     addon_dir.mkdir(parents=True, exist_ok=True)
     ch_dir = addon_dir / "channels"
@@ -190,14 +179,12 @@ def test_get_stream4me_sections_fallback_sezioni_vuote(tmp_path):
 
     sections = kb.get_stream4me_sections(addon_dir)
     assert any(it["title"] == "Solo Film" for it in sections["film"])
-    assert len(sections["serie"]) > 0
-    assert len(sections["canali"]) > 0
-    assert len(sections["animazione"]) > 0
+    assert not sections["serie"] and not sections["canali"] and not sections["animazione"]
 
 
 # ---------------------------------------------------------------- Test Endpoint Sections
 def test_endpoint_stream4me_sections_default(tmp_path, monkeypatch):
-    """L'endpoint /stream4me/sections restituisce le sezioni con preset e popola il DB."""
+    """L'endpoint /stream4me/sections senza addon installato restituisce le 4 sezioni vuote e non scrive nel DB."""
     gs = make_gs(tmp_path, monkeypatch)
     res = gs.get("stream4me/sections")
 
@@ -210,7 +197,7 @@ def test_endpoint_stream4me_sections_default(tmp_path, monkeypatch):
 
     # Tutti gli item devono essere normalizzati con source='ricette-web'
     all_items = [it for sec in res["sections"] for it in sec["items"]]
-    assert len(all_items) > 0
+    assert all_items == []
     assert all(it["source"] == "ricette-web" for it in all_items)
     assert all(it.get("source_label") == "Stream4me" for it in all_items)
 
@@ -323,7 +310,13 @@ def test_stream4me_play_target_flusso_diretto(tmp_path, monkeypatch):
 def test_stream4me_play_target_risoluzione_web(tmp_path, monkeypatch):
     """play_target per un item con URL pagina web estrae il flusso con extract_stream_urls."""
     gs = make_gs(tmp_path, monkeypatch)
-    gs.get("stream4me/sections")
+    conn = sqlite3.connect(tmp_path / "ricette-web-cache" / "ricette.db")
+    conn.execute(
+        "INSERT INTO items (id, recipe_id, kind, title, url, stream_url, source) VALUES "
+        "('stream4me:film:nuove-uscite', 'stream4me', 'film', 'Nuove uscite', 'https://pagina.test/film/nuove-uscite', '', 'ricette-web')"
+    )
+    conn.commit()
+    conn.close()
 
     html_content = """
     <html><body>
@@ -336,7 +329,7 @@ def test_stream4me_play_target_risoluzione_web(tmp_path, monkeypatch):
     mock_resp.text = html_content
     monkeypatch.setattr(rw.httpx, "get", lambda *a, **k: mock_resp)
 
-    # nuove-uscite ha stream_url='' e url='https://stream4me.example/film/nuove-uscite'
+    # la voce ha stream_url='' e una pagina web da cui estrarre il flusso
     target = gs.get("play_target", id="stream4me:film:nuove-uscite")
     assert target["url"] == "https://cdn.example/streaming/video.mp4"
     assert target["external"] is False  # .mp4 è riproducibile internamente
