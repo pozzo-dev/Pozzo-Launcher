@@ -9,14 +9,14 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from fastapi.responses import PlainTextResponse
 
 from ... import backup as BK, config as C, platforms as P, telemetry
 from ... import i18n as I
 from ...library.build import build
-from ..server import WINDOW_FOCUS, _REMOTE_DOWN, _plain
+from ..server import WINDOW_FOCUS, _REMOTE_DOWN, _plain, quit_app
 
 
 def build_router(ctx) -> APIRouter:
@@ -148,11 +148,13 @@ def build_router(ctx) -> APIRouter:
         """Scarica e installa la nuova versione in sottofondo; poi l'app si chiude e si riapre aggiornata."""
         from ... import updates
         from ...cache import Cache
+        if ctx.launcher.running().get("status") in ("starting", "extracting", "running"):
+            raise HTTPException(409, I.tr("s.system.updatePlaying"))  # l'aggiornamento chiude Pozzo a meta' partita
         if updates.STATE["status"] != "running":
             def run():
                 c = Cache(cfg.cache)
                 try:  # 1,5 s perche' la pagina legga "riavvio" prima che il processo esca
-                    updates.install(c, quit=lambda: threading.Timer(1.5, os._exit, args=(0,)).start())
+                    updates.install(c, quit=lambda: quit_app(1.5))
                 finally:
                     c.close()
             updates.STATE["status"] = "running"

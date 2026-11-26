@@ -109,7 +109,7 @@ def register(gs):
         Vuoto se `kind` non esiste (screenshot) o se il gioco non si trova: la finestra lascia incollare un URL."""
         key = chiave(gs.cfg)
         if not key:
-            raise HTTPException(400, "Serve la chiave di SteamGridDB (Impostazioni › SteamGridDB)")
+            raise HTTPException(400, gs.t("err.key"))
         spec = CERCA.get(str(kind))
         if spec is None or not str(q).strip():
             return {"game": None, "items": []}
@@ -122,7 +122,7 @@ def register(gs):
                 hit = found[0]
                 r = c.get(f"{API}/{path}/game/{hit['id']}", params=params).json().get("data") or []
         except (httpx.HTTPError, ValueError) as e:  # rete assente o risposta illeggibile
-            raise HTTPException(502, f"SteamGridDB non risponde ({type(e).__name__})")
+            raise HTTPException(502, gs.t("err.down", errore=type(e).__name__))
         items = [{"url": i["url"], "thumb": i.get("thumb") or i["url"], "w": i.get("width"), "h": i.get("height"),
                   "score": i.get("score") or 0}
                  for i in r if str(i.get("url", "")).startswith("https://")]

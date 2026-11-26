@@ -20,6 +20,7 @@ async function coverTransition(from, update, to) {
     from.style.viewTransitionName = "cover"; root.classList.add("vt-cover"); tile?.classList.add("vt-hold");
     tr = document.startViewTransition(() => { from.style.viewTransitionName = ""; update(); const t = to(); if (t) t.style.viewTransitionName = "cover"; });
   } catch { clear(); return update(); }
+  tr.ready.catch(() => {}); // animazione saltata (un'altra parte, finestra nascosta): la scheda cambia lo stesso, non e' un errore
   tr.finished.then(clear, clear);
   await tr.updateCallbackDone;
 }
@@ -102,8 +103,10 @@ function wireModalInteractions(body) {
       btn.classList.add("active");
       btn.setAttribute("aria-selected", "true");
       body.querySelector(`[data-dpane="${btn.dataset.dtab}"]`)?.classList.add("active");
+      extSectionTutorials();  // le sezioni delle estensioni stanno in una scheda: il loro tutorial parte quando si vede
     });
   });
+  body.addEventListener("toggle", (e) => { if (e.target.open) extSectionTutorials(); }, true);  // o in un pannello richiudibile
   body.querySelectorAll("[data-dpop]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -877,6 +880,15 @@ function ratingBlock(d) {
     ${parts.length > 1 ? `<span class="muted small">${parts.join(" · ")}</span>` : ""}</div>`;
 }
 
+/** Tutorial delle sezioni delle estensioni, la prima volta che sono visibili (in un'altra scheda non si vedono). */
+function extSectionTutorials() {
+  requestAnimationFrame(() => {
+    const host = $("#d-ext");
+    if (!host || !host.offsetParent) return;
+    for (const sec of GS.ui.detailSections) if (GS.tutorials?.auto(sec.id)) return;
+  });
+}
+
 async function renderDetailSections(d) {
   const host = $("#d-ext");
   for (const sec of GS.ui.detailSections) {
@@ -889,6 +901,7 @@ async function renderDetailSections(d) {
       const body = box.querySelector(".d-ext-body");
       body.classList.remove("muted");
       if (out instanceof Element) { body.innerHTML = ""; body.appendChild(out); } else body.innerHTML = out ?? "";
+      if (S.detail === d) extSectionTutorials();
     } catch (e) {
       box.querySelector(".d-ext-body").textContent = t("f.err.generic", {msg: e.message});
     }
@@ -936,7 +949,7 @@ async function setFlag(field, value) {
 
 /* ------------------------------------------------------------------ gioco scaricato ed estratto
    /api/status porta l'ultimo evento game_downloaded {seq, game_id, from_id, title}. Dopo il ricaricamento della libreria:
-   avviso e, se la scheda aperta era la voce online (from_id; i numeri cambiano a ogni ricostruzione), si apre il gioco posseduto. */
+   avviso e, se la scheda aperta era la voce online (from_id), si apre il gioco posseduto. */
 function downloadedPlan(ev, seen, openId) {
   if (!ev || !(ev.seq > (seen || 0))) return null;
   return { seq: ev.seq, toast: t("f.dl.done", {title: ev.title}),

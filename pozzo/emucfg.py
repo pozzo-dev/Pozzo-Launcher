@@ -17,7 +17,6 @@ LEAVE = "leave"
 INHERIT = "inherit"
 LEVELS = ("quality", "performance", "faithful")
 _KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_. -]*$")
 _EMU = re.compile(r"^[a-z0-9]+$")
 
 
@@ -157,19 +156,6 @@ def preview(emulator: str, game_id: str, game_sel=None, console_sel=None) -> dic
     """Come resolve(), ma con valori vuoti al posto di None (per «Cosa cambierà»)."""
     return resolve(emulator, game_id, game_sel, console_sel) or {
         "preset": None, "values": {}, "sources": [], "reason": ""}
-
-
-def retroarch_override_path(config_dir: str | Path, core: str, game_name: str) -> Path:
-    """Percorso `/config/<core>/<game>.cfg` documentato da RetroArch.
-
-    `config_dir` è la cartella impostata in RetroArch per Directory > Config;
-    `game_name` è il nome contenuto senza estensione.
-    """
-    for value in (core, game_name):
-        if (not isinstance(value, str) or not _COMPONENT.fullmatch(value)
-                or value in {".", ".."} or value.endswith((".", " "))):
-            raise ValueError("Nome core/gioco non valido")
-    return Path(config_dir) / core / f"{game_name}.cfg"
 
 
 def _patch(text: str, values: Mapping[str, str]) -> str:

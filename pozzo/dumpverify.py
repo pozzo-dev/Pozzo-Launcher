@@ -3,13 +3,6 @@
 from __future__ import annotations
 
 
-def migrate_schema(db) -> None:
-    """Aggiunge match_by in modo compatibile con le librerie già create."""
-    columns = {row[1] for row in db.execute("PRAGMA table_info(games)")}
-    if "match_by" not in columns:
-        db.execute("ALTER TABLE games ADD COLUMN match_by TEXT NOT NULL DEFAULT ''")
-
-
 def report(games, indexes: dict) -> dict:
     """Costruisce il report senza leggere file: usa esclusivamente gli hash di Game."""
     items = []

@@ -1,14 +1,14 @@
 [plugin]
 name = "Calendario uscite"
-version = "1.1"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "📅"
+icon = "▦"
 screenshot = "screenshot.png"
-description = "Calendario delle prossime uscite videoludiche con priorità ai titoli della tua lista desideri e ai generi che giochi più spesso, alimentato da RAWG."
-long_description = "Non perdere mai il lancio di un gioco atteso. Questa estensione interroga il database RAWG per creare una panoramica ordinata delle uscite dei prossimi mesi. Mostra prima i giochi che hai già aggiunto alla tua lista dei desideri di Pozzo Launcher, seguiti dai titoli di maggiore rilievo appartenenti ai generi con cui trascorri più tempo."
-how_it_works = "1. Installa l'estensione e assicurati di avere una chiave API gratuita di RAWG configurata in Impostazioni › Fonti › RAWG (l'app ne fornisce già una predefinita).\n2. Nella barra laterale si attiva la voce «Calendario uscite».\n3. La vista è divisa per mese: in cima trovi i titoli della tua lista dei desideri con il countdown dei giorni mancanti.\n4. Più in basso trovi i giochi consigliati per te in base alle statistiche dei tuoi generi preferiti."
-features = ["Riconoscimento automatico dei titoli in lista desideri", "Suggerimenti personalizzati basati sui tuoi generi più giocati", "Data di uscita precisa, piattaforme previste e sinossi per ogni gioco", "Cache intelligente delle chiamate di rete per evitare consumi di quota"]
+description = "Le prossime uscite in un calendario mese per mese, con copertine: prima i giochi della tua lista dei desideri, poi i più attesi dei generi che giochi di più."
+long_description = "Un calendario per ogni mese con le copertine dei giochi in uscita nei prossimi sei mesi. In cima trovi i giochi della tua lista dei desideri con il conto alla rovescia; sotto, i titoli più attesi dei generi che giochi di più (oppure di tutti i generi). Con un clic aggiungi un gioco alla lista dei desideri. Usa la chiave RAWG già impostata nell'app."
+how_it_works = "1. Installa l'estensione.\n2. Serve la chiave gratuita di RAWG in Impostazioni › Libreria e fonti (la stessa usata per i metadati).\n3. Apri «Calendario uscite» nella barra laterale.\n4. Clicca un giorno del calendario per vedere le sue uscite, e «Desideri» per seguire un gioco."
+features = ["Calendario mese per mese con le copertine", "Prima i giochi della tua lista dei desideri, con il conto alla rovescia", "Filtro: i tuoi generi preferiti o tutti", "Aggiunta alla lista dei desideri con un clic"]
 api = 1
-min_app = "0.7.1"
-permissions = ["rete:api.rawg.io", "rete:media.rawg.io", "libreria:lettura", "impostazioni"]
+min_app = "0.20.2"
+permissions = ["rete:api.rawg.io", "rete:media.rawg.io", "libreria:lettura", "libreria:scrittura", "impostazioni"]
 load = "lazy"

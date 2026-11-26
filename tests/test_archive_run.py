@@ -57,6 +57,43 @@ def test_copy_failure_keeps_temp(tmp_path, monkeypatch):
         AR.Run(_cfg(tmp_path), tmp_path / "ud", "k", _zip(tmp_path)).prepare()
 
 
+def test_chiusura_a_meta_partita_recupera_i_salvataggi(tmp_path):
+    """Pozzo chiuso (o caduto) durante la partita: finish() non e' mai girato, i file non si perdono."""
+    z = _zip(tmp_path)
+    root = AR.Run(_cfg(tmp_path), tmp_path / "ud", "k", z).prepare()
+    (root / "save.dat").write_text("40 ore")
+    (root / "nuovo.sav").write_text("n")
+    root = AR.Run(_cfg(tmp_path), tmp_path / "ud", "k", z).prepare()
+    assert (root / "save.dat").read_text() == "40 ore" and (root / "nuovo.sav").read_text() == "n"
+    assert (root / "game.exe").read_text() == "exe"
+
+
+def test_gioco_ancora_aperto_non_si_tocca(tmp_path, monkeypatch):
+    z = _zip(tmp_path)
+    root = AR.Run(_cfg(tmp_path), tmp_path / "ud", "k", z).prepare()
+    (root / "save.dat").write_text("in corso")
+    monkeypatch.setattr(AR, "in_use", lambda d: True)
+    with pytest.raises(AR.ArchiveRunError, match="ancora aperto"):
+        AR.Run(_cfg(tmp_path), tmp_path / "ud", "k", z).prepare()
+    assert (root / "save.dat").read_text() == "in corso" and (root / "game.exe").exists()
+
+
+def test_in_use(tmp_path):
+    """Vivo chi ha l'eseguibile nella cartella o un suo file sulla riga di comando (emulatore con la ROM)."""
+    import subprocess
+    import sys
+    rom = tmp_path / "a b" / "g.nds"
+    rom.parent.mkdir()
+    rom.write_text("import time; time.sleep(60)")
+    assert not AR.in_use(rom.parent)
+    p = subprocess.Popen([sys.executable, str(rom)])
+    try:
+        assert AR.in_use(rom.parent) and not AR.in_use(tmp_path / "altra") and not AR.in_use(tmp_path / "a")
+    finally:
+        p.kill()
+        p.wait()
+
+
 def test_enabled(tmp_path):
     z = _zip(tmp_path)
     assert AR.enabled({"auto": {"archive": True}}, z)

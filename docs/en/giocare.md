@@ -184,8 +184,9 @@ game** to reuse it next time without re-copying (if the game changes in the mean
 
 Warnings:
 
-- for PC games, saves written inside the game folder will be lost with the deleted copy; saves in standard Windows
-  locations or managed by the app are safe;
+- saves written next to the copy (inside the PC game folder or beside the ROM) go back next to the original when you
+  close the game. If that fails (drive unplugged, folder not writable, original changed meanwhile) the copy is not
+  deleted and a message tells you where it is;
 - not available for games launched via an external store or launcher;
 - clicking **Close Game** during the copy process cancels it immediately;
 - leftover copies on disk after a PC or emulator crash are automatically cleaned up on next launcher launch;
@@ -207,10 +208,25 @@ the libretro overlay-borders repository, downloaded and cached), a **shader** pr
 and **cheats** from the libretro-database with one switch each (**Find cheats**). Choices apply to the game or as the
 core default. Pozzo writes only its own keys in the override files and makes a `.pozzo-bak` copy first.
 
-## Reducing PC Game Size
+## Reducing Game and ROM Size
 
-For a PC game installed on Windows, **🗜 Reduce disk space** (right-click menu) compresses the files with Windows
-compression. Pick the **algorithm** and press **Compress** (**Decompress** to undo); if the game is in the CompactGUI
+**🗜 Reduce disk space** compresses files with Windows compression: they stay where they are, with the same name, and
+emulators open them as before. You find it in the right-click menu:
+
+- on an **installed PC game** from a store (not on manually added ones);
+- on a **ROM**;
+- on a **console** in the sidebar, to compress all of its ROMs at once.
+
+Before starting, Pozzo reads a few samples of the files and estimates the savings. It usually pays off with DS, 3DS and
+PS2 or Xbox 360 ISOs. Formats that are already compressed or encrypted (ZIP, 7Z, CHD, RVZ, CSO, NSP, PKG…) are skipped.
+After compressing, Pozzo compares a few blocks of each file with the original ones: if any differs, it stops and
+decompresses that file.
+The drive must be **NTFS**. For PS1, PS2 and PSP discs, the formats in [Tools](tools.md) (CHD, CSO) save more.
+
+The entry is disabled when there is no space to gain (less than 5%, e.g. Switch NSP, RVZ or ZIP files): hover over it to
+read why.
+
+Pick the **algorithm** and press **Compress** (**Decompress** to undo); if the game is in the CompactGUI
 database you see an estimate of the savings. If the game uses DirectStorage, it may fail to start or run slower on
 compressed files, and Pozzo asks for explicit confirmation.
 

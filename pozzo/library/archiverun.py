@@ -8,6 +8,7 @@ temporanea NON si cancella (si perderebbero i dati): resta, marcata, e l'utente 
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -20,6 +21,7 @@ from ..downloads import extract as X
 log = logging.getLogger(__name__)
 
 KEEP = ".pozzo-keep"  # cartella conservata perche' la copia dei file e' fallita
+RUN_LIST = ".pozzo-run.json"  # cartella estratta e file alla partenza: se Pozzo si chiude a meta' partita si riparte da qui
 
 
 class ArchiveRunError(Exception):
@@ -58,6 +60,27 @@ def _snap(root: Path) -> dict[str, tuple[int, int]]:
     return out
 
 
+def procs_in(folder) -> list:
+    """Processi in esecuzione il cui eseguibile sta nella cartella."""
+    try:
+        import psutil
+    except ImportError:
+        return []
+    root = os.path.normcase(os.path.abspath(folder)) + os.sep
+    return [p for p in psutil.process_iter(["exe"]) if os.path.normcase(p.info.get("exe") or "").startswith(root)]
+
+
+def in_use(folder) -> bool:
+    """Un gioco sta usando la cartella: il suo eseguibile e' li', o un emulatore ha un suo file sulla riga di comando."""
+    try:
+        import psutil
+    except ImportError:
+        return False
+    root = os.path.normcase(os.path.abspath(folder)) + os.sep
+    return any(root in os.path.normcase(x or "") for p in psutil.process_iter(["exe", "cmdline"])
+               for x in (p.info.get("exe"), *(p.info.get("cmdline") or [])))
+
+
 class Run:
     def __init__(self, cfg, data_dir: Path, key: str, archive):
         self.archive = Path(archive)
@@ -71,6 +94,7 @@ class Run:
         if (self.dir / KEEP).exists():
             raise ArchiveRunError(f"Una partita precedente ha lasciato dei file da recuperare in {self.dir}: "
                                   "copiali altrove e cancella la cartella, poi riprova")
+        self._recover()
         shutil.rmtree(self.dir, ignore_errors=True)
         try:
             self.root = X.extract(self.archive, self.dir, cancelled=cancelled,
@@ -85,7 +109,28 @@ class Run:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(f, dst)
         self.before = _snap(self.root)
+        tmp = self.dir / (RUN_LIST + ".tmp")
+        tmp.write_text(json.dumps({"root": self.root.name, "files": self.before}), encoding="utf-8")
+        os.replace(tmp, self.dir / RUN_LIST)
         return self.root
+
+    def _recover(self):
+        """Partita precedente mai finita (Pozzo chiuso o caduto): i suoi file vanno nell'overlay prima di riestrarre."""
+        try:
+            man = json.loads((self.dir / RUN_LIST).read_text(encoding="utf-8"))
+            root, before = self.dir / man["root"], {r: tuple(s) for r, s in man["files"].items()}
+        except FileNotFoundError:
+            return  # nessuna partita, o estrazione interrotta prima di giocare
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise ArchiveRunError(f"File di una partita precedente non leggibili ({e}): recuperali da {self.dir} "
+                                  "e cancella la cartella, poi riprova") from e
+        if in_use(self.dir):
+            raise ArchiveRunError("Il gioco è ancora aperto: chiudilo e riprova")
+        self.root, self.before = root, before
+        msg = self.finish()
+        self.root = None
+        if msg:
+            raise ArchiveRunError(msg)
 
     def finish(self) -> str | None:
         """Copia i file cambiati nell'overlay e cancella la cartella. Ritorna un avviso se la cartella e' rimasta."""

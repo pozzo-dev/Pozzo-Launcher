@@ -38,6 +38,7 @@ from .. import storelinks as SL
 from ..library import launcher as L
 from . import extensions as X
 from ..boot import BOOT
+from ..onexit import hard_exit
 from . import jobs as J
 from . import browserdl
 from .. import stores as STORES
@@ -255,7 +256,8 @@ def create_app(cfg) -> FastAPI:
     async def _lang(request, call_next):
         """Lingua dei messaggi di errore: la stessa dell'interfaccia (cookie gs_lang impostato da i18n.js)."""
         from .. import i18n as I
-        token = I.current.set(I.from_request(request.cookies.get("gs_lang"), request.headers.get("accept-language")))
+        I.last = I.from_request(request.cookies.get("gs_lang"), request.headers.get("accept-language"))
+        token = I.current.set(I.last)
         try:
             return await call_next(request)
         finally:
@@ -521,6 +523,7 @@ def create_app(cfg) -> FastAPI:
 
     def _phone_shutdown():
         stop.set()
+        launcher.close_session()  # prima di chiudere i database: il tempo della partita ancora aperta
         phone_hub.stop()
         from ..remote import libshare
         libshare.close_upnp(phone_hub)
@@ -629,6 +632,17 @@ class LocalGuard:
 
 
 WINDOW_FOCUS = {"fn": None}  # impostata quando l'app gira in una finestra nativa
+QUIT = {"fn": None}  # chiusura ordinata (la imposta run()): finestra o server, secondo come gira l'app
+
+
+def quit_app(delay: float):
+    """Chiude l'app tra `delay` secondi (il tempo di rispondere alla pagina) passando dallo spegnimento ordinato."""
+    def go():
+        guard = threading.Timer(15, hard_exit)  # se resta appesa si esce lo stesso
+        guard.daemon = True
+        guard.start()
+        (QUIT["fn"] or hard_exit)()
+    threading.Timer(delay, go).start()
 
 
 def _theme_bg(cfg, bigpicture: bool = False) -> str:
@@ -725,12 +739,23 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
     if browser:
         import webbrowser
         threading.Timer(1.0, lambda: webbrowser.open(start_url)).start()
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+
+        def stop_browser():
+            import signal
+            inner.state.events.close()
+            signal.raise_signal(signal.SIGINT)  # come Ctrl+C: uvicorn.run si ferma in ordine
+        QUIT["fn"] = stop_browser
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=1)
         return
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning",
                                            timeout_graceful_shutdown=1))  # SSE/keep-alive aperti non devono tenere la chiusura appesa
     t = threading.Thread(target=server.run, daemon=True)
     t.start()
+
+    def stop_server():
+        inner.state.events.close()  # prima di fermare il server: gli SSE aperti finiscono da soli, senza traceback
+        server.should_exit = True
+    QUIT["fn"] = stop_server
     while not server.started:
         time.sleep(0.05)
     try:
@@ -962,8 +987,9 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                     except Exception:
                         pass
             # rete di sicurezza: se start() non torna comunque, si esce lo stesso
-            threading.Timer(8, os._exit, args=(0,)).start()
+            threading.Timer(15, hard_exit).start()  # piu' dell'attesa del server qui sotto
         main_win.events.closed += close_all
+        QUIT["fn"] = main_win.destroy
         inner.state.overlay.attach(url)
         # il suono degli avvisi (WebAudio) parte senza un clic dentro la finestra
         os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
@@ -972,19 +998,19 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         # (console preferite, filtri, ordinamenti...)
         webview.start(private_mode=False, storage_path=str(Path(cfg.cache).parent / "webview"))
     except Exception as e:  # pywebview non disponibile: si usa il browser
+        QUIT["fn"] = stop_server
         print(f"Finestra desktop non disponibile ({e}), apro il browser: {url}")
         import webbrowser
         webbrowser.open(start_url)
         t.join()
     finally:
-        inner.state.events.close()  # prima di fermare il server: gli SSE aperti finiscono da soli, senza traceback
-        server.should_exit = True
+        stop_server()
         try:
             from .. import notify
             notify.remove()
         except Exception:
             pass
-        t.join(timeout=3)  # spegnimento ordinato del server: telefono e controller virtuali
+        t.join(timeout=10)  # spegnimento ordinato del server: telefono, controller virtuali, download (Manager.stop: fino a 6 s)
         # uscita immediata: senza, Python aspetta i lavori in sottofondo (lettura store, scraping) e la
         # finestra chiusa resta un processo che lavora; quei lavori riprendono da soli al prossimo avvio
-        os._exit(0)
+        hard_exit()

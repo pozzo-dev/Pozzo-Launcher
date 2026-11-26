@@ -1,20 +1,22 @@
 // Helper puri di Notizie (senza DOM): data relativa, normalizzazione, filtro «miei giochi».
 
-export const KINDS = { annuncio: "Annuncio", patch: "Patch", dlc: "DLC", uscita: "Uscita", notizia: "Notizia" };
+// tipi di notizia (i nomi stanno nel locales.json dell'estensione: kind.<tipo>)
+export const KINDS = ["annuncio", "patch", "dlc", "uscita", "notizia"];
 
 export const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
   .replace(/[^a-z0-9]+/g, " ").trim();
 
-export function relDate(iso, now = Date.now()) {
+/** «5 minuti fa», «ieri»… nella lingua dell'interfaccia; oltre una settimana la data. */
+export function relDate(iso, now = Date.now(), lang = "it") {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return "";
   const s = Math.max(0, Math.round((now - t) / 1000));
-  if (s < 60) return "adesso";
-  const un = (n, a, b) => `${n} ${n === 1 ? a : b} fa`;
-  if (s < 3600) return un(Math.floor(s / 60), "minuto", "minuti");
-  if (s < 86400) return un(Math.floor(s / 3600), "ora", "ore");
-  if (s < 86400 * 7) return un(Math.floor(s / 86400), "giorno", "giorni");
-  return new Date(t).toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" });
+  const rel = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+  if (s < 60) return rel.format(0, "second");
+  if (s < 3600) return rel.format(-Math.floor(s / 60), "minute");
+  if (s < 86400) return rel.format(-Math.floor(s / 3600), "hour");
+  if (s < 86400 * 7) return rel.format(-Math.floor(s / 86400), "day");
+  return new Date(t).toLocaleDateString(lang, { day: "numeric", month: "short", year: "numeric" });
 }
 
 export const safeUrl = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : "");

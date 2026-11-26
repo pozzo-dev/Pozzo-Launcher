@@ -159,7 +159,7 @@ function tileEl(g) {
     // q=1: una copertina remota non ancora scaricata non tiene occupato il collegamento (arriva con applyPatches)
     const src = `/img/${g.id}/cover?w=${Math.round(S.tw * (window.devicePixelRatio || 1))}&q=1`;
     let tries = 0;
-    // un errore puo' essere passeggero (app che riparte, disco occupato) o dovuto a numeri di gioco vecchi dopo una
+    // un errore puo' essere passeggero (app che riparte, disco occupato) o dovuto a un gioco tolto da una
     // ricostruzione della libreria: si ricontrolla la libreria e si riprova prima di rinunciare
     img.onerror = () => {
       if (!img.getAttribute("src")) return; // annullata da stopCover: non e' un errore
@@ -173,7 +173,7 @@ function tileEl(g) {
 }
 
 /* La libreria nella pagina puo' diventare vecchia: una ricostruzione fatta altrove (scansione, CLI, altra finestra)
-   cambia i numeri dei giochi, e copertine e dati non si trovano piu'. Si confronta la data di costruzione. */
+   aggiunge e toglie giochi (chi resta conserva il suo numero). Si confronta la data di costruzione. */
 let syncBusy = false;
 async function syncLibrary() {
   if (syncBusy || !S.games.length) return;
@@ -183,7 +183,7 @@ async function syncLibrary() {
     // libreria ricostruita altrove, oppure dati utente cambiati da un altro dispositivo (partita avviata dal telefono...)
     if (!st.building && ((st.built_at && st.built_at !== S.builtAt) || (st.user_rev != null && st.user_rev !== S.userRev))) await reload(true);
     else if (st.meta_rev != null && st.meta_rev !== S.metaRev) await applyPatches();
-    if (!st.building) onGameDownloaded(st.downloaded); // dopo il ricaricamento: i numeri dei giochi sono quelli nuovi
+    if (!st.building) onGameDownloaded(st.downloaded); // dopo il ricaricamento: il gioco nuovo e' gia' in S
     if (["starting", "extracting", "running"].includes(st.running) && $("#running").hidden) pollRunning();
   } catch { /* server non raggiungibile: si riprova al prossimo controllo */ } finally { syncBusy = false; }
 }

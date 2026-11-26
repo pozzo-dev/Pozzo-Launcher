@@ -14,7 +14,7 @@ Launcher desktop Windows (anche macOS/Linux in CI) per ROM + giochi PC degli sto
 - `pozzo/app/` server: `server.py` (`create_app`), `routes/*.py` (un file per area, `build_router`), `extensions.py`/`extstore.py` (plugin), `apiv1.py`, `jobs.py`.
 - `pozzo/app/static/` frontend: `index.html`, `app.js`, `core.js`, `js/`, `experiences/`, `bigpicture*`, `app.css` (token tema), `i18n.js`.
 - `pozzo/data/locales/` 6 lingue (it, en, de, es, fr, pt-BR): ogni testo visibile va in tutte (skill `translate`).
-- `extensions/<nome>/` 24 plugin opzionali: `plugin.toml` + `backend.py` + `frontend.js` + `style.css`. Possono mancare, il core non deve dipenderne.
+- `extensions/<nome>/` 16 plugin opzionali: `plugin.toml` + `backend.py` + `frontend.js` + `style.css`. Possono mancare, il core non deve dipenderne.
 - `tests/` ~240 file; `packaging/` PyInstaller + installer; `docs/` manuale MkDocs (it, `en/`); `themes/`, `profiles/`.
 - `cache/ build/ dist/ release/ site/ scratch/` sono output/temporanei: non leggerli.
 

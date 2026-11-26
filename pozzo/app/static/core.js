@@ -443,7 +443,38 @@ const GS = (() => {
   const experiences = new Map();
   experiences.set("catalog", { id: "catalog", get name() { return t("b.core.exp.catalog.name"); }, get description() { return t("b.core.exp.catalog.desc"); },
     nav: "sidebar", home: null, card: null, detail: "panel", onFocus: null });
-  const ui = { gameActions: [], detailSections: [], tileBadges: [], sidebarItems: [], views: new Map(), settingsTabs: [] };
+  const ui = { gameActions: [], detailSections: [], tileBadges: [], sidebarItems: [], views: new Map(), settingsTabs: [], shelves: [] };
+  // Mattoni per le pagine delle estensioni: stesso aspetto del resto dell'app senza stili scritti a mano.
+  ui.cover = (id, w = 300) => `/img/${encodeURIComponent(id)}/cover?w=${w}`;
+  ui.gameCard = (g) => (typeof shelfGame === "function" ? shelfGame(g)  // home.js; manca in Big Picture
+    : `<button class="shelf-game" type="button" data-shelf-game="${esc(g.id)}"><span class="shelf-cover"><img src="${ui.cover(g.id)}" alt="" loading="lazy"></span>`
+      + `<span class="shelf-game-title">${esc(g.title)}</span></button>`);
+  /** Intestazione standard (titolo, sottotitolo, azioni, «?» del tutorial). Ritorna il contenitore del corpo. */
+  ui.page = (el, { title = "", subtitle = "", actions = "", tutorial = null } = {}) => {
+    const help = tutorial && GS.tutorials?.has(tutorial);
+    // nella vista normale il titolo c'e' gia' nella barra in alto: qui solo in Big Picture
+    el.innerHTML = `<div class="ext-page"><header class="ext-head"><div class="ext-head-t">${GS.mode === "desktop" ? "" : `<h1>${esc(title)}</h1>`}`
+      + `${subtitle ? `<p class="muted">${esc(subtitle)}</p>` : ""}</div><div class="ext-actions">${actions}`
+      + `${help ? `<button class="icon-btn ext-help" type="button" title="${esc(t("b.ext.tutorial"))}" aria-label="${esc(t("b.ext.tutorial"))}">?</button>` : ""}`
+      + `</div></header><div class="ext-body"></div></div>`;
+    el.querySelector(".ext-help")?.addEventListener("click", () => GS.tutorials.show(tutorial));
+    // le copertine di gameCard aprono il gioco; una volta sola e senza toccare el.onclick, che e' dell'estensione
+    if (!el.dataset.extPage) {
+      el.dataset.extPage = "1";
+      // solo dentro .ext-page: lo stesso contenitore ospita anche la home, che apre i giochi da se'
+      el.addEventListener("click", (e) => { const g = e.target.closest(".ext-page [data-shelf-game]"); if (g) GS.openGame(+g.dataset.shelfGame); });
+    }
+    return el.querySelector(".ext-body");
+  };
+  /** Stato vuoto che dice cosa fare: {icon, title, text, action: {label, run}}. */
+  ui.empty = ({ icon = "", title = "", text = "", action = null } = {}) => {
+    const box = document.createElement("section");
+    box.className = "shelves-empty ext-empty";
+    box.innerHTML = `${icon ? `<div class="ext-empty-ico" aria-hidden="true">${esc(icon)}</div>` : ""}<h2>${esc(title)}</h2>`
+      + `${text ? `<p class="muted">${esc(text)}</p>` : ""}${action ? `<button class="btn primary" type="button">${esc(action.label)}</button>` : ""}`;
+    if (action) box.querySelector("button").onclick = action.run;
+    return box;
+  };
   const add = (list) => (item) => {
     if (!item || !item.id) throw new Error("serve un id");
     const i = list.findIndex((x) => x.id === item.id);
@@ -485,6 +516,8 @@ const GS = (() => {
     addTileBadge: add(ui.tileBadges), // {id, render(game) -> testo|null}
     addSidebarItem: add(ui.sidebarItems), // {id, label, icon?, view?, onClick?}
     addSettingsTab: add(ui.settingsTabs), // {id, label, category?, render(el)}
+    addShelf: add(ui.shelves), // {id, title, why?, games(library) -> [game] | Promise}: scaffale nella home
+    addTutorial: (tut) => GS.tutorials?.add(tut), // {id, view?, section?, steps: [{title, text, sel?}]}; vedi exttutorials.js
     registerView(id, view) { ui.views.set(id, view); GS.emit("uiChanged", { kind: "views" }); }, // {title, render(el)}
     // forniti dall'interfaccia attiva (desktop o Big Picture)
     toast: (m) => console.log(m),
@@ -508,6 +541,7 @@ function showWindow() {
 /** Applica il tema attivo e carica i plugin abilitati. */
 async function loadExtensions() {
   let ext;
+  await window.GSI18n?.ready;  // il cookie della lingua deve esserci: il server sceglie i testi delle estensioni
   try { ext = await api("/api/extensions"); } catch (e) {
     console.warn("estensioni non disponibili", e);
     showWindow();  // senza estensioni si mostra lo stesso, col tema predefinito
@@ -594,6 +628,15 @@ async function loadExtensions() {
   GS.emit("extensionsLoaded", ext);
 }
 
+/** Testi dell'estensione (locales/<lingua>.json, gia' scelti dal server): t("chiave", {nome}) come window.t; lang per Intl. */
+function extText(strings = {}) {
+  const lang = window.GSI18n?.lang || document.documentElement.lang || "it";
+  return { lang, t: (key, p) => {
+    const s = strings[key] ?? key;
+    return p ? s.replace(/\{(\w+)\}/g, (m, k) => (k in p ? p[k] : m)) : s;
+  } };
+}
+
 /** Carica foglio di stile e frontend di un plugin (all'avvio e a caldo). `mod` = import gia' avviato. */
 async function loadPlugin(p, mod) {
   if (p.style) {
@@ -604,7 +647,7 @@ async function loadPlugin(p, mod) {
   if (p.frontend) {
     try {
       const m = await (mod || import(p.frontend));
-      if (typeof m.default === "function") await m.default(GS, { id: p.id, settings: p.settings || {} });
+      if (typeof m.default === "function") await m.default(GS, { id: p.id, settings: p.settings || {}, ...extText(p.strings) });
     } catch (e) {
       console.error(`Plugin ${p.id}:`, e);
       GS.toast(t("b.core.plugin.loadFail", {nome: p.name, errore: e.message}), true);
@@ -625,6 +668,7 @@ GS.unloadPlugin = (id) => {
     owned.views.forEach((v) => GS.ui.views.delete(v));
     delete GS._owned[id];
   }
+  GS.tutorials?.remove(id);
   GS.plugins = (GS.plugins || []).filter((x) => x.id !== id);
   GS.emit("uiChanged", { kind: "plugin" });
 };
@@ -640,7 +684,7 @@ GS.hotLoadPlugin = async (id) => {
     if (!p) return false;
     GS.plugins = ext.plugins; GS.extensions = ext;
     if (!p.enabled || p.error) return !p.error;
-    const lists = ["gameActions", "detailSections", "tileBadges", "sidebarItems", "settingsTabs"];
+    const lists = ["gameActions", "detailSections", "tileBadges", "sidebarItems", "settingsTabs", "shelves"];
     const before = Object.fromEntries(lists.map((k) => [k, new Set(GS.ui[k].map((x) => x.id))]));
     const viewsBefore = new Set(GS.ui.views.keys());
     // ?v= evita il modulo in cache di una versione precedente

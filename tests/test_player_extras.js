@@ -8,7 +8,12 @@ fs.writeFileSync(path.join(tmpDir, "player.mjs"), fs.readFileSync(path.join(__di
 const memStore = (init = {}) => { const m = { ...init }; return { m, getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: (k) => { delete m[k]; } }; };
 const badStore = { getItem() { throw new Error("x"); }, setItem() { throw new Error("x"); } };
 
+// testi in italiano da locales.json, come li passa l'app con ctx.t
+const IT = JSON.parse(fs.readFileSync(path.join(__dirname, "../extensions/media-locale/locales.json"), "utf8")).it;
+const itT = (k, p) => String(IT[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p && n in p ? p[n] : m));
+
 import(pathToFileURL(path.join(tmpDir, "player.mjs")).href).then(async (P) => {
+  P.setPlayerT(itT, "it");
   // preferenze
   assert.deepStrictEqual(P.loadPlayerPrefs(memStore()), { autonext: true, skipIntro: false, skipSecs: 85 });
   assert.deepStrictEqual(P.loadPlayerPrefs(badStore), { autonext: true, skipIntro: false, skipSecs: 85 });

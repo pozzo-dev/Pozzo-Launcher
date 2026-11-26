@@ -50,6 +50,44 @@ def test_invito_e_ingresso():
     print("ok  invito: codice di 6 cifre, uso singolo, ospite separato dai telefoni")
 
 
+def test_accesso_ospite_scade():
+    """Il PC nega l'ospite dopo 12 ore, anche se conserva il cookie (e anche gli ospiti entrati con versioni vecchie)."""
+    hub = new_hub()
+    guest = hub.join(hub.new_invite(), "Amico")
+    phone = hub.pair(hub.new_code(), "Telefono")
+    for d in hub.conf["devices"]:
+        d["created"] -= PH.GUEST_TTL + 1
+    assert hub.device_for(guest) is None
+    assert hub.device_for(phone), "i telefoni abbinati non scadono"
+    print("ok  l'accesso dell'ospite scade sul PC, i telefoni no")
+
+
+def test_ospite_collegato_esce_alla_scadenza():
+    """Il collegamento gia' aperto si chiude alla scadenza, senza aspettare che l'ospite si ricolleghi."""
+    from starlette.websockets import WebSocketDisconnect
+    hub = new_hub()
+    hub.ensure_pad = lambda n: None
+    app = FastAPI()
+    PH.register(app, hub, Path(PH.__file__).resolve().parent.parent / "app" / "static")
+    hub.join(hub.new_invite(), "Amico")
+    dev = hub.conf["devices"][0]
+
+    async def come_ospite(scope, receive, send):
+        if scope["type"] == "websocket":
+            scope.setdefault("state", {})["phone_device"] = dev["id"]
+        await app(scope, receive, send)
+    with TestClient(come_ospite).websocket_connect("/m/ws") as ws:
+        assert ws.receive_json()["t"] == "ok"
+        assert ws.receive_json()["t"] == "players"
+        hub._save(devices=[{**dev, "created": dev["created"] - PH.GUEST_TTL - 1}])
+        try:
+            while True:
+                ws.receive_json()
+        except WebSocketDisconnect as e:
+            assert e.code == 4001, e.code
+    print("ok  l'ospite gia' collegato esce alla scadenza")
+
+
 def test_invito_separato_dai_telefoni():
     hub = new_hub()
     phone_code = hub.new_code()

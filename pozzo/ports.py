@@ -37,6 +37,7 @@ from . import config as C
 from . import platforms as P
 from . import mods as M
 from .matching import normalize
+from .mods import _inside, _sha256
 
 API = ("https://api.quiverlauncher.com/api/v1", "https://famous-wildebeest-660.convex.site/api/v1")
 TTL = 24 * 3600
@@ -370,14 +371,6 @@ def _work(cfg, name: str) -> Path:
     return d
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for b in iter(lambda: f.read(1 << 20), b""):
-            h.update(b)
-    return h.hexdigest().lower()
-
-
 def _stage(cfg, asset: dict, folder_name: str, files_to_add: list[str], progress=None) -> tuple[Path, list[str]]:
     """Scarica ed estrae l'asset in una cartella temporanea; ritorna (cartella, file della release).
     Se la release dichiara il checksum SHA-256, un file diverso viene rifiutato."""
@@ -399,14 +392,6 @@ def _stage(cfg, asset: dict, folder_name: str, files_to_add: list[str], progress
         p.parent.mkdir(parents=True, exist_ok=True)
         p.touch()
     return staged, release_files(staged)
-
-
-def _inside(root: Path, rel: str) -> Path:
-    """root/rel, rifiutando percorsi che escono da root (dati dal catalogo o dall'utente)."""
-    p = (root / rel).resolve()
-    if p != root.resolve() and root.resolve() not in p.parents:
-        raise ValueError(f"percorso non valido: {rel}")
-    return p
 
 
 # ---------------------------------------------------------------- port installati

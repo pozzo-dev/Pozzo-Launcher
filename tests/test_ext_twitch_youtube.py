@@ -135,6 +135,10 @@ class FakeGS:
     def __init__(self, app):
         self.app, self.settings, self.log = app, {}, (lambda _: None)
 
+    def t(self, key, **params):  # come PluginAPI.t, in italiano
+        from pozzo.app.extensions import ext_strings
+        return ext_strings(Path(__file__).resolve().parent.parent / "extensions" / "twitch-youtube", "it").get(key, key).format(**params)
+
     def route(self, path, methods=("GET",)):
         def deco(fn):
             self.app.add_api_route(f"/plugin-api/twitch-youtube/{path}", fn, methods=list(methods))

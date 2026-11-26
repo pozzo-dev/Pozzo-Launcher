@@ -152,6 +152,9 @@ def _detach(cmd: list[str]):
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+SWAP_TRIES = 15  # tentativi (uno al secondo) di spostare la cartella dell'app
+
+
 def swap_script(tmp: Path, src: Path, dst: Path, pid: int) -> list[str]:
     """Aspetta la chiusura dell'app e sostituisce la cartella con quella già pronta."""
     backup = dst.with_name(f".{dst.name}.old-{pid}")
@@ -160,12 +163,15 @@ def swap_script(tmp: Path, src: Path, dst: Path, pid: int) -> list[str]:
         s.write_text("@echo off\r\nchcp 65001 >nul\r\nset S=%SystemRoot%\\System32\r\n:wait\r\n"
                      f'"%S%\\tasklist.exe" /FI "PID eq {pid}" | "%S%\\find.exe" "{pid}" >nul'
                      ' && ("%S%\\timeout.exe" /t 1 /nobreak >nul & goto wait)\r\n'
-                     f'move "{dst}" "{backup}" >nul\r\nif errorlevel 1 exit /b 1\r\n'
-                     f'move "{src}" "{dst}" >nul\r\nif errorlevel 1 (move "{backup}" "{dst}" >nul & exit /b 1)\r\n'
+                     # cartella bloccata per un attimo (antivirus, indicizzazione): si riprova, poi si riapre la versione vecchia
+                     f'set N=0\r\n:swap\r\nmove "{dst}" "{backup}" >nul && goto moved\r\nset /a N+=1\r\n'
+                     f'if %N% lss {SWAP_TRIES} ("%S%\\ping.exe" -n 2 127.0.0.1 >nul & goto swap)\r\ngoto run\r\n:moved\r\n'
+                     f'move "{src}" "{dst}" >nul\r\nif errorlevel 1 (move "{backup}" "{dst}" >nul & goto run)\r\n'
                      f'rmdir /S /Q "{backup}"\r\n'
-                     f'start "" "{dst / "PozzoLauncher.exe"}"\r\n', encoding="utf-8")
+                     f':run\r\nstart "" "{dst / "PozzoLauncher.exe"}"\r\n', encoding="utf-8")
         return ["cmd", "/c", str(s)]
     run = f"open {shlex.quote(str(dst))}" if sys.platform == "darwin" else f"{shlex.quote(str(dst / 'PozzoLauncher'))} &"
+    old = run  # versione vecchia, intatta: basta riaprirla
     if sys.platform == "darwin":
         # il bundle e' stato riscritto: via il vecchio manifest e nuovo sigillo ad-hoc, senza bloccare l'avvio
         q = shlex.quote(str(dst))
@@ -173,9 +179,11 @@ def swap_script(tmp: Path, src: Path, dst: Path, pid: int) -> list[str]:
                f"codesign --force --deep -s - {q} 2>/dev/null || true\n{run}")
     s = tmp / "update.sh"
     s.write_text(f"#!/bin/sh\nwhile kill -0 {pid} 2>/dev/null; do sleep 1; done\n"
-                 f"mv {shlex.quote(str(dst))} {shlex.quote(str(backup))} || exit 1\n"
+                 # cartella bloccata per un attimo: si riprova, poi si riapre la versione vecchia
+                 f"n=0\nuntil mv {shlex.quote(str(dst))} {shlex.quote(str(backup))}; do n=$((n+1)); "
+                 f"[ $n -ge {SWAP_TRIES} ] && {{\n{old}\nexit 1; }}; sleep 1; done\n"
                  f"if ! mv {shlex.quote(str(src))} {shlex.quote(str(dst))}; then "
-                 f"mv {shlex.quote(str(backup))} {shlex.quote(str(dst))}; exit 1; fi\n"
+                 f"mv {shlex.quote(str(backup))} {shlex.quote(str(dst))}\n{old}\nexit 1; fi\n"
                  f"rm -rf {shlex.quote(str(backup))}\n{run}\n", encoding="utf-8")
     return ["/bin/sh", str(s)]
 
@@ -525,6 +533,21 @@ def _verified_manifest(work: Path, manifest_asset: dict, assets: dict) -> Path:
     return manifest_file
 
 
+def _installer_sha256(work: Path, info: dict, name: str) -> str:
+    """SHA-256 dell'installer dall'elenco firmato della release (tools/release_manifest.py); SignatureError se non c'e'."""
+    version, assets = _version(info["latest"]), {x["name"]: x for x in info.get("assets", [])}
+    lst = assets.get(f"PozzoLauncher-{version}-installers.json")
+    if not lst:
+        raise SignatureError("Release senza manifest firmato degli installer")
+    data = json.loads(_verified_manifest(work, lst, assets).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("version") != version:  # elenco firmato ma di un'altra versione
+        raise SignatureError("Versione del manifest degli installer inattesa")
+    sha = next((str(x.get("sha256") or "") for x in data.get("file") or [] if isinstance(x, dict) and x.get("name") == name), "")
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        raise SignatureError(f"{name} non e' nel manifest firmato degli installer")
+    return sha
+
+
 def install(cache, quit) -> None:
     """Scarica e installa l'ultima versione; quit() chiude l'app perche' la nuova prenda il suo posto.
     Avanzamento ed errori in STATE (da eseguire in un thread)."""
@@ -550,15 +573,11 @@ def install(cache, quit) -> None:
         file = work / Path(a["name"]).name
         STATE.update(phase=f"Download di {file.name}", done=0, total=a["size"])
         if kind in ("setup", "deb"):
-            if PUBKEY.strip():
-                # lega la release alla chiave prima di eseguire l'installer; lo sha256 dell'installer
-                # non e' nel manifest (vedi release_manifest.py), quindi qui non si puo' controllare
-                m = next((x for x in info.get("assets", [])
-                          if x["name"] == f"PozzoLauncher-{_version(info['latest'])}-manifest.json"), None)
-                if not m:
-                    raise SignatureError("Release senza manifest firmato")
-                _verified_manifest(work, m, {x["name"]: x for x in info.get("assets", [])})
-            _download(a["url"], file, digest=a.get("digest"), total=a["size"])
+            digest = a.get("digest")
+            if PUBKEY.strip():  # quello che si esegue deve essere l'installer firmato, non quello che c'e' nella release
+                digest = "sha256:" + _installer_sha256(work, info, a["name"])
+            STATE.update(phase=f"Download di {file.name}")
+            _download(a["url"], file, digest=digest, total=a["size"])
             if kind == "deb":
                 _detach(["xdg-open", str(file)])
                 STATE.update(status="done", phase=f"Aperto {file.name}: completa l'installazione e riavvia PozzoLauncher")

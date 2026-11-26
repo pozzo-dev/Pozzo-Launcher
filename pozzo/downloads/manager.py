@@ -615,6 +615,10 @@ class Manager:
             jobs = list(self._jobs.values())
             for tid in list(self._jobs):
                 self._cancel_job(tid)
+            try:  # subito: se il processo viene chiuso durante l'attesa lo stato c'e' gia'
+                self.store.save(list(self.tasks.values()))
+            except Exception:  # noqa: BLE001 - disco pieno: si riprova dopo l'attesa
+                pass
         if jobs and self._loop:  # i torrent salvano i resume data prima di uscire: si aspetta (poco)
             try:
                 asyncio.run_coroutine_threadsafe(asyncio.wait(jobs, timeout=5), self._loop).result(6)

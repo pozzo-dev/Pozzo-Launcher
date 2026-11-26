@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20.2 (2026-11-25)
+## 0.20.2 (2026-11-26)
 
 ### Aggiunto
 
@@ -9,6 +9,7 @@
 - **Wikipedia in più lingue e con la copertina**: oltre a italiano e inglese cerca anche in tedesco, francese e spagnolo, partendo dalla lingua del gioco. Quando nessun'altra fonte ha la copertina, prende quella della pagina; le immagini che sembrano loghi o schermate vengono scartate.
 - **Come funziona la ricerca dei dati**: in Impostazioni › Libreria una breve spiegazione di cosa cerca lo scraping, in quali fonti e in che ordine, cosa succede se non trova il gioco e come si avvia.
 - **Aggiornamenti, DLC e mod dei giochi Switch**: con Ryujinx ed Eden (anche Eglantine) il gioco parte già con l'aggiornamento, i DLC e le mod scelti nella nuova sezione «Contenuti Switch» della scheda, senza installare nulla nella memoria dell'emulatore. Le mod si importano da un archivio o da una cartella, si spengono e si rimuovono; le scelte e le mod fatte a mano nell'emulatore non vengono toccate. Limiti: su Eden i DLC si accendono e si spengono tutti insieme; i pacchetti con più DLC e i DLC in formato XCI non si collegano a Ryujinx.
+- **Tutorial e traduzioni per le estensioni**: ogni estensione può avere un breve tutorial, che parte la prima volta che la apri e si rivede dal «?» o dal pulsante «Tutorial» nello Store, e i suoi testi nelle 6 lingue dell'app (anche la scheda nello Store). Le estensioni possono aggiungere uno scaffale alla home a scaffali.
 
 ### Migliorato
 
@@ -24,6 +25,35 @@
 - **Riconoscimento delle ROM per nome**: un gioco con lo stesso titolo ma un'altra regione poteva bloccare il riconoscimento con i database libretro (errore interno sulle regioni preferite).
 - **Build più affidabili**: un mirror di Ubuntu bloccato non ferma più la build per 20 minuti, e i test più pesanti hanno più tempo quando girano in parallelo.
 - **Giochi Battle.net e Riot che si fermavano al client**: Hearthstone, League of Legends, Teamfight Tactics e gli altri giochi Riot partono da soli appena il client è pronto, senza premere «Gioca». Se un gioco Battle.net o Riot è stato spostato, all'avvio Pozzo usa la cartella nuova.
+- **Ripristino delle copie di sicurezza**: ripristinare la copia più vecchia la cancellava prima di leggerla, quando il numero massimo di copie era raggiunto.
+- **Sincronizzazione con una cartella condivisa**: con i salvataggi attivi si fermava con un errore e creava un profilo «saves» (se c'è, si può eliminare). Un profilo rinominato ora arriva sull'altro PC con i suoi dati.
+- **Salvataggi degli emulatori**: disinstallando con i dati conservati restano anche quelli di Flycast, Cemu, Vita3K e Xenia e la configurazione di RetroArch.
+- **Salvataggi accanto al gioco**: con «Gioca da disco veloce» e con le ROM in ZIP i salvataggi che l'emulatore scrive accanto alla copia non si perdono più.
+- **Ripristino dei salvataggi di un gioco**: non cancella più dalla cartella i file che non può rimettere (.dll, .js, .jar…).
+- **Ospite a distanza**: l'accesso scade davvero dopo 12 ore, anche per chi conserva il cookie.
+- **Riduci spazio su disco**: rispondeva «serve un gioco PC installato» per qualsiasi gioco. Ora funziona anche sulle ROM e, dal menu di una console nella barra laterale, su tutte le sue ROM; mostra lo spazio occupato davvero, una stima del risparmio e quanto ha liberato. La voce è bloccata, con il motivo, quando si guadagnerebbe meno del 5%.
+- **Salvataggi dei giochi PC**: quelli dentro la cartella del gioco (per esempio i Call of Duty su Steam) non venivano trovati né copiati.
+- **Uscita e aggiornamento**: File › Esci e l'installazione di un aggiornamento chiudono Pozzo in ordine, come la X, salvando lo stato dei download e dei torrent; la chiusura aspetta che abbiano finito (prima si fermava dopo 3 secondi).
+- **Giochi in archivio**: chiudendo Pozzo (o con un crash) durante la partita i salvataggi andavano persi all'avvio successivo. Ora si recuperano.
+- **Riaprire Pozzo con un gioco ancora in corso**: non cancella più i file temporanei che il gioco sta usando.
+- **Chiudere Pozzo durante una partita**: un gioco in pausa riparte, il controller nascosto torna visibile e il tempo giocato si registra. Con un gioco aperto l'aggiornamento chiede prima di chiuderlo.
+- **Copie dei salvataggi**: la sincronizzazione fa una copia per gioco invece di una per file, e il limite di copie non toglie più quelle di un gioco con lo stesso nome.
+- **Ripristino senza credenziali**: telefoni abbinati, PC sincronizzati e webhook conservano le credenziali attuali.
+- **Aggiornamento**: l'installer per Windows e il .deb si verificano con un elenco firmato; se la sostituzione della cartella non riesce, Pozzo riprova e poi riapre la versione vecchia.
+- **Ospite a distanza**: anche un collegamento già aperto si chiude alla scadenza.
+- **Avvisi senza motivo aprendo un gioco**: l'animazione della copertina interrotta a metà mostrava «Transition was skipped» come se fosse un errore.
+- **Gioco sbagliato o «Gioco non trovato» dopo una ricostruzione della libreria**: ogni gioco ora conserva il suo numero, quindi una pagina già aperta apre sempre quello giusto.
+- **Estensione Ricette web** che non si caricava nell'app installata (mancava un modulo di Python).
+
+### Rimosso
+
+- **Sei estensioni doppie o poco utili**: Statistiche e Cosa gioco stasera? (l'app ha già la pagina Statistiche e «A cosa vuoi giocare?»), Eventi e fiere, Speedrun, Sconti (prezzi, storico e giochi gratis sono già nella lista dei desideri) e Recensioni (i voti sono già nella scheda del gioco).
+
+### Cambiato
+
+- **Estensioni rifatte**: Anniversari (scaffale in home e prossimi 30 giorni), Calendario uscite (calendario con copertine e «Desideri»), Il tuo anno (storia a schermo intero), Diario (linea del tempo con partite, note, schermate e salvataggi), Obiettivi (sfide proposte dalla libreria), Limite di tempo (grafico della settimana, avviso 10 minuti prima, chiusura del gioco a scelta), Pulizia (riquadri e copertine), Il mio PC ce la fa? (semaforo e indicatori), Store Minerva, Link → Store (procedura in tre passi), Twitch e YouTube, Notizie e SteamGridDB, tutte tradotte.
+- **Media locale, Media server e Ricette web in 6 lingue**: interfaccia, lettore, errori e scheda nello Store tradotti; Media locale e Ricette web hanno un breve tutorial e Ricette web l'intestazione standard delle estensioni. Le istruzioni di Media server ora spiegano che si configura dalle impostazioni di Media.
+- **Descrizioni oneste nello Store**: Ricette web dice che gli addon Kodi e Stream4me facoltativi eseguono codice di terze parti sul PC e non hanno limiti di rete; Media locale dice che va in rete solo quando scarichi locandine e trame da TMDb e AniList.
 
 ## 0.20.1 (2026-11-19)
 ### Aggiunto

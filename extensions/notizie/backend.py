@@ -256,9 +256,9 @@ def validate_settings(body: dict) -> dict:
     for c in body.get("custom_sources") or []:
         url, nome = str(c.get("url", "")).strip(), str(c.get("nome", "")).strip()[:60]
         if not re.match(r"https?://[^\s/]+", url, re.I):
-            raise ValueError(f"URL non valido: {url[:80]}")
+            raise ValueError("err.url", url[:80])  # codice del testo in locales.json e dettaglio
         if not nome:
-            raise ValueError("nome mancante")
+            raise ValueError("err.name", "")
         cid = "c-" + hashlib.sha1(url.encode()).hexdigest()[:8]
         if cid not in {x["id"] for x in custom}:
             custom.append({"id": cid, "casa": str(c.get("casa", "")).strip()[:40] or "Personali", "nome": nome, "url": url})
@@ -392,7 +392,8 @@ def register(gs):
         try:
             v = validate_settings(body)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            key, detail = (e.args + ("", ""))[:2]
+            raise HTTPException(400, gs.t(key, url=detail))
         gs.save_settings(v)
         return {"ok": True, "sources": all_sources(gs.settings)}
 
@@ -411,11 +412,11 @@ def register(gs):
     def follow(body: dict):
         gid, title = str(body.get("id") or "").strip(), str(body.get("title") or "").strip()[:200]
         if not gid or not title:
-            raise HTTPException(400, "id e titolo richiesti")
+            raise HTTPException(400, gs.t("err.idTitle"))
         try:
             appid = int(body.get("steam_appid") or 0) or None
         except (TypeError, ValueError):
-            raise HTTPException(400, "steam_appid non valido")
+            raise HTTPException(400, gs.t("err.appid"))
         fl = [f for f in gs.settings.get("follows") or [] if f["id"] != gid]
         fl.append({"id": gid, "title": title, "steam_appid": appid, "last_seen_ts": iso(time.time())})
         return set_follows(fl)
@@ -431,7 +432,7 @@ def register(gs):
         fl = gs.settings.get("follows") or []
         hit = [f for f in fl if f["id"] == gid]
         if not hit:
-            raise HTTPException(404, "gioco non seguito")
+            raise HTTPException(404, gs.t("err.notFollowed"))
         hit[0]["last_seen_ts"] = iso(time.time())
         return set_follows(fl)
 
@@ -470,6 +471,6 @@ def register(gs):
         d = build_digest(now)
         store_digest(cache, now, d)
         from pozzo import notify
-        notify.send(gs.cfg, f"Rassegna settimanale pronta: {d['counts']['totale']} novità", "Aprila dalla pagina Notizie.")
+        notify.send(gs.cfg, gs.t("n.digest.t", n=d["counts"]["totale"]), gs.t("n.digest.x"))
 
     gs.job("rassegna-settimanale", rassegna_settimanale, every=6 * 3600, run_at_start=True)

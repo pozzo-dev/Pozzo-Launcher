@@ -242,7 +242,7 @@ def build_router(ctx) -> APIRouter:
         src = Path(cfg.cache) / rel
         if not src.exists():
             raise HTTPException(404)
-        # i numeri dei giochi cambiano quando la libreria viene ricostruita: il browser deve sempre
+        # l'immagine di un gioco puo' cambiare (scelta a mano, nuovo scraping): il browser deve sempre
         # ricontrollare. L'ETag identifica il FILE (percorso + data + dimensione): se e' lo stesso si
         # risponde 304 e il browser usa la sua copia, altrimenti riceve l'immagine giusta.
         st = src.stat()

@@ -186,8 +186,9 @@ gioco** per riusarla la volta dopo, senza ricopiare (se nel frattempo il gioco �
 
 Avvertenze:
 
-- per i giochi PC, i salvataggi scritti dentro la cartella del gioco si perdono con la copia eliminata; quelli nelle
-  cartelle standard di Windows o gestiti dall'app no;
+- i salvataggi scritti accanto alla copia (dentro la cartella del gioco PC o accanto alla ROM) tornano accanto
+  all'originale a fine partita. Se non si può (disco scollegato, cartella non scrivibile, originale cambiato nel
+  frattempo) la copia non viene eliminata e un messaggio dice dov'è;
 - non è disponibile per i giochi avviati da uno store o launcher esterno;
 - **Chiudi gioco** durante la copia la annulla immediatamente;
 - le copie rimaste su disco dopo un arresto anomalo del PC o dell'emulatore vengono ripulite automaticamente al successivo avvio del launcher;
@@ -210,10 +211,24 @@ RetroArch e i **cheat** della libretro-database con un interruttore ciascuno (**
 il gioco o come predefinito del core. Pozzo scrive solo le sue chiavi nei file di override e prima ne fa una copia
 `.pozzo-bak`.
 
-## Ridurre lo spazio dei giochi PC
+## Ridurre lo spazio di giochi e ROM
 
-Per un gioco PC installato su Windows, **🗜 Riduci spazio su disco** (menu del tasto destro) comprime i file con la
-compressione di Windows. Scegli l'**algoritmo** e premi **Comprimi** (**Decomprimi** per tornare indietro); se il gioco
+**🗜 Riduci spazio su disco** comprime i file con la compressione di Windows: restano dove sono, con lo stesso nome, e
+gli emulatori li aprono come prima. Si trova nel menu del tasto destro:
+
+- su un **gioco PC installato** da uno store (non su quelli aggiunti a mano);
+- su una **ROM**;
+- su una **console** nella barra laterale, per comprimere tutte le sue ROM in una volta.
+
+Prima di iniziare Pozzo legge alcuni campioni dei file e stima il risparmio. Di solito conviene con DS, 3DS e ISO di PS2
+o Xbox 360. I formati già compressi o cifrati (ZIP, 7Z, CHD, RVZ, CSO, NSP, PKG…) vengono saltati. Dopo la compressione Pozzo
+confronta alcuni blocchi di ogni file con quelli di prima: se uno è diverso si ferma e lo decomprime. Serve un disco
+**NTFS**. Per i dischi di PS1, PS2 e PSP i formati degli [Strumenti](strumenti.md) (CHD, CSO) riducono di più.
+
+La voce è bloccata quando non c'è spazio da guadagnare (meno del 5%, per esempio NSP di Switch, RVZ o ZIP): passandoci
+sopra col mouse si legge il motivo.
+
+Scegli l'**algoritmo** e premi **Comprimi** (**Decomprimi** per tornare indietro); se il gioco
 è nel database di CompactGUI vedi una stima del risparmio. Se il gioco usa DirectStorage, su file compressi potrebbe
 non avviarsi o andare più lento, e Pozzo chiede una conferma esplicita.
 

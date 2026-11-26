@@ -636,7 +636,7 @@ function loadHints() {
   if (sel.dataset.bound) return;
   sel.dataset.bound = "1";
   sel.addEventListener("change", () => h.setMode(sel.value));
-  $("#hint-reset").addEventListener("click", () => { h.resetSeen(); count(); toast(t("e.hints.reset")); });
+  $("#hint-reset").addEventListener("click", () => { h.resetSeen(); GS.tutorials?.reset(); count(); toast(t("e.hints.reset")); });
 }
 
 function loadTour() {

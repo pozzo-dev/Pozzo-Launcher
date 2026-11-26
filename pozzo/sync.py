@@ -114,14 +114,15 @@ def open_profile(cfg, pid: str) -> UserData:
     return UserData(path, shared=profile_path(cfg, "default"), profile=pid)
 
 
-def add_profile(cfg, name: str) -> dict:
-    """Nuovo profilo (o quello che esiste gia' con lo stesso nome)."""
+def add_profile(cfg, name: str, pid: str | None = None) -> dict:
+    """Nuovo profilo (o quello che esiste gia' con lo stesso nome). pid: id gia' deciso da un altro PC, che non
+    segue il nome se il profilo e' stato rinominato."""
     name = name.strip()[:40]
     if not name:
         raise ValueError("Serve un nome")
-    pid = profile_id(name)
-    if pid == "default":
-        pid = "default-2"
+    pid = pid or profile_id(name)
+    if pid in ("default", SAVES_DIR):  # SAVES_DIR: nella cartella condivisa quel nome e' dei salvataggi
+        pid += "-2"
     hit = next((p for p in profiles(cfg) if p["id"] == pid), None)
     if hit:
         return hit
@@ -449,7 +450,9 @@ class Sync:
         known = {p["id"] for p in profiles(self.cfg)}
         for pid, b in bundles.items():
             if pid not in known:
-                add_profile(self.cfg, (b.get("profile") or {}).get("name") or pid)
+                if not re.fullmatch(r"[a-z0-9-]{1,40}", pid) or pid == SAVES_DIR:  # arriva da un altro PC e diventa un file
+                    continue
+                add_profile(self.cfg, (b.get("profile") or {}).get("name") or pid, pid)
             r = merge(self.user_of(pid), b)
             if c["what"] == "all" and pid == "default" and merge_settings(self.cfg, c, b.get("settings")):
                 r["settings"] = 1
@@ -617,6 +620,8 @@ class Sync:
             dirs = self._saves_dirs(key, title)
             base = state.get(key) if isinstance(state.get(key), dict) else {}
             now: dict[str, str] = {}
+            copied = False  # i salvataggi di prima si copiano una volta per gioco, non una per file (la rotazione toglierebbe le copie vere)
+            clash: dict[str, tuple[Path, bytes, str]] = {}  # conflitti da archiviare: chiave -> (file locale, byte remoti, sha1)
             for rel in sorted(set(rfiles) | set(local)):
                 if not _safe_rel(rel):  # manifest di un altro PC: non ci si fida dei percorsi
                     res["warnings"].append(f"{title}: percorso scartato dal manifest di {rname} («{str(rel)[:80]}»)")
@@ -648,18 +653,14 @@ class Sync:
                 if lp and lh != b:  # hanno cambiato tutti e due: nessuna sovrascrittura
                     cid = f"{key}\t{rel}"
                     if (state.get(CONFLICTS) or {}).get(cid) != rh:  # la versione remota si archivia una volta sola
-                        try:
-                            out = SV._store(self.cfg, key, title, {SV._mkey(lp): (None, data)},
-                                            reason=f"conflitto {rname} {when}", dirs=[])
-                            SV.set_meta(self.cfg, key, out.name, note=f"{title} (conflitto {rname} {when})")
-                            state.setdefault(CONFLICTS, {})[cid] = rh
-                        except (OSError, ValueError) as e:  # copia non archiviata: il file resta comunque intatto
-                            res["warnings"].append(f"{title}: conflitto non archiviato ({e})")
+                        clash[cid] = (lp, data, rh)
                     res["conflicts"].append(f"{title}: {rel} (conflitto con {rname}, {when})")
                     now[rel] = b  # base invariata: il conflitto resta finche' i due file non combaciano
                     continue
                 if lp:  # la versione che si perde resta tra le copie del gioco
-                    SV.backup(self.cfg, key, title, [lp], reason="sync", name=title)
+                    if not copied:
+                        SV.backup(self.cfg, key, title, list(local.values()), reason="sync")
+                        copied = True
                     root, dest = next((d for d in dirs if _inside(d, lp)), lp.parent), lp
                 else:
                     spot = self._saves_dest(local, dirs, rel)
@@ -674,6 +675,14 @@ class Sync:
                     continue
                 now[rel] = _file_sha(dest)
                 res["updated"].append(f"{key}/{rel}")
+            if clash:
+                try:
+                    out = SV._store(self.cfg, key, title, {SV._mkey(lp): (None, data) for lp, data, _ in clash.values()},
+                                    reason=f"conflitto {rname} {when}", dirs=[])
+                    SV.set_meta(self.cfg, key, out.name, note=f"{title} (conflitto {rname} {when})")
+                    state.setdefault(CONFLICTS, {}).update({cid: rh for cid, (_, _, rh) in clash.items()})
+                except (OSError, ValueError) as e:  # copia non archiviata: i file restano comunque intatti
+                    res["warnings"].append(f"{title}: conflitto non archiviato ({e})")
             if now:
                 state[key] = now
         self._write_saves_state(state)
@@ -722,6 +731,8 @@ class Sync:
         incoming: dict = {}
         if root.is_dir():
             for pdir in root.iterdir():
+                if pdir.name == SAVES_DIR:  # salvataggi, non un profilo: li legge saves_folder
+                    continue
                 for f in pdir.glob("*.json") if pdir.is_dir() else []:
                     if f.stem != me:
                         try:
@@ -732,6 +743,8 @@ class Sync:
         for k, b in incoming.items():
             merged[k] = self.receive({k.split("\t")[0]: b})
         for pid, b in self.bundles().items():
+            if pid == SAVES_DIR:  # creato per errore da una versione vecchia: il suo file e' il manifest dei salvataggi
+                continue
             d = root / pid
             d.mkdir(parents=True, exist_ok=True)
             tmp = d / f".{me}.tmp"

@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import ctypes
 import json
-import os
 import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 
 
 @dataclass
@@ -182,10 +180,3 @@ def parse_vdf(text: str) -> dict:
             stack[-1][key] = s.replace("\\\\", "\\")
             key = None
     return root
-
-
-def first_existing(*paths) -> Path | None:
-    for p in paths:
-        if p and Path(os.path.expandvars(str(p))).exists():
-            return Path(os.path.expandvars(str(p)))
-    return None

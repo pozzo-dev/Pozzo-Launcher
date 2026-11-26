@@ -347,6 +347,33 @@ def _manifest(d: Path) -> dict | None:
         return None
 
 
+def ext_locales(d: Path) -> dict[str, dict]:
+    """locales.json di un'estensione: {lingua: {chiave: testo}}. Un file solo: lo store non installa sottocartelle."""
+    try:
+        data = json.loads((d / "locales.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, dict)} if isinstance(data, dict) else {}
+
+
+def pick_lang(locales: dict[str, dict], lang: str) -> dict:
+    """La lingua chiesta sopra, poi inglese, poi italiano (la lingua in cui nascono le estensioni)."""
+    out: dict = {}
+    for code in [c for c in ("it", "en") if c != lang] + [lang]:  # l'ultima vince
+        out.update(locales.get(code) or {})
+    return out
+
+
+def ext_strings(d: Path, lang: str) -> dict[str, str]:
+    return {str(k): str(v) for k, v in pick_lang(ext_locales(d), lang).items()}
+
+
+def ext_lang() -> str:
+    """Lingua per i testi delle estensioni: quella della richiesta, o dell'ultima richiesta per i lavori in background."""
+    from .. import i18n as I
+    return I.current.get(None) or I.last
+
+
 def list_plugins(cfg, errors: dict | None = None) -> list[dict]:
     disabled = set(cfg.app.get("disabled_plugins", []))
     settings = C.read_settings(cfg).get("plugins", {})
@@ -368,9 +395,12 @@ def list_plugins(cfg, errors: dict | None = None) -> list[dict]:
                     api = int(m.get("api", 1))
                 except (TypeError, ValueError):
                     api = None  # manifest sbagliato: l'estensione non si carica (come api troppo alta)
+                strings = ext_strings(d, ext_lang())
                 out.append({
-                    "id": d.name, "name": m.get("name", d.name), "version": str(m.get("version", "")),
-                    "author": m.get("author", ""), "description": m.get("description", ""), "api": api,
+                    "id": d.name, "name": strings.get("plugin.name") or m.get("name", d.name),
+                    "version": str(m.get("version", "")), "author": m.get("author", ""),
+                    "description": strings.get("plugin.description") or m.get("description", ""), "api": api,
+                    "strings": strings,
                     "enabled": (d.name not in disabled or d.name == STORE_ID) and api is not None and api <= API_VERSION,
                     "locked": d.name == STORE_ID,
                     "frontend": f"/plugins/{d.name}/frontend.js" if (d / "frontend.js").exists() else None,
@@ -528,6 +558,15 @@ class PluginAPI:
     def save_settings(self, values: dict):
         self.settings.update(values)
         C.save_settings(self.cfg, plugins={self.id: dict(self.settings)})
+
+    def t(self, key: str, lang: str | None = None, **params) -> str:
+        """Testo tradotto da locales/<lingua>.json dell'estensione; {nome} si riempie con params."""
+        d = next((b / self.id for b in plugin_dirs(self.cfg) if (b / self.id / "plugin.toml").is_file()), None)
+        text = ext_strings(d, lang or ext_lang()).get(key, key) if d else key
+        try:
+            return text.format(**params) if params else text
+        except (KeyError, IndexError, ValueError):
+            return text
 
 
 class _LazyAPI(PluginAPI):

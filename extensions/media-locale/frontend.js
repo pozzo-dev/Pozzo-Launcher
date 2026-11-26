@@ -25,7 +25,15 @@ import {
   migrateToProfileKey,
 } from "./logica.js";
 import * as playerModule from "./player.js";
-import { attachPlay, play, loadContinueCache, removeFromContinueCache, animateSpinners, takeHandoff, HANDOFF_KEY } from "./player.js";
+import { attachPlay, play, loadContinueCache, removeFromContinueCache, animateSpinners, takeHandoff, HANDOFF_KEY, setPlayerT } from "./player.js";
+
+// testi: ctx.t arriva in default(); setT serve ai test che usano gli helper da soli
+let tr = (k) => k;
+let lang;
+export const setT = (fn, l) => { tr = fn; lang = l; };
+const tx = (k, p) => String(tr(k, p)).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const BADGE_KEYS = { "Disco Locale": "src.disk", "Web / Streaming": "src.web" };
+const badgeText = (b) => (b?.label ? b.label.split(" · ").map((x) => (BADGE_KEYS[x] ? tr(BADGE_KEYS[x]) : x)).join(" · ") : "");
 
 export const WATCHLIST_STATUSES = logicaModule.WATCHLIST_STATUSES || {
   plan_to_watch: { id: "plan_to_watch", label: "Da guardare", icon: "📌", order: 1 },
@@ -285,7 +293,7 @@ export function deduplicateStream4meEpisodes(episodes, parentItem = null, fallba
     out.push({
       ...ep,
       id: ep.id ?? `${p.id || "s4m"}_ep_${idx + 1}`,
-      title: ep.title || `Episodio ${epNum}`,
+      title: ep.title || tr("ep.n", { n: epNum }),
       series: ep.series || seriesTitle,
       kind: ep.kind || "episodio",
       genre: ep.genre || p.genre || "",
@@ -306,40 +314,40 @@ export function renderWatchlistControlsHtml(itemKey, entry = null, esc = default
   if (!entry) {
     return `
       <div class="pm-wl-controls">
-        <button type="button" class="pm-player-btn pm-primary" data-wl-add="${esc(k)}">📋 ＋ Aggiungi alla Watchlist</button>
-        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="high" title="Aggiungi con priorità Alta">🔥 Alta</button>
-        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="medium" title="Aggiungi con priorità Media">⚡ Media</button>
-        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="low" title="Aggiungi con priorità Bassa">💤 Bassa</button>
+        <button type="button" class="pm-player-btn pm-primary" data-wl-add="${esc(k)}">📋 ＋ ${tx("wl.add")}</button>
+        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="high" title="${tx("wl.addPrio.high")}">🔥 ${tx("prio.high")}</button>
+        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="medium" title="${tx("wl.addPrio.medium")}">⚡ ${tx("prio.medium")}</button>
+        <button type="button" class="pm-player-btn" data-wl-add="${esc(k)}" data-wl-add-priority="low" title="${tx("wl.addPrio.low")}">💤 ${tx("prio.low")}</button>
       </div>
     `.trim();
   }
 
   const norm = normalizeWatchlistEntry(entry, { item_key: k });
-  const ratingOptions = [`<option value="0" ${!norm.rating ? "selected" : ""}>Senza voto</option>`];
+  const ratingOptions = [`<option value="0" ${!norm.rating ? "selected" : ""}>${tx("wl.noRating")}</option>`];
   for (let r = 1; r <= 10; r++) {
     ratingOptions.push(`<option value="${r}" ${norm.rating === r ? "selected" : ""}>★ ${r}</option>`);
   }
 
   return `
     <div class="pm-wl-controls">
-      <select class="pm-source-select" data-wl-status="${esc(k)}" aria-label="Stato Watchlist">
-        <option value="plan_to_watch" ${norm.status === "plan_to_watch" ? "selected" : ""}>📌 Da guardare</option>
-        <option value="watching" ${norm.status === "watching" ? "selected" : ""}>▶ In corso</option>
-        <option value="on_hold" ${norm.status === "on_hold" ? "selected" : ""}>⏸ In pausa</option>
-        <option value="completed" ${norm.status === "completed" ? "selected" : ""}>✓ Completato</option>
-        <option value="dropped" ${norm.status === "dropped" ? "selected" : ""}>✕ Abbandonato</option>
+      <select class="pm-source-select" data-wl-status="${esc(k)}" aria-label="${tx("wl.status")}">
+        <option value="plan_to_watch" ${norm.status === "plan_to_watch" ? "selected" : ""}>📌 ${tx("st.plan_to_watch")}</option>
+        <option value="watching" ${norm.status === "watching" ? "selected" : ""}>▶ ${tx("st.watching")}</option>
+        <option value="on_hold" ${norm.status === "on_hold" ? "selected" : ""}>⏸ ${tx("st.on_hold")}</option>
+        <option value="completed" ${norm.status === "completed" ? "selected" : ""}>✓ ${tx("st.completed")}</option>
+        <option value="dropped" ${norm.status === "dropped" ? "selected" : ""}>✕ ${tx("st.dropped")}</option>
       </select>
-      <select class="pm-source-select" data-wl-priority="${esc(k)}" aria-label="Priorità Watchlist">
-        <option value="high" ${norm.priority === "high" ? "selected" : ""}>🔥 Priorità Alta</option>
-        <option value="medium" ${norm.priority === "medium" ? "selected" : ""}>⚡ Priorità Media</option>
-        <option value="low" ${norm.priority === "low" ? "selected" : ""}>💤 Priorità Bassa</option>
+      <select class="pm-source-select" data-wl-priority="${esc(k)}" aria-label="${tx("wl.priority")}">
+        <option value="high" ${norm.priority === "high" ? "selected" : ""}>🔥 ${tx("prio.full.high")}</option>
+        <option value="medium" ${norm.priority === "medium" ? "selected" : ""}>⚡ ${tx("prio.full.medium")}</option>
+        <option value="low" ${norm.priority === "low" ? "selected" : ""}>💤 ${tx("prio.full.low")}</option>
       </select>
-      <select class="pm-source-select" data-wl-rating="${esc(k)}" aria-label="Voto personale">
+      <select class="pm-source-select" data-wl-rating="${esc(k)}" aria-label="${tx("wl.rating")}">
         ${ratingOptions.join("")}
       </select>
-      <input type="text" class="pm-wl-note-input" data-wl-note-input="${esc(k)}" value="${esc(norm.notes || "")}" placeholder="Nota personale (es. ep. dove sono rimasto)…">
-      <button type="button" class="pm-player-btn" data-wl-save-note="${esc(k)}">Salva nota</button>
-      <button type="button" class="pm-player-btn" data-wl-remove="${esc(k)}">✕ Rimuovi</button>
+      <input type="text" class="pm-wl-note-input" data-wl-note-input="${esc(k)}" value="${esc(norm.notes || "")}" placeholder="${tx("wl.notePh")}">
+      <button type="button" class="pm-player-btn" data-wl-save-note="${esc(k)}">${tx("wl.saveNote")}</button>
+      <button type="button" class="pm-player-btn" data-wl-remove="${esc(k)}">✕ ${tx("remove")}</button>
     </div>
   `.trim();
 }
@@ -362,33 +370,33 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
   });
 
   const statPills = [
-    { status: "all", label: "Totale", count: stats.total, active: statusFilter === "all" && priorityFilter === "all" },
-    { status: "plan_to_watch", label: "📌 Da guardare", count: stats.plan_to_watch, active: statusFilter === "plan_to_watch" },
-    { status: "watching", label: "▶ In corso", count: stats.watching, active: statusFilter === "watching" },
-    { status: "on_hold", label: "⏸ In pausa", count: stats.on_hold, active: statusFilter === "on_hold" },
-    { status: "completed", label: "✓ Completati", count: stats.completed, active: statusFilter === "completed" },
-    { status: "all", priority: "high", label: "🔥 Alta priorità", count: stats.high_priority, active: priorityFilter === "high" },
+    { status: "all", label: tr("wl.total"), count: stats.total, active: statusFilter === "all" && priorityFilter === "all" },
+    { status: "plan_to_watch", label: "📌 " + tr("st.plan_to_watch"), count: stats.plan_to_watch, active: statusFilter === "plan_to_watch" },
+    { status: "watching", label: "▶ " + tr("st.watching"), count: stats.watching, active: statusFilter === "watching" },
+    { status: "on_hold", label: "⏸ " + tr("st.on_hold"), count: stats.on_hold, active: statusFilter === "on_hold" },
+    { status: "completed", label: "✓ " + tr("st.completedPl"), count: stats.completed, active: statusFilter === "completed" },
+    { status: "all", priority: "high", label: "🔥 " + tr("prio.filter.high"), count: stats.high_priority, active: priorityFilter === "high" },
   ];
 
   const statusTabs = [
-    { id: "all", label: "Tutti" },
-    { id: "plan_to_watch", label: "📌 Da guardare" },
-    { id: "watching", label: "▶ In corso" },
-    { id: "on_hold", label: "⏸ In pausa" },
-    { id: "completed", label: "✓ Completato" },
-    { id: "dropped", label: "✕ Abbandonato" },
+    { id: "all", label: tr("all") },
+    { id: "plan_to_watch", label: "📌 " + tr("st.plan_to_watch") },
+    { id: "watching", label: "▶ " + tr("st.watching") },
+    { id: "on_hold", label: "⏸ " + tr("st.on_hold") },
+    { id: "completed", label: "✓ " + tr("st.completed") },
+    { id: "dropped", label: "✕ " + tr("st.dropped") },
   ];
 
   const catTabs = [
-    { id: "all", label: "Tutti", count: stats.total },
-    ...Object.values(WATCHLIST_CATEGORIES).map((c) => ({ id: c.id, label: `${c.icon} ${c.label}`, count: stats.by_category[c.id] })),
+    { id: "all", label: tr("all"), count: stats.total },
+    ...Object.values(WATCHLIST_CATEGORIES).map((c) => ({ id: c.id, label: `${c.icon} ${tr("cat." + c.id)}`, count: stats.by_category[c.id] })),
   ];
   const unlinked = list.filter((x) => x && !normalizeWatchlistEntry(x).linked_key).length;
 
   return `
     <div class="pm-netflix-home">
       <div class="pm-wl-head">
-        <div class="pm-season-tabs pm-wl-cats" role="tablist" aria-label="Categoria">
+        <div class="pm-season-tabs pm-wl-cats" role="tablist" aria-label="${tx("wl.category")}">
           ${catTabs.map((t) => `
             <button type="button" role="tab" class="pm-season-tab ${categoryFilter === t.id ? "pm-active" : ""}" data-wl-category="${esc(t.id)}">
               ${esc(t.label)} <span class="pm-wl-count">${esc(t.count)}</span>
@@ -396,10 +404,10 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
           `).join("")}
         </div>
         <div class="pm-wl-head-actions">
-          <button type="button" class="pm-player-btn" data-wl-match ${unlinked ? "" : "disabled"} title="Cerca nel catalogo le voci non ancora associate">🔗 Associa ai titoli trovati${unlinked ? ` (${esc(unlinked)})` : ""}</button>
-          <button type="button" class="pm-player-btn" data-wl-export title="Scarica un file di backup della watchlist di questo profilo">⬇ Esporta backup</button>
-          <button type="button" class="pm-player-btn" data-wl-import-open data-wl-restore title="Ripristina la watchlist da un backup di Pozzo">⬆ Ripristina backup</button>
-          <button type="button" class="pm-player-btn pm-primary" data-wl-import-open>⬇ Importa watchlist</button>
+          <button type="button" class="pm-player-btn" data-wl-match ${unlinked ? "" : "disabled"} title="${tx("wl.match.title")}">🔗 ${tx("wl.match")}${unlinked ? ` (${esc(unlinked)})` : ""}</button>
+          <button type="button" class="pm-player-btn" data-wl-export title="${tx("wl.export.title")}">⬇ ${tx("wl.export")}</button>
+          <button type="button" class="pm-player-btn" data-wl-import-open data-wl-restore title="${tx("wl.restore.title")}">⬆ ${tx("wl.restore")}</button>
+          <button type="button" class="pm-player-btn pm-primary" data-wl-import-open>⬇ ${tx("wl.import")}</button>
         </div>
       </div>
 
@@ -420,19 +428,19 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
             </button>
           `).join("")}
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <select class="pm-source-select" data-wl-filter-priority aria-label="Filtra priorità">
-            <option value="all" ${priorityFilter === "all" ? "selected" : ""}>Tutte le priorità</option>
-            <option value="high" ${priorityFilter === "high" ? "selected" : ""}>🔥 Alta priorità</option>
-            <option value="medium" ${priorityFilter === "medium" ? "selected" : ""}>⚡ Media priorità</option>
-            <option value="low" ${priorityFilter === "low" ? "selected" : ""}>💤 Bassa priorità</option>
+        <div class="pm-flex-ac-g8-wrap">
+          <select class="pm-source-select" data-wl-filter-priority aria-label="${tx("prio.filter")}">
+            <option value="all" ${priorityFilter === "all" ? "selected" : ""}>${tx("prio.filter.all")}</option>
+            <option value="high" ${priorityFilter === "high" ? "selected" : ""}>🔥 ${tx("prio.filter.high")}</option>
+            <option value="medium" ${priorityFilter === "medium" ? "selected" : ""}>⚡ ${tx("prio.filter.medium")}</option>
+            <option value="low" ${priorityFilter === "low" ? "selected" : ""}>💤 ${tx("prio.filter.low")}</option>
           </select>
-          <select class="pm-source-select" data-wl-sort aria-label="Ordina Watchlist">
-            <option value="priority" ${sortBy === "priority" ? "selected" : ""}>Priorità (Alta → Bassa)</option>
-            <option value="status" ${sortBy === "status" ? "selected" : ""}>Stato</option>
-            <option value="recent" ${sortBy === "recent" ? "selected" : ""}>Aggiunti di recente</option>
-            <option value="rating" ${sortBy === "rating" ? "selected" : ""}>Voto più alto</option>
-            <option value="title" ${sortBy === "title" ? "selected" : ""}>Titolo A-Z</option>
+          <select class="pm-source-select" data-wl-sort aria-label="${tx("wl.sort")}">
+            <option value="priority" ${sortBy === "priority" ? "selected" : ""}>${tx("sort.priority")}</option>
+            <option value="status" ${sortBy === "status" ? "selected" : ""}>${tx("sort.status")}</option>
+            <option value="recent" ${sortBy === "recent" ? "selected" : ""}>${tx("sort.recent")}</option>
+            <option value="rating" ${sortBy === "rating" ? "selected" : ""}>${tx("sort.rating")}</option>
+            <option value="title" ${sortBy === "title" ? "selected" : ""}>${tx("sort.title")}</option>
           </select>
         </div>
       </div>
@@ -445,7 +453,7 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
             const poster = safeMediaUrl(e.poster || e.backdrop);
             const defaultIcon = e.kind === "brano" ? "🎵" : (e.kind === "episodio" ? "📺" : "🎬");
             const badge = badgeOf(e);
-            const badgeLabel = badge?.label || e.source || "Locale";
+            const badgeLabel = badgeText(badge) || e.source || tr("src.local");
             const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
             const prioMeta = WATCHLIST_PRIORITIES[e.priority] || WATCHLIST_PRIORITIES.medium;
             const stMeta = WATCHLIST_STATUSES[e.status] || WATCHLIST_STATUSES.plan_to_watch;
@@ -453,9 +461,9 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
             const pct = e.total > 0 ? Math.min(100, Math.round((e.progress / e.total) * 100)) : 0;
             const progressHtml = e.total > 0
               ? `<div class="pm-wl-progress" title="${esc(e.progress)}/${esc(e.total)}"><span class="pm-wl-progress-bar"><i style="width:${pct}%"></i></span><span class="pm-wl-progress-txt">${esc(e.progress)}/${esc(e.total)}</span></div>`
-              : (e.progress > 0 ? `<span class="pm-badge">${esc(e.progress)} ep. visti</span>` : "");
+              : (e.progress > 0 ? `<span class="pm-badge">${tx("wl.epSeen", { n: e.progress })}</span>` : "");
 
-            const ratingOpts = [`<option value="0" ${!e.rating ? "selected" : ""}>Senza voto</option>`];
+            const ratingOpts = [`<option value="0" ${!e.rating ? "selected" : ""}>${tx("wl.noRating")}</option>`];
             for (let r = 1; r <= 10; r++) {
               ratingOpts.push(`<option value="${r}" ${e.rating === r ? "selected" : ""}>★ ${r}</option>`);
             }
@@ -466,14 +474,14 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
                   ${poster ? `<img class="pm-list-thumb-img" src="${esc(poster)}" alt="" loading="lazy">` : defaultIcon}
                 </div>
                 <div class="pm-list-info" style="gap: 6px;">
-                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <div class="pm-flex-ac-g8-wrap">
                     <h4 class="pm-list-title" title="${esc(e.title)}" data-detail-key="${esc(k)}" data-detail-id="${esc(e.id)}" style="font-size: 1rem; cursor: pointer;">${esc(e.title)}</h4>
-                    <span class="pm-wl-priority-badge pm-wl-priority-${esc(e.priority)}">${esc(prioMeta.icon)} ${esc(prioMeta.label)}</span>
-                    <span class="pm-wl-status-badge">${esc(stMeta.icon)} ${esc(stMeta.label)}</span>
-                    <span class="pm-wl-cat-badge">${esc(catMeta.icon)} ${esc(catMeta.label)}</span>
+                    <span class="pm-wl-priority-badge pm-wl-priority-${esc(e.priority)}">${esc(prioMeta.icon)} ${tx("prio." + prioMeta.id)}</span>
+                    <span class="pm-wl-status-badge">${esc(stMeta.icon)} ${tx("st." + stMeta.id)}</span>
+                    <span class="pm-wl-cat-badge">${esc(catMeta.icon)} ${tx("cat." + catMeta.id)}</span>
                     ${e.linked_key
-                      ? `<span class="pm-wl-link pm-wl-linked" title="${esc(e.linked_key)}">✓ In catalogo</span>`
-                      : `<span class="pm-wl-link pm-wl-unlinked">Non trovato</span>`}
+                      ? `<span class="pm-wl-link pm-wl-linked" title="${esc(e.linked_key)}">✓ ${tx("wl.linked")}</span>`
+                      : `<span class="pm-wl-link pm-wl-unlinked">${tx("wl.unlinked")}</span>`}
                     <span class="pm-source-badge">${esc(badgeIcon)}${esc(badgeLabel)}</span>
                     ${e.series && e.series !== e.title ? `<span class="pm-badge">${esc(e.series)}</span>` : ""}
                     ${e.year ? `<span class="pm-badge">${esc(e.year)}</span>` : ""}
@@ -481,30 +489,30 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
                   </div>
                   ${progressHtml}
                   <div class="pm-wl-controls">
-                    <select class="pm-source-select" data-wl-status="${esc(k)}" aria-label="Stato">
-                      <option value="plan_to_watch" ${e.status === "plan_to_watch" ? "selected" : ""}>📌 Da guardare</option>
-                      <option value="watching" ${e.status === "watching" ? "selected" : ""}>▶ In corso</option>
-                      <option value="on_hold" ${e.status === "on_hold" ? "selected" : ""}>⏸ In pausa</option>
-                      <option value="completed" ${e.status === "completed" ? "selected" : ""}>✓ Completato</option>
-                      <option value="dropped" ${e.status === "dropped" ? "selected" : ""}>✕ Abbandonato</option>
+                    <select class="pm-source-select" data-wl-status="${esc(k)}" aria-label="${tx("sort.status")}">
+                      <option value="plan_to_watch" ${e.status === "plan_to_watch" ? "selected" : ""}>📌 ${tx("st.plan_to_watch")}</option>
+                      <option value="watching" ${e.status === "watching" ? "selected" : ""}>▶ ${tx("st.watching")}</option>
+                      <option value="on_hold" ${e.status === "on_hold" ? "selected" : ""}>⏸ ${tx("st.on_hold")}</option>
+                      <option value="completed" ${e.status === "completed" ? "selected" : ""}>✓ ${tx("st.completed")}</option>
+                      <option value="dropped" ${e.status === "dropped" ? "selected" : ""}>✕ ${tx("st.dropped")}</option>
                     </select>
-                    <select class="pm-source-select" data-wl-priority="${esc(k)}" aria-label="Priorità">
-                      <option value="high" ${e.priority === "high" ? "selected" : ""}>🔥 Priorità Alta</option>
-                      <option value="medium" ${e.priority === "medium" ? "selected" : ""}>⚡ Priorità Media</option>
-                      <option value="low" ${e.priority === "low" ? "selected" : ""}>💤 Priorità Bassa</option>
+                    <select class="pm-source-select" data-wl-priority="${esc(k)}" aria-label="${tx("wl.priority")}">
+                      <option value="high" ${e.priority === "high" ? "selected" : ""}>🔥 ${tx("prio.full.high")}</option>
+                      <option value="medium" ${e.priority === "medium" ? "selected" : ""}>⚡ ${tx("prio.full.medium")}</option>
+                      <option value="low" ${e.priority === "low" ? "selected" : ""}>💤 ${tx("prio.full.low")}</option>
                     </select>
-                    <select class="pm-source-select" data-wl-rating="${esc(k)}" aria-label="Voto">
+                    <select class="pm-source-select" data-wl-rating="${esc(k)}" aria-label="${tx("wl.rating")}">
                       ${ratingOpts.join("")}
                     </select>
-                    <input type="text" class="pm-wl-note-input" data-wl-note-input="${esc(k)}" value="${esc(e.notes || "")}" placeholder="Nota personale (es. ep. dove sono rimasto)…">
-                    <button type="button" class="pm-player-btn" data-wl-save-note="${esc(k)}" style="padding: 4px 10px; font-size: 0.78rem;">Salva nota</button>
+                    <input type="text" class="pm-wl-note-input" data-wl-note-input="${esc(k)}" value="${esc(e.notes || "")}" placeholder="${tx("wl.notePh")}">
+                    <button type="button" class="pm-player-btn" data-wl-save-note="${esc(k)}" style="padding: 4px 10px; font-size: 0.78rem;">${tx("wl.saveNote")}</button>
                   </div>
                 </div>
                 <div class="pm-list-actions">
                   ${e.linked_key
-                    ? `<button type="button" class="pm-player-btn pm-primary" data-wl-play="${esc(e.linked_key)}">▶ Riproduci</button>`
-                    : `<button type="button" class="pm-player-btn pm-primary" data-wl-search="${esc(e.title)}" data-wl-search-cat="${esc(e.category)}">🔎 Cerca</button>`}
-                  <button type="button" class="pm-player-btn" data-wl-remove="${esc(k)}" title="Rimuovi dalla Watchlist">✕</button>
+                    ? `<button type="button" class="pm-player-btn pm-primary" data-wl-play="${esc(e.linked_key)}">▶ ${tx("play")}</button>`
+                    : `<button type="button" class="pm-player-btn pm-primary" data-wl-search="${esc(e.title)}" data-wl-search-cat="${esc(e.category)}">🔎 ${tx("search")}</button>`}
+                  <button type="button" class="pm-player-btn" data-wl-remove="${esc(k)}" title="${tx("wl.remove")}">✕</button>
                 </div>
               </article>
             `;
@@ -512,7 +520,7 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
         </div>
       ` : `
         <div class="pm-provider-status">
-          <p class="muted" style="margin: 0;">Nessun titolo nella Watchlist per i filtri selezionati. Aggiungi film, serie TV o anime con il pulsante 📋 sulle locandine o nei dettagli!</p>
+          <p class="muted pm-m0">${tx("wl.empty")}</p>
         </div>
       `}
     </div>
@@ -520,12 +528,12 @@ export function renderWatchlistViewHtml(entries = [], filterState = {}, esc = de
 }
 
 const WL_IMPORT_PROVIDERS = {
-  anilist: { label: "AniList", hint: "Inserisci il tuo nome utente AniList (la lista deve essere pubblica).", input: "user" },
-  mal: { label: "MyAnimeList", hint: "Scegli il file XML esportato da MyAnimeList.", input: "file", accept: ".xml,text/xml" },
-  csv: { label: "Trakt / Letterboxd (CSV)", hint: "Scegli il file CSV esportato (watchlist o diario).", input: "file", accept: ".csv,text/csv" },
-  json: { label: "Trakt (JSON)", hint: "Scegli il file JSON esportato.", input: "file", accept: ".json,application/json" },
-  pozzo: { label: "Backup Pozzo (JSON)", hint: "Scegli il file di backup creato da «Esporta backup».", input: "file", accept: ".json,application/json" },
-  text: { label: "Lista di testo", hint: "Un titolo per riga (ad esempio copiata da AnimeUnity).", input: "text" },
+  anilist: { label: "AniList", hint: "wli.hint.anilist", input: "user" },
+  mal: { label: "MyAnimeList", hint: "wli.hint.mal", input: "file", accept: ".xml,text/xml" },
+  csv: { label: "Trakt / Letterboxd (CSV)", hint: "wli.hint.csv", input: "file", accept: ".csv,text/csv" },
+  json: { label: "Trakt (JSON)", hint: "wli.hint.json", input: "file", accept: ".json,application/json" },
+  pozzo: { label: "wli.label.pozzo", hint: "wli.hint.pozzo", input: "file", accept: ".json,application/json" },
+  text: { label: "wli.label.text", hint: "wli.hint.text", input: "text" },
 };
 
 /** Dialogo «Importa watchlist». state: {provider, username, content, filename, prepared, skipped, warnings, defaultCat, busy, error}. */
@@ -545,14 +553,14 @@ export function renderWatchlistImportDialogHtml(state = {}, esc = defaultEsc) {
     const warnings = Array.isArray(st.warnings) ? st.warnings : [];
     preview = `
       <div class="pm-settings-section pm-wli-preview">
-        <strong>Anteprima: ${esc(prepared.length)} voci</strong>
-        <div class="pm-wli-line">${Object.values(WATCHLIST_CATEGORIES).map((c) => `<span class="pm-wl-cat-badge">${esc(c.icon)} ${esc(c.label)}: ${esc(byCat[c.id] || 0)}</span>`).join(" ")}</div>
-        <div class="pm-wli-line">${Object.values(WATCHLIST_STATUSES).filter((x) => bySt[x.id]).map((x) => `<span class="pm-wl-status-badge">${esc(x.icon)} ${esc(x.label)}: ${esc(bySt[x.id])}</span>`).join(" ")}</div>
-        <div class="pm-wli-line"><span class="pm-wl-link pm-wl-linked">✓ Già nel catalogo: ${esc(linked)}</span> <span class="pm-wl-link pm-wl-unlinked">Non trovate: ${esc(prepared.length - linked)}</span>${st.skipped ? ` <span class="muted">Ignorate dal servizio: ${esc(Array.isArray(st.skipped) ? st.skipped.length : st.skipped)}</span>` : ""}</div>
-        ${warnings.length ? `<ul class="pm-wli-warnings">${warnings.slice(0, 8).map((w) => `<li>${esc(typeof w === "string" ? w : (w?.message || JSON.stringify(w)))}</li>`).join("")}${warnings.length > 8 ? `<li>…e altri ${esc(warnings.length - 8)} avvisi</li>` : ""}</ul>` : ""}
-        <label class="pm-wli-field">Tipo per le voci senza categoria
+        <strong>${tx("wli.preview", { n: prepared.length })}</strong>
+        <div class="pm-wli-line">${Object.values(WATCHLIST_CATEGORIES).map((c) => `<span class="pm-wl-cat-badge">${esc(c.icon)} ${tx("cat." + c.id)}: ${esc(byCat[c.id] || 0)}</span>`).join(" ")}</div>
+        <div class="pm-wli-line">${Object.values(WATCHLIST_STATUSES).filter((x) => bySt[x.id]).map((x) => `<span class="pm-wl-status-badge">${esc(x.icon)} ${tx("st." + x.id)}: ${esc(bySt[x.id])}</span>`).join(" ")}</div>
+        <div class="pm-wli-line"><span class="pm-wl-link pm-wl-linked">✓ ${tx("wli.linked", { n: linked })}</span> <span class="pm-wl-link pm-wl-unlinked">${tx("wli.unlinked", { n: prepared.length - linked })}</span>${st.skipped ? ` <span class="muted">${tx("wli.skipped", { n: Array.isArray(st.skipped) ? st.skipped.length : st.skipped })}</span>` : ""}</div>
+        ${warnings.length ? `<ul class="pm-wli-warnings">${warnings.slice(0, 8).map((w) => `<li>${esc(typeof w === "string" ? w : (w?.message || JSON.stringify(w)))}</li>`).join("")}${warnings.length > 8 ? `<li>${tx("wli.moreWarnings", { n: warnings.length - 8 })}</li>` : ""}</ul>` : ""}
+        <label class="pm-wli-field">${tx("wli.defCat")}
           <select class="pm-source-select" data-wli-defcat>
-            ${Object.values(WATCHLIST_CATEGORIES).map((c) => `<option value="${esc(c.id)}" ${defCat === c.id ? "selected" : ""}>${esc(c.icon)} ${esc(c.label)}</option>`).join("")}
+            ${Object.values(WATCHLIST_CATEGORIES).map((c) => `<option value="${esc(c.id)}" ${defCat === c.id ? "selected" : ""}>${esc(c.icon)} ${tx("cat." + c.id)}</option>`).join("")}
           </select>
         </label>
       </div>`;
@@ -560,29 +568,29 @@ export function renderWatchlistImportDialogHtml(state = {}, esc = defaultEsc) {
 
   return `
     <div class="pm-settings-overlay" data-close-settings-backdrop>
-      <div class="pm-settings-modal" role="dialog" aria-modal="true" aria-label="Importa watchlist">
+      <div class="pm-settings-modal" role="dialog" aria-modal="true" aria-label="${tx("wl.import")}">
         <div class="pm-settings-header">
-          <h3 class="pm-settings-title">⬇ Importa watchlist</h3>
-          <button type="button" class="pm-modal-close" data-close-settings style="position: static;" title="Chiudi">✕</button>
+          <h3 class="pm-settings-title">⬇ ${tx("wl.import")}</h3>
+          <button type="button" class="pm-modal-close" data-close-settings style="position: static;" title="${tx("close")}">✕</button>
         </div>
         <div class="pm-settings-content">
           <div class="pm-settings-section">
-            <label class="pm-wli-field">Servizio
+            <label class="pm-wli-field">${tx("wli.service")}
               <select class="pm-source-select" data-wli-provider>
-                ${Object.entries(WL_IMPORT_PROVIDERS).map(([id, p]) => `<option value="${esc(id)}" ${provider === id ? "selected" : ""}>${esc(p.label)}</option>`).join("")}
+                ${Object.entries(WL_IMPORT_PROVIDERS).map(([id, p]) => `<option value="${esc(id)}" ${provider === id ? "selected" : ""}>${esc(p.label.startsWith("wli.") ? tr(p.label) : p.label)}</option>`).join("")}
               </select>
             </label>
-            <p class="muted" style="margin: 8px 0;">${esc(meta.hint)}</p>
-            ${meta.input === "user" ? `<input type="text" class="pm-wl-note-input" style="max-width:none;" data-wli-username value="${esc(st.username || "")}" placeholder="Nome utente" autocomplete="off">` : ""}
+            <p class="muted pm-f555">${tx(meta.hint)}</p>
+            ${meta.input === "user" ? `<input type="text" class="pm-wl-note-input" style="max-width:none;" data-wli-username value="${esc(st.username || "")}" placeholder="${tx("wli.user")}" autocomplete="off">` : ""}
             ${meta.input === "file" ? `<input type="file" data-wli-file accept="${esc(meta.accept)}">${st.filename ? ` <span class="muted">${esc(st.filename)}</span>` : ""}` : ""}
-            ${meta.input === "text" ? `<textarea class="pm-wli-text" data-wli-text rows="8" placeholder="Un titolo per riga">${esc(st.content || "")}</textarea>` : ""}
-            <p class="muted" style="margin: 8px 0 0;">I dati restano sul tuo computer: i file vengono letti qui e inviati solo al backend locale.</p>
+            ${meta.input === "text" ? `<textarea class="pm-wli-text" data-wli-text rows="8" placeholder="${tx("wli.hint.text")}">${esc(st.content || "")}</textarea>` : ""}
+            <p class="muted pm-c94d">${tx("wli.privacy")}</p>
           </div>
           ${st.error ? `<div class="pm-wli-error" role="alert">⚠ ${esc(st.error)}</div>` : ""}
           ${preview}
           <div class="pm-wli-actions">
-            <button type="button" class="pm-player-btn" data-wli-analyze ${st.busy ? "disabled" : ""}>${st.busy === "analyze" ? "Analisi in corso…" : "Analizza"}</button>
-            ${prepared && prepared.length ? `<button type="button" class="pm-player-btn pm-primary" data-wli-commit ${st.busy ? "disabled" : ""}>${st.busy === "commit" ? "Importazione…" : `Importa ${esc(prepared.length)} voci`}</button>` : ""}
+            <button type="button" class="pm-player-btn" data-wli-analyze ${st.busy ? "disabled" : ""}>${st.busy === "analyze" ? tx("wli.analyzing") : tx("wli.analyze")}</button>
+            ${prepared && prepared.length ? `<button type="button" class="pm-player-btn pm-primary" data-wli-commit ${st.busy ? "disabled" : ""}>${st.busy === "commit" ? tx("wli.importing") : tx("wli.commit", { n: prepared.length })}</button>` : ""}
           </div>
         </div>
       </div>
@@ -594,7 +602,7 @@ export function renderHeroHtml(item, esc = defaultEsc) {
   if (!item) return "";
   const key = compositeKey ? compositeKey(item) : `${item.source || "locale"}:${item.id ?? ""}`;
   const badge = badgeOf(item);
-  const badgeLabel = badge?.label || item.source_label || item.source || "Locale";
+  const badgeLabel = badgeText(badge) || item.source_label || item.source || tr("src.local");
   const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
   const bg = safeMediaUrl(item.backdrop || item.poster);
   const title = item.title || "";
@@ -606,7 +614,7 @@ export function renderHeroHtml(item, esc = defaultEsc) {
       ${bg ? `<img class="pm-hero-backdrop" src="${esc(bg)}" alt="" loading="lazy">` : ""}
       <div class="pm-hero-gradient"></div>
       <div class="pm-hero-body">
-        <div class="pm-hero-badges" style="display: flex; align-items: center; gap: 8px;">
+        <div class="pm-hero-badges pm-flex-ac-g8">
           <span class="pm-source-badge">${esc(badgeIcon)}${esc(badgeLabel)}</span>
           ${item.year ? `<span class="pm-badge">${esc(item.year)}</span>` : ""}
           ${item.genre ? `<span class="pm-badge">${esc(item.genre)}</span>` : ""}
@@ -615,12 +623,12 @@ export function renderHeroHtml(item, esc = defaultEsc) {
         </div>
         <h2 class="pm-hero-title">${esc(title)}</h2>
         ${desc ? `<p class="pm-hero-desc">${esc(desc)}</p>` : ""}
-        <div class="pm-hero-actions" style="display: flex; gap: 10px; margin-top: 8px;">
+        <div class="pm-hero-actions pm-flex-g10-mt8">
           <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(key)}" data-play-id="${esc(item.id ?? '')}">
-            ▶ Riproduci
+            ▶ ${tx("play")}
           </button>
           <button type="button" class="pm-player-btn" data-detail-key="${esc(key)}" data-detail-id="${esc(item.id ?? '')}">
-            ℹ Altre info
+            ℹ ${tx("moreInfo")}
           </button>
         </div>
       </div>
@@ -632,7 +640,7 @@ export function renderCardHtml(item, isFav = false, esc = defaultEsc, options = 
   if (!item) return "";
   const key = compositeKey ? compositeKey(item) : `${item.source || "locale"}:${item.id ?? ""}`;
   const badge = badgeOf(item);
-  const badgeLabel = badge?.label || item.source_label || item.source || "Locale";
+  const badgeLabel = badgeText(badge) || item.source_label || item.source || tr("src.local");
   const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
   const poster = safeMediaUrl(item.poster);
   const seen = isSeen(item);
@@ -661,13 +669,13 @@ export function renderCardHtml(item, isFav = false, esc = defaultEsc, options = 
     <article class="pm-card ${seen ? 'pm-seen' : ''}" data-play-key="${esc(key)}" data-play-id="${esc(item.id)}" data-detail-key="${esc(key)}" data-detail-id="${esc(item.id)}" ${isS4me ? `data-s4me-open="${esc(item.id ?? '')}"` : ""}>
       <div class="pm-poster">
         ${poster ? `<img class="pm-poster-img" src="${esc(poster)}" alt="" loading="lazy">` : `<div class="pm-poster-placeholder">${defaultIcon}</div>`}
-        <span class="pm-source-badge" style="position: absolute; top: 6px; right: 6px; z-index: 2;">${esc(badgeIcon)}${esc(badgeLabel)}</span>
+        <span class="pm-source-badge pm-abs-db54">${esc(badgeIcon)}${esc(badgeLabel)}</span>
         ${seen ? `<span class="pm-seen-badge pm-seen">✓</span>` : ""}
-        <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(item.id)}" style="position: absolute; top: 6px; left: 6px; z-index: 3; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'};" title="${isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${isFav ? '★' : '☆'}</button>
-        <button type="button" class="pm-fav-btn" data-wl-toggle="${esc(key)}" data-wl-id="${esc(item.id ?? '')}" style="position: absolute; top: 6px; left: 34px; z-index: 3; background: var(--panel); border: 1px solid ${wlEntry ? 'var(--accent)' : 'var(--line)'}; border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'};" title="Aggiungi/Modifica nella Watchlist">${wlIcon}</button>
+        <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(item.id)}" style="position: absolute; top: 6px; left: 6px; z-index: 3; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'};" title="${isFav ? tx("fav.remove") : tx("fav.add")}">${isFav ? '★' : '☆'}</button>
+        <button type="button" class="pm-fav-btn" data-wl-toggle="${esc(key)}" data-wl-id="${esc(item.id ?? '')}" style="position: absolute; top: 6px; left: 34px; z-index: 3; background: var(--panel); border: 1px solid ${wlEntry ? 'var(--accent)' : 'var(--line)'}; border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'};" title="${tx("wl.edit")}">${wlIcon}</button>
         ${isS4me && item.id != null ? `
-          <button type="button" class="pm-pin-btn ${wlEntry ? 'pm-pinned' : ''}" data-wl-toggle="${esc(key)}" data-wl-id="${esc(item.id)}" title="${wlEntry ? 'Rimuovi dalla Watchlist' : 'Aggiungi alla Watchlist'}">
-            ${wlEntry ? '✓ In Watchlist' : '＋ Watchlist'}
+          <button type="button" class="pm-pin-btn ${wlEntry ? 'pm-pinned' : ''}" data-wl-toggle="${esc(key)}" data-wl-id="${esc(item.id)}" title="${wlEntry ? tx("wl.remove") : tx("wl.add")}">
+            ${wlEntry ? "✓ " + tx("wl.in") : "＋ Watchlist"}
           </button>
         ` : ""}
       </div>
@@ -693,11 +701,11 @@ export function renderCarouselHtml(title, items, options = {}, esc = defaultEsc)
       const poster = safeMediaUrl(it.backdrop || it.poster);
       const key = compositeKey ? compositeKey(it) : `${it.source || "locale"}:${it.id ?? ""}`;
       const badge = badgeOf(it);
-      const badgeLabel = badge?.label || it.source || "Locale";
+      const badgeLabel = badgeText(badge) || it.source || tr("src.local");
       const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
       let sub = "";
       if (it.kind === "episodio") {
-        sub = it.series ? `${it.series} · S${it.season ?? 1}E${it.episode ?? 1}` : `Episodio ${it.episode ?? 1}`;
+        sub = it.series ? `${it.series} · S${it.season ?? 1}E${it.episode ?? 1}` : tr("ep.n", { n: it.episode ?? 1 });
       } else if (it.kind === "brano") {
         sub = it.series || it.album || "";
       } else if (it.year) {
@@ -707,7 +715,7 @@ export function renderCarouselHtml(title, items, options = {}, esc = defaultEsc)
         <article class="pm-resume-card" data-play-key="${esc(key)}" data-play-id="${esc(it.id)}" data-detail-key="${esc(key)}" data-detail-id="${esc(it.id)}">
           <div class="pm-backdrop">
             ${poster ? `<img class="pm-backdrop-img" src="${esc(poster)}" alt="" loading="lazy">` : `<div class="pm-poster-placeholder">▶</div>`}
-            <span class="pm-source-badge" style="position: absolute; top: 6px; right: 6px; z-index: 2;">${esc(badgeIcon)}${esc(badgeLabel)}</span>
+            <span class="pm-source-badge pm-abs-db54">${esc(badgeIcon)}${esc(badgeLabel)}</span>
             <div class="pm-progress">
               <div class="pm-progress-bar" style="width: ${pct}%;"></div>
             </div>
@@ -732,19 +740,19 @@ export function renderCarouselHtml(title, items, options = {}, esc = defaultEsc)
       const wlIcon = wlEntry ? (wlEntry.priority === "high" ? "🔥" : "📌") : "📋";
       // numeri solo se reali: le righe del catalogo streaming non sono episodi (prima «1 stagione · 2 episodi» per Breaking Bad)
       const meta = s.known === false
-        ? (s.label || "Serie TV")
+        ? (s.label || tr("cat.serie"))
         : `${s.seasonsCount || 1} stagion${(s.seasonsCount || 1) === 1 ? 'e' : 'i'} · ${s.count || 1} episod${(s.count || 1) === 1 ? 'o' : 'i'}`;
       const badge = badgeOf(rep);
-      const badgeLabel = badge?.label || rep.source || "Locale";
+      const badgeLabel = badgeText(badge) || rep.source || tr("src.local");
       const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
       return `
         <article class="pm-card ${s.allSeen ? 'pm-seen' : ''}" data-series-name="${esc(s.name)}">
           <div class="pm-poster">
             ${poster ? `<img class="pm-poster-img" src="${esc(poster)}" alt="" loading="lazy">` : `<div class="pm-poster-placeholder">📺</div>`}
-            <span class="pm-source-badge" style="position: absolute; top: 6px; right: 6px; z-index: 2;">${esc(badgeIcon)}${esc(badgeLabel)}</span>
-            ${s.allSeen ? `<span class="pm-seen-badge pm-seen">✓ Vista</span>` : ""}
-            <button type="button" class="pm-fav-btn" data-fav-id="series:${esc(s.name)}" style="position: absolute; top: 6px; left: 6px; z-index: 3; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'};" title="${isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${isFav ? '★' : '☆'}</button>
-            <button type="button" class="pm-fav-btn" data-wl-toggle="series:${esc(s.name)}" style="position: absolute; top: 6px; left: 34px; z-index: 3; background: var(--panel); border: 1px solid ${wlEntry ? 'var(--accent)' : 'var(--line)'}; border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'};" title="Aggiungi/Modifica nella Watchlist">${wlIcon}</button>
+            <span class="pm-source-badge pm-abs-db54">${esc(badgeIcon)}${esc(badgeLabel)}</span>
+            ${s.allSeen ? `<span class="pm-seen-badge pm-seen">✓ ${tx("seen.series")}</span>` : ""}
+            <button type="button" class="pm-fav-btn" data-fav-id="series:${esc(s.name)}" style="position: absolute; top: 6px; left: 6px; z-index: 3; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'};" title="${isFav ? tx("fav.remove") : tx("fav.add")}">${isFav ? '★' : '☆'}</button>
+            <button type="button" class="pm-fav-btn" data-wl-toggle="series:${esc(s.name)}" style="position: absolute; top: 6px; left: 34px; z-index: 3; background: var(--panel); border: 1px solid ${wlEntry ? 'var(--accent)' : 'var(--line)'}; border-radius: 999px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'};" title="${tx("wl.edit")}">${wlIcon}</button>
           </div>
           <div class="pm-card-body">
             <h4 class="pm-title" title="${esc(s.name)}">${esc(s.name)}</h4>
@@ -769,8 +777,8 @@ export function renderCarouselHtml(title, items, options = {}, esc = defaultEsc)
         <h3 class="pm-carousel-title">${esc(title)}</h3>
         <div class="pm-carousel-controls" style="display: flex; align-items: center; gap: 6px;">
           <span class="pm-carousel-count">${esc(countLabel)}</span>
-          <button type="button" class="pm-carousel-btn" data-carousel-scroll="-1" title="Scorri a sinistra" aria-label="Scorri a sinistra">‹</button>
-          <button type="button" class="pm-carousel-btn" data-carousel-scroll="1" title="Scorri a destra" aria-label="Scorri a destra">›</button>
+          <button type="button" class="pm-carousel-btn" data-carousel-scroll="-1" title="${tx("scroll.left")}" aria-label="${tx("scroll.left")}">‹</button>
+          <button type="button" class="pm-carousel-btn" data-carousel-scroll="1" title="${tx("scroll.right")}" aria-label="${tx("scroll.right")}">›</button>
         </div>
       </div>
       <div class="pm-carousel-row" data-carousel-row>
@@ -782,7 +790,7 @@ export function renderCarouselHtml(title, items, options = {}, esc = defaultEsc)
 
 export function renderListHtml(items = [], options = {}, esc = defaultEsc) {
   if (!items || !items.length) {
-    return `<p class="muted" style="padding: 32px 0; text-align: center;">Nessun elemento da mostrare.</p>`;
+    return `<p class="muted pm-tc-75fc">${tx("empty.items")}</p>`;
   }
   const favs = options.favs || new Set();
   const watchlistMap = options.watchlistMap || new Map();
@@ -794,7 +802,7 @@ export function renderListHtml(items = [], options = {}, esc = defaultEsc) {
         const wlEntry = watchlistMap instanceof Map ? (watchlistMap.get(key) || (it.id != null ? watchlistMap.get(String(it.id)) : null)) : null;
         const wlIcon = wlEntry ? (wlEntry.priority === "high" ? "🔥" : "📌") : "📋";
         const badge = badgeOf(it);
-        const badgeLabel = badge?.label || it.source || "Locale";
+        const badgeLabel = badgeText(badge) || it.source || tr("src.local");
         const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
         const poster = safeMediaUrl(it.poster || it.backdrop);
         const dur = it.duration ? formatDuration(it.duration) : "";
@@ -816,9 +824,9 @@ export function renderListHtml(items = [], options = {}, esc = defaultEsc) {
               </div>
             </div>
             <div class="pm-list-actions">
-              <button type="button" class="pm-fav-btn" data-wl-toggle="${esc(key)}" style="background: transparent; border: none; font-size: 1rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="Aggiungi/Modifica nella Watchlist">${wlIcon}</button>
-              <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(it.id ?? '')}" style="background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="${isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${isFav ? '★' : '☆'}</button>
-              <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(key)}" data-play-id="${esc(it.id ?? '')}" style="padding: 4px 10px; font-size: .8rem;">▶ Riproduci</button>
+              <button type="button" class="pm-fav-btn" data-wl-toggle="${esc(key)}" style="background: transparent; border: none; font-size: 1rem; cursor: pointer; color: ${wlEntry ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="${tx("wl.edit")}">${wlIcon}</button>
+              <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(it.id ?? '')}" style="background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="${isFav ? tx("fav.remove") : tx("fav.add")}">${isFav ? '★' : '☆'}</button>
+              <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(key)}" data-play-id="${esc(it.id ?? '')}" style="padding: 4px 10px; font-size: .8rem;">▶ ${tx("play")}</button>
             </div>
           </div>
         `;
@@ -837,17 +845,17 @@ export function renderMediaContextMenuHtml(item, options = {}, esc = defaultEsc)
   const isFav = Boolean(options.isFav);
 
   const itemsHtml = [];
-  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-play="${esc(k)}" data-ctx-id="${esc(id)}">▶ Riproduci</button>`);
-  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-detail="${esc(k)}" data-ctx-id="${esc(id)}">ℹ Informazioni</button>`);
-  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-fav="${esc(k)}" data-ctx-id="${esc(id)}">${isFav ? "★ Rimuovi dai preferiti" : "☆ Aggiungi ai preferiti"}</button>`);
+  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-play="${esc(k)}" data-ctx-id="${esc(id)}">▶ ${tx("play")}</button>`);
+  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-detail="${esc(k)}" data-ctx-id="${esc(id)}">ℹ ${tx("info")}</button>`);
+  itemsHtml.push(`<button type="button" class="pm-ctx-item" data-ctx-fav="${esc(k)}" data-ctx-id="${esc(id)}">${isFav ? "★ " + tx("fav.remove") : "☆ " + tx("fav.add")}</button>`);
 
   if (isContinueItem) {
-    itemsHtml.push(`<button type="button" class="pm-ctx-item pm-ctx-danger" data-ctx-remove-continue="${esc(k)}" data-ctx-item-id="${esc(id)}">✕ Rimuovi da «Continua a guardare»</button>`);
+    itemsHtml.push(`<button type="button" class="pm-ctx-item pm-ctx-danger" data-ctx-remove-continue="${esc(k)}" data-ctx-item-id="${esc(id)}">✕ ${tx("continue.remove")}</button>`);
   }
 
   itemsHtml.push(options.isInWatchlist
-    ? `<button type="button" class="pm-ctx-item pm-ctx-danger" data-wl-toggle="${esc(k)}" data-wl-id="${esc(id)}">🗑 Rimuovi dalla Watchlist</button>`
-    : `<button type="button" class="pm-ctx-item" data-wl-toggle="${esc(k)}" data-wl-id="${esc(id)}">📋 Aggiungi alla Watchlist</button>`);
+    ? `<button type="button" class="pm-ctx-item pm-ctx-danger" data-wl-toggle="${esc(k)}" data-wl-id="${esc(id)}">🗑 ${tx("wl.remove")}</button>`
+    : `<button type="button" class="pm-ctx-item" data-wl-toggle="${esc(k)}" data-wl-id="${esc(id)}">📋 ${tx("wl.add")}</button>`);
 
   return itemsHtml.join("");
 }
@@ -877,7 +885,7 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
     const nextToWatch = (lastWatched ? nextEpisode(allEps, lastWatched.id) : null) || allEps.find((e) => !isSeen(e)) || allEps[0];
     const isSeriesFav = favs.has("series:" + seriesName);
     const badge = badgeOf(repEp);
-    const badgeLabel = badge?.label || repEp.source || "Locale";
+    const badgeLabel = badgeText(badge) || repEp.source || tr("src.local");
     const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
     const pinTargetId = (typeof target === "object" && target?.id) ? target.id : repEp.id;
     const isS4meSeries = Boolean(isStream4meItem(repEp) || repEp.channel_id || (typeof target === "object" && (isStream4meItem(target) || target.channel_id)));
@@ -888,30 +896,30 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
     return `
       <div class="pm-modal-overlay" data-close-modal-backdrop>
         <div class="pm-modal-detail" role="dialog" aria-modal="true">
-          <button type="button" class="pm-modal-close" data-close-modal title="Chiudi">✕</button>
+          <button type="button" class="pm-modal-close" data-close-modal title="${tx("close")}">✕</button>
           <div class="pm-modal-header">
             ${backdrop ? `<img class="pm-modal-backdrop" src="${esc(backdrop)}" alt="" loading="lazy">` : ""}
             <div class="pm-modal-gradient"></div>
             <div class="pm-modal-header-body">
-              <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="pm-flex-ac-g8">
                 <span class="pm-source-badge">${esc(badgeIcon)}${esc(badgeLabel)}</span>
-                <span class="pm-badge">${seasonKeys.length} stagion${seasonKeys.length === 1 ? 'e' : 'i'}</span>
-                <span class="pm-badge">${allEps.length} episodi</span>
+                <span class="pm-badge">${tx(seasonKeys.length === 1 ? "seasons.one" : "seasons.n", { n: seasonKeys.length })}</span>
+                <span class="pm-badge">${tx("episodes.n", { n: allEps.length })}</span>
                 ${repEp.genre ? `<span class="pm-badge">${esc(repEp.genre)}</span>` : ""}
               </div>
               <h2 class="pm-modal-title">${esc(seriesName)}</h2>
               ${overview ? `<p class="pm-hero-desc" style="-webkit-line-clamp: 4;">${esc(overview)}</p>` : ""}
-              <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 6px;">
+              <div class="pm-flex-ac-wrap-fd38">
                 ${nextToWatch ? `
                   <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(compositeKey ? compositeKey(nextToWatch) : nextToWatch.id)}" data-play-id="${esc(nextToWatch.id)}">
-                    ▶ Riproduci: S${esc(nextToWatch.season ?? 1)}E${esc(nextToWatch.episode ?? 1)} · ${esc(nextToWatch.title)}
+                    ▶ ${tx("play")}: S${esc(nextToWatch.season ?? 1)}E${esc(nextToWatch.episode ?? 1)} · ${esc(nextToWatch.title)}
                   </button>
                 ` : ""}
                 <button type="button" class="pm-player-btn" data-fav-id="series:${esc(seriesName)}">
-                  ${isSeriesFav ? '★ Preferita' : '☆ Aggiungi ai preferiti'}
+                  ${isSeriesFav ? "★ " + tx("fav.isSeries") : "☆ " + tx("fav.add")}
                 </button>
                 <button type="button" class="pm-player-btn ${wlEntry ? 'pm-primary' : ''}" data-wl-toggle="${esc(wlKey)}"${pinTargetId != null ? ` data-wl-id="${esc(pinTargetId)}"` : ""}>
-                  ${wlEntry ? '✓ In Watchlist' : '＋ Watchlist'}
+                  ${wlEntry ? "✓ " + tx("wl.in") : "＋ Watchlist"}
                 </button>
               </div>
               ${renderWatchlistControlsHtml(wlKey, wlEntry, esc)}
@@ -921,7 +929,7 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
             <div class="pm-season-tabs" role="tablist">
               ${seasonKeys.map((s) => `
                 <button type="button" role="tab" class="pm-season-tab ${String(s) === String(currentSeason) ? 'pm-active' : ''}" data-modal-season="${esc(s)}">
-                  Stagione ${esc(s)}
+                  ${tx("season.n", { n: s })}
                 </button>
               `).join("")}
             </div>
@@ -939,7 +947,7 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
                       ${seen ? `<span class="pm-seen-badge pm-seen">✓</span>` : ""}
                     </div>
                     <div class="pm-episode-info">
-                      <div class="pm-episode-num">Episodio ${ep.episode != null ? esc(ep.episode) : ""}</div>
+                      <div class="pm-episode-num">${ep.episode != null ? tx("ep.n", { n: ep.episode }) : ""}</div>
                       <h4 class="pm-episode-title" title="${esc(ep.title)}">${esc(ep.title)}</h4>
                       ${ep.overview ? `<p class="pm-episode-desc">${esc(ep.overview)}</p>` : ""}
                       <div class="pm-meta">
@@ -947,7 +955,7 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
                         ${pct > 0 && !seen ? `<span class="pm-progress-label">${pct}%</span>` : ""}
                       </div>
                     </div>
-                    <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(ep.id)}" style="background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="${isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${isFav ? '★' : '☆'}</button>
+                    <button type="button" class="pm-fav-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(ep.id)}" style="background: transparent; border: none; font-size: 1.1rem; cursor: pointer; color: ${isFav ? 'var(--accent)' : 'var(--muted)'}; padding: 6px;" title="${isFav ? tx("fav.remove") : tx("fav.add")}">${isFav ? '★' : '☆'}</button>
                   </article>
                 `;
               }).join("")}
@@ -962,7 +970,7 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
   const item = target;
   const key = compositeKey ? compositeKey(item) : `${item.source || "locale"}:${item.id ?? ""}`;
   const badge = badgeOf(item);
-  const badgeLabel = badge?.label || item.source_label || item.source || "Locale";
+  const badgeLabel = badgeText(badge) || item.source_label || item.source || tr("src.local");
   const badgeIcon = badge?.icon ? `${badge.icon} ` : "";
   const bg = safeMediaUrl(item.backdrop || item.poster);
   const dur = item.duration ? formatDuration(item.duration) : "";
@@ -975,12 +983,12 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
   return `
     <div class="pm-modal-overlay" data-close-modal-backdrop>
       <div class="pm-modal-detail" role="dialog" aria-modal="true">
-        <button type="button" class="pm-modal-close" data-close-modal title="Chiudi">✕</button>
+        <button type="button" class="pm-modal-close" data-close-modal title="${tx("close")}">✕</button>
         <div class="pm-modal-header">
           ${bg ? `<img class="pm-modal-backdrop" src="${esc(bg)}" alt="" loading="lazy">` : ""}
           <div class="pm-modal-gradient"></div>
           <div class="pm-modal-header-body">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="pm-flex-ac-g8">
               <span class="pm-source-badge">${esc(badgeIcon)}${esc(badgeLabel)}</span>
               ${item.year ? `<span class="pm-badge">${esc(item.year)}</span>` : ""}
               ${item.genre ? `<span class="pm-badge">${esc(item.genre)}</span>` : ""}
@@ -989,15 +997,15 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
             </div>
             <h2 class="pm-modal-title">${esc(item.title || "")}</h2>
             ${item.overview ? `<p class="pm-hero-desc" style="-webkit-line-clamp: 5;">${esc(item.overview)}</p>` : ""}
-            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px;">
+            <div class="pm-flex-ac-wrap-cb18">
               <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(key)}" data-play-id="${esc(item.id ?? '')}">
-                ▶ Riproduci
+                ▶ ${tx("play")}
               </button>
               <button type="button" class="pm-player-btn" data-fav-key="${esc(key)}" data-fav-id="${esc(item.id ?? '')}">
-                ${isFav ? '★ Preferito' : '☆ Aggiungi ai preferiti'}
+                ${isFav ? "★ " + tx("fav.is") : "☆ " + tx("fav.add")}
               </button>
               <button type="button" class="pm-player-btn ${wlEntry ? 'pm-primary' : ''}" data-wl-toggle="${esc(key)}" data-wl-id="${esc(item.id ?? '')}">
-                ${wlEntry ? '✓ In Watchlist' : '＋ Watchlist'}
+                ${wlEntry ? "✓ " + tx("wl.in") : "＋ Watchlist"}
               </button>
             </div>
             ${renderWatchlistControlsHtml(key, wlEntry, esc)}
@@ -1005,9 +1013,9 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
         </div>
         ${detailLoading || detailEpisodes.length ? `
           <div class="pm-modal-body">
-            ${detailLoading ? `<p class="muted" style="margin: 0; font-size: 0.88rem;" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>Caricamento episodi e flussi da Stream4me…</p>` : ""}
+            ${detailLoading ? `<p class="muted pm-m0-t88" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>${tx("s4m.loadingEps")}</p>` : ""}
             ${detailEpisodes.length ? `
-              <h4 style="margin: 0; font-size: 0.95rem; color: var(--text);">Episodi / Flussi disponibili (${detailEpisodes.length})</h4>
+              <h4 class="pm-m0-t95-939c">${tx("s4m.episodes", { n: detailEpisodes.length })}</h4>
               <div class="pm-episode-list">
                 ${detailEpisodes.map((ep, idx) => {
                   const epKey = compositeKey ? compositeKey(ep) : `${ep.source || item.source || "stream4me"}:${ep.id ?? idx}`;
@@ -1018,11 +1026,11 @@ export function renderDetailModal(target, groups = {}, options = {}, esc = defau
                         ${epPoster ? `<img class="pm-episode-thumb-img" src="${esc(epPoster)}" alt="" loading="lazy">` : `<div class="pm-poster-placeholder">▶</div>`}
                       </div>
                       <div class="pm-episode-info">
-                        <div class="pm-episode-num">${ep.episode != null ? `Episodio ${esc(ep.episode)}` : `Flusso ${idx + 1}`}</div>
+                        <div class="pm-episode-num">${ep.episode != null ? tx("ep.n", { n: ep.episode }) : tx("stream.n", { n: idx + 1 })}</div>
                         <h4 class="pm-episode-title" title="${esc(ep.title || item.title || '')}">${esc(ep.title || item.title || '')}</h4>
                         ${ep.overview ? `<p class="pm-episode-desc">${esc(ep.overview)}</p>` : ""}
                       </div>
-                      <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(epKey)}" data-play-id="${esc(ep.id ?? '')}" style="padding: 5px 12px; font-size: 0.8rem;">▶ Riproduci</button>
+                      <button type="button" class="pm-player-btn pm-primary" data-play-key="${esc(epKey)}" data-play-id="${esc(ep.id ?? '')}" style="padding: 5px 12px; font-size: 0.8rem;">▶ ${tx("play")}</button>
                     </article>
                   `;
                 }).join("")}
@@ -1058,14 +1066,14 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
   if (!activeProvider) {
     if (!installed && !provList.length) {
       return `
-        <div class="pm-empty-banner" style="text-align: center; padding: 48px 24px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; margin-top: 16px;">
-          <div style="font-size: 2.6rem; margin-bottom: 10px;">🧩</div>
-          <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; color: var(--text);">Stream4me non ancora installato</h3>
-          <p class="muted" style="max-width: 520px; margin: 0 auto 18px auto; font-size: 0.88rem; line-height: 1.5;">
-            Installa Stream4me per sfogliare e guardare canali in streaming, film, serie TV e anime direttamente da Pozzo Launcher.
+        <div class="pm-empty-banner pm-tc-mt16-9794">
+          <div class="pm-mb10-76ac">🧩</div>
+          <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; color: var(--text);">${tx("s4m.notInstalled")}</h3>
+          <p class="muted pm-t88-e063">
+            ${tx("s4m.installHint")}
           </p>
           <button type="button" class="pm-player-btn pm-primary" data-install-stream4me style="font-size: 0.95rem; padding: 8px 20px;">
-            ⬇ Installa Stream4me con 1 clic
+            ⬇ ${tx("s4m.install1")}
           </button>
         </div>
       `.trim();
@@ -1074,29 +1082,29 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
     return `
       <div class="pm-s4me-browser">
         <div class="pm-provider-header">
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <h3 style="margin: 0; font-size: 1.25rem; color: var(--text);">🧩 Navigatore Canali Stream4me (Kodi)</h3>
-            <p class="muted" style="margin: 0; font-size: 0.84rem;">Seleziona un provider per sfogliare il catalogo in tempo reale o cerca un titolo in tutti i canali e aggiungilo alla tua Libreria. Clicca con il tasto destro su un provider per rimuoverlo.</p>
+          <div class="pm-flex-col-g4">
+            <h3 style="margin: 0; font-size: 1.25rem; color: var(--text);">🧩 ${tx("s4m.browser")}</h3>
+            <p class="muted pm-m0-t84">${tx("s4m.browserHint")}</p>
           </div>
           <div class="pm-provider-search-bar">
-            <input type="search" class="pm-provider-search-input" data-provider-search-input value="${esc(query)}" placeholder="Cerca film, serie TV o anime nei provider…">
-            <button type="button" class="pm-player-btn pm-primary" data-provider-search-btn>🔍 Cerca nei provider</button>
+            <input type="search" class="pm-provider-search-input" data-provider-search-input value="${esc(query)}" placeholder="${tx("s4m.searchPh")}">
+            <button type="button" class="pm-player-btn pm-primary" data-provider-search-btn>🔍 ${tx("s4m.searchBtn")}</button>
           </div>
         </div>
         ${loading ? `
           <div class="pm-provider-status">
-            <p class="muted">Ricerca nei provider Stream4me in corso…</p>
+            <p class="muted">${tx("s4m.searching")}</p>
           </div>
         ` : ""}
         ${error ? `
           <div class="pm-provider-status">
-            <p style="color: var(--accent); margin: 0 0 8px 0;">${esc(error)}</p>
-            <button type="button" class="pm-player-btn" data-provider-retry>↻ Riprova</button>
+            <p class="pm-3d45">${esc(error)}</p>
+            <button type="button" class="pm-player-btn" data-provider-retry>↻ ${tx("retry")}</button>
           </div>
         ` : ""}
         ${query && itemsList.length ? `
-          <div style="margin-bottom: 24px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 1.05rem; color: var(--text);">Risultati in streaming per "${esc(query)}" (${itemsList.length})</h4>
+          <div class="pm-mb24">
+            <h4 class="pm-9fa1">${tx("s4m.results", { q: query, n: itemsList.length })}</h4>
             <div class="pm-grid">
               ${itemsList.map((it) => {
                 const sIt = { ...it, source: it.source || "stream4me", source_label: it.source_label || it.channel_name || "Stream4me" };
@@ -1116,7 +1124,7 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
               <article class="pm-provider-card" data-open-provider="${esc(pId)}">
                 <div class="pm-provider-card-top">
                   <span class="pm-provider-icon">🧩</span>
-                  <div style="min-width: 0; flex: 1;">
+                  <div class="pm-mw0-f1">
                     <h4 class="pm-provider-title" title="${esc(pName)}">${esc(pName)}</h4>
                     ${p.language ? `<span class="pm-badge">${esc(p.language)}</span>` : ""}
                   </div>
@@ -1127,8 +1135,8 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
                   </div>
                 ` : ""}
                 <div class="pm-provider-card-footer">
-                  <button type="button" class="pm-player-btn pm-primary" data-open-provider="${esc(pId)}" style="width: 100%; justify-content: center;">
-                    Apri catalogo →
+                  <button type="button" class="pm-player-btn pm-primary pm-w100-jc" data-open-provider="${esc(pId)}">
+                    ${tx("s4m.openCatalog")} →
                   </button>
                 </div>
               </article>
@@ -1145,20 +1153,20 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
   return `
     <div class="pm-s4me-browser">
       <div class="pm-provider-nav">
-        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          <button type="button" class="pm-player-btn" data-close-provider>← Tutti i provider</button>
+        <div class="pm-flex-ac-g12-wrap">
+          <button type="button" class="pm-player-btn" data-close-provider>← ${tx("s4m.allProviders")}</button>
           <h3 style="margin: 0; font-size: 1.2rem; color: var(--text);">🧩 ${esc(provName)}</h3>
         </div>
         <div class="pm-provider-search-bar">
-          <input type="search" class="pm-provider-search-input" data-provider-search-input value="${esc(query)}" placeholder="Cerca in ${esc(provName)}…">
-          <button type="button" class="pm-player-btn pm-primary" data-provider-search-btn>🔍 Cerca</button>
+          <input type="search" class="pm-provider-search-input" data-provider-search-input value="${esc(query)}" placeholder="${tx("s4m.searchIn", { name: provName })}">
+          <button type="button" class="pm-player-btn pm-primary" data-provider-search-btn>🔍 ${tx("search")}</button>
         </div>
       </div>
       ${menus.length ? `
-        <div class="pm-season-tabs" role="tablist" style="margin-bottom: 14px;">
+        <div class="pm-season-tabs pm-mb14" role="tablist">
           ${menus.map((m) => {
             const mPath = m.path ?? m.id ?? m.action ?? "";
-            const mLabel = m.label || m.title || m.name || mPath || "Catalogo";
+            const mLabel = m.label || m.title || m.name || mPath || tr("catalog");
             const isAct = !query && (String(mPath) === String(activePath));
             return `
               <button type="button" role="tab" class="pm-season-tab ${isAct ? 'pm-active' : ''}" data-provider-path="${esc(mPath)}">
@@ -1170,12 +1178,12 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
       ` : ""}
       ${loading ? `
         <div class="pm-provider-status">
-          <p class="muted">Esplorazione catalogo ${esc(provName)} in corso…</p>
+          <p class="muted">${tx("s4m.exploring", { name: provName })}</p>
         </div>
       ` : error ? `
         <div class="pm-provider-status">
-          <p style="color: var(--accent); margin: 0 0 10px 0;">${esc(error)}</p>
-          <button type="button" class="pm-player-btn" data-provider-retry>↻ Riprova</button>
+          <p class="pm-bd40">${esc(error)}</p>
+          <button type="button" class="pm-player-btn" data-provider-retry>↻ ${tx("retry")}</button>
         </div>
       ` : itemsList.length ? `
         <div class="pm-grid">
@@ -1188,14 +1196,14 @@ export function renderStream4meBrowserHtml(state = {}, esc = defaultEsc) {
         </div>
       ` : `
         <div class="pm-provider-status">
-          <p class="muted">Nessun elemento trovato in questa sezione. Prova una categoria diversa o usa la barra di ricerca.</p>
+          <p class="muted">${tx("s4m.emptySection")}</p>
         </div>
       `}
     </div>
   `.trim();
 }
 
-const SRC_STATE_LABEL = { ok: "Connessa", error: "Errore", absent: "Non installata", slow: "Lenta", unknown: "Verifica…" };
+const SRC_STATE_LABEL = { ok: "src.ok", error: "src.error", absent: "src.absent", slow: "src.slow", unknown: "src.unknown" };
 
 /** Payload per media-server/config: source, base_url + (api_key | username/password | token). */
 export function buildServerPayload({ type = "jellyfin", url = "", user = "", password = "", key = "" } = {}) {
@@ -1210,12 +1218,12 @@ export function buildServerPayload({ type = "jellyfin", url = "", user = "", pas
 
 /** Riga di stato del catalogo ricette-web: { text, chip }. */
 export function catalogSummary(st) {
-  if (!st) return { text: "Stato del catalogo non disponibile.", chip: "" };
+  if (!st) return { text: tr("cat.status.none"), chip: "" };
   const total = st.total ?? st.count ?? st.items;
-  const n = total != null ? ` · ${total} titoli` : "";
-  if (st.refreshing) return { text: "Aggiornamento in corso…" + (typeof st.progress === "number" && st.progress <= 1 ? ` (${Math.round(st.progress * 100)}%)` : ""), chip: "Aggiornamento" };
-  const when = st.updated_at ? `Aggiornato il ${new Date(Number(st.updated_at) * 1000).toLocaleString()}` : "Catalogo non ancora aggiornato";
-  return { text: when + n + (st.last_error ? ` · Errore: ${st.last_error}` : ""), chip: st.last_error ? "Errore" : (total != null ? `${total} titoli` : "") };
+  const n = total != null ? " · " + tr("titles.n", { n: total }) : "";
+  if (st.refreshing) return { text: tr("updating") + (typeof st.progress === "number" && st.progress <= 1 ? ` (${Math.round(st.progress * 100)}%)` : ""), chip: tr("update") };
+  const when = st.updated_at ? tr("updatedOn", { data: new Date(Number(st.updated_at) * 1000).toLocaleString(lang) }) : tr("cat.never");
+  return { text: when + n + (st.last_error ? " · " + tr("errorWith", { err: st.last_error }) : ""), chip: st.last_error ? tr("src.error") : (total != null ? tr("titles.n", { n: total }) : "") };
 }
 
 /** Stato sorgente da un errore di fetch: 404 / non trovata = estensione assente. */
@@ -1231,14 +1239,14 @@ const badgeOf = (item) => {
   return { icon: bs[0]?.icon, label: bs.map((b) => b.label).join(" · ") };
 };
 
-const SRC_NAMES = { "media-locale": "Locale", "media-server": "Server", "ricette-web": "Web" };
-const CHIP_TEXT = { ok: "ok", slow: "lenta", error: "non raggiungibile", absent: "non installata" };
+const SRC_NAMES = { "media-locale": "src.local", "media-server": "Server", "ricette-web": "Web" };
+const CHIP_TEXT = { ok: "chip.ok", slow: "chip.slow", error: "chip.error", absent: "chip.absent" };
 /** Chip di stato per sorgente dei risultati federati; 'absent' resta grigio. */
 export function renderSourceChips(statuses, esc = defaultEsc) {
   return (Array.isArray(statuses) ? statuses : []).map((s) => {
     const st = CHIP_TEXT[s.state] ? s.state : "error";
     const n = st === "ok" || st === "slow" ? ` · ${Number(s.count) || 0}` : "";
-    return `<span class="pm-src-chip pm-src-${st}">${esc(SRC_NAMES[s.id] || s.id)}: ${CHIP_TEXT[st]}${n}</span>`;
+    return `<span class="pm-src-chip pm-src-${st}">${esc(SRC_NAMES[s.id] ? tr(SRC_NAMES[s.id]) : s.id)}: ${tx(CHIP_TEXT[st])}${n}</span>`;
   }).join("");
 }
 
@@ -1250,9 +1258,9 @@ export function renderSettingsModal(data = {}, esc = defaultEsc) {
   const catalogLine = catalogSummary(catalog);
   const srcChip = (key, text) => {
     const st = srcStates[key]?.state || "unknown";
-    return `<span class="pm-src-chip pm-src-${st}">${esc(text || srcStates[key]?.text || SRC_STATE_LABEL[st])}</span>`;
+    return `<span class="pm-src-chip pm-src-${st}">${esc(text || srcStates[key]?.text || tr(SRC_STATE_LABEL[st]))}</span>`;
   };
-  const absentMsg = (ext) => `<p class="muted" style="margin: 0; font-size: 0.82rem;">L'estensione «${ext}» non è installata: installala dallo Store per usare questa sorgente.</p>`;
+  const absentMsg = (ext) => `<p class="muted pm-m0-t82">${tx("absent", { ext })}</p>`;
   const scanning = Boolean(data.scanning);
   const canPick = Boolean(typeof window !== "undefined" && window.pywebview?.api?.pick_folder);
   const installedAddons = data.installedAddons || [];
@@ -1266,106 +1274,106 @@ export function renderSettingsModal(data = {}, esc = defaultEsc) {
     <div class="pm-settings-overlay" data-close-settings-backdrop>
       <div class="pm-settings-modal" role="dialog" aria-modal="true">
         <div class="pm-settings-header">
-          <h3 class="pm-settings-title">⚙ Impostazioni Media Center</h3>
-          <button type="button" class="pm-modal-close" data-close-settings style="position: static;" title="Chiudi">✕</button>
+          <h3 class="pm-settings-title">⚙ ${tx("settings.title")}</h3>
+          <button type="button" class="pm-modal-close" data-close-settings style="position: static;" title="${tx("close")}">✕</button>
         </div>
         <div class="pm-settings-content">
             <div class="pm-settings-section">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong style="font-size: 0.95rem;">Cartelle locali</strong> ${srcChip("locale", roots.length ? roots.length + " cartelle" : "Nessuna cartella")}
+              <div class="pm-flex-jsb-ac">
+                <strong class="pm-t95">${tx("set.folders")}</strong> ${srcChip("locale", roots.length ? tr("set.nFolders", { n: roots.length }) : tr("set.noFolder"))}
                 <button type="button" class="pm-player-btn" data-scan-now ${scanning ? "disabled" : ""}>
-                  ${scanning ? "⟳ Scansione…" : "↻ Scansiona ora"}
+                  ${scanning ? "⟳ " + tx("set.scanning") : "↻ " + tx("set.scanNow")}
                 </button>
               </div>
-              <p class="muted" style="margin: 0; font-size: 0.82rem;">Aggiungi cartelle contenenti film, serie TV, anime o musica per l'indicizzazione locale automatica.</p>
-              <div style="display: flex; gap: 6px;">
-                <input type="text" class="pm-root-input" placeholder="Percorso cartella sul computer…" style="flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-                ${canPick ? `<button type="button" class="pm-player-btn" data-pick-root>Sfoglia…</button>` : ""}
-                <button type="button" class="pm-player-btn pm-primary" data-add-root>＋ Aggiungi</button>
+              <p class="muted pm-m0-t82">${tx("set.foldersHint")}</p>
+              <div class="pm-flex-g6">
+                <input type="text" class="pm-root-input pm-f1-mw0-t84-f5be" placeholder="${tx("set.pathPh")}">
+                ${canPick ? `<button type="button" class="pm-player-btn" data-pick-root>${tx("browse")}</button>` : ""}
+                <button type="button" class="pm-player-btn pm-primary" data-add-root>＋ ${tx("add")}</button>
               </div>
-              <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+              <div class="pm-flex-col-g6-mt8">
                 ${roots.length ? roots.map((r) => `
-                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line); font-size: 0.82rem;">
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${esc(r.path)}">📁 ${esc(r.path)}</span>
-                    <button type="button" class="pm-player-btn" data-remove-root="${esc(r.path)}" style="padding: 2px 8px; font-size: 0.74rem;">✕ Rimuovi</button>
+                  <div class="pm-flex-ac-jsb-5ba9">
+                    <span class="pm-ovh-ell-nowrap-f1" title="${esc(r.path)}">📁 ${esc(r.path)}</span>
+                    <button type="button" class="pm-player-btn" data-remove-root="${esc(r.path)}" style="padding: 2px 8px; font-size: 0.74rem;">✕ ${tx("remove")}</button>
                   </div>
-                `).join("") : `<p class="muted" style="margin: 8px 0; font-size: 0.82rem;">Nessuna cartella configurata.</p>`}
+                `).join("") : `<p class="muted pm-t82-e343">${tx("set.noFolders")}</p>`}
               </div>
             </div>
             <div class="pm-settings-section">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong style="font-size: 0.95rem;">Server Jellyfin / Plex</strong> ${srcChip("server")}
+              <div class="pm-flex-jsb-ac">
+                <strong class="pm-t95">${tx("set.server")}</strong> ${srcChip("server")}
               </div>
               ${srcStates.server?.state === "absent" ? absentMsg("media-server") : `
-              <p class="muted" style="margin: 0; font-size: 0.82rem;">Collega il tuo server per vedere le librerie remote${serverConfigured.length ? ` (configurati: ${esc(serverConfigured.join(", "))})` : ""}. Le credenziali restano su questo PC.</p>
-              <div style="display: flex; gap: 8px;">
-                <select id="pm-server-type" class="pm-source-select" style="min-width: 120px;">
+              <p class="muted pm-m0-t82">${tx("set.serverHint")}${serverConfigured.length ? " " + tx("set.configured", { list: serverConfigured.join(", ") }) : ""}</p>
+              <div class="pm-flex-g8">
+                <select id="pm-server-type" class="pm-source-select pm-6519">
                   <option value="jellyfin">Jellyfin</option>
                   <option value="plex">Plex</option>
                 </select>
-                <input type="text" id="pm-server-url" placeholder="http://192.168.1.100:8096" style="flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
+                <input type="text" id="pm-server-url" placeholder="http://192.168.1.100:8096" class="pm-f1-mw0-t84-f5be">
               </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <input type="text" id="pm-server-user" placeholder="Utente (Jellyfin)" autocomplete="off" style="flex: 1; min-width: 120px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-                <input type="password" id="pm-server-pass" placeholder="Password (Jellyfin)" autocomplete="new-password" style="flex: 1; min-width: 120px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
+              <div class="pm-flex-g8-wrap">
+                <input type="text" id="pm-server-user" placeholder="${tx("set.user")}" autocomplete="off" class="pm-f1-t84-64e7">
+                <input type="password" id="pm-server-pass" placeholder="${tx("set.pass")}" autocomplete="new-password" class="pm-f1-t84-64e7">
               </div>
-              <input type="password" id="pm-server-token" placeholder="Chiave API Jellyfin (alternativa) / Token Plex" autocomplete="off" style="padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="pm-player-btn pm-primary" data-save-server>Salva configurazione</button>
-                <button type="button" class="pm-player-btn" data-test-server>Test connessione</button>
-                <span class="pm-server-status muted" style="font-size: 0.82rem;"></span>
+              <input type="password" id="pm-server-token" placeholder="${tx("set.token")}" autocomplete="off" class="pm-t84-66d3">
+              <div class="pm-flex-g8-ac">
+                <button type="button" class="pm-player-btn pm-primary" data-save-server>${tx("set.save")}</button>
+                <button type="button" class="pm-player-btn" data-test-server>${tx("set.test")}</button>
+                <span class="pm-server-status muted pm-t82"></span>
               </div>`}
             </div>
-${srcStates.kodi?.state === "absent" ? `<div class="pm-settings-section"><div style="display: flex; justify-content: space-between; align-items: center;"><strong style="font-size: 0.95rem;">Kodi & Stream4me</strong> ${srcChip("kodi")}</div>${absentMsg("ricette-web")}</div>` : `
+${srcStates.kodi?.state === "absent" ? `<div class="pm-settings-section"><div class="pm-flex-jsb-ac"><strong class="pm-t95">Kodi & Stream4me</strong> ${srcChip("kodi")}</div>${absentMsg("ricette-web")}</div>` : `
             <div class="pm-settings-section">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong style="font-size: 0.95rem;">Integrazione Kodi & Stream4me</strong>
-                ${srcChip("kodi", stream4meInstalled ? "Stream4me installato" : "Stream4me non installato")}
+              <div class="pm-flex-jsb-ac">
+                <strong class="pm-t95">${tx("set.kodi")}</strong>
+                ${srcChip("kodi", tr(stream4meInstalled ? "s4m.installed" : "s4m.notInstalledShort"))}
               </div>
-              <p class="muted" style="margin: 0; font-size: 0.82rem;">Guarda serie TV, film e canali in streaming direttamente su Pozzo Launcher tramite Stream4me e gli addon di Kodi.</p>
+              <p class="muted pm-m0-t82">${tx("set.kodiHint")}</p>
               <div>
                 <button type="button" class="pm-player-btn pm-primary" data-install-stream4me>
-                  ${stream4meInstalled ? '↻ Aggiorna Stream4me' : '⬇ Installa Stream4me'}
+                  ${stream4meInstalled ? "↻ " + tx("s4m.update") : "⬇ " + tx("s4m.installShort")}
                 </button>
-                <button type="button" class="pm-player-btn" data-cleanup-stream4me title="Toglie i titoli dei provider eliminati e riscansiona quelli attivi">
-                  🧹 Aggiorna e pulisci librerie
+                <button type="button" class="pm-player-btn" data-cleanup-stream4me title="${tx("s4m.cleanup.title")}">
+                  🧹 ${tx("s4m.cleanup")}
                 </button>
               </div>
 
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px;">
-                <strong style="font-size: 0.88rem;">Aggiungi o Gestisci Provider Stream4me</strong>
-                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                  <input type="text" id="pm-prov-name" placeholder="Nome provider (es. MioSito)…" style="flex: 1; min-width: 140px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-                  <input type="text" id="pm-prov-host" placeholder="URL Host (es. https://miosito.it)…" style="flex: 1; min-width: 180px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
+              <div class="pm-mt10-flex-col-6085">
+                <strong class="pm-t88">${tx("prov.manage")}</strong>
+                <div class="pm-flex-wrap-g6">
+                  <input type="text" id="pm-prov-name" placeholder="${tx("prov.namePh")}" class="pm-f1-t84-b179">
+                  <input type="text" id="pm-prov-host" placeholder="${tx("prov.hostPh")}" class="pm-f1-t84-8999">
                   <select id="pm-prov-cat" class="pm-source-select">
-                    <option value="movie,tvshow">Film & Serie TV</option>
+                    <option value="movie,tvshow">${tx("prov.cat.both")}</option>
                     <option value="anime">Anime</option>
-                    <option value="movie">Solo Film</option>
-                    <option value="tvshow">Solo Serie TV</option>
-                    <option value="live">Canali Live</option>
+                    <option value="movie">${tx("prov.cat.movie")}</option>
+                    <option value="tvshow">${tx("prov.cat.tv")}</option>
+                    <option value="live">${tx("prov.cat.live")}</option>
                   </select>
-                  <button type="button" class="pm-player-btn pm-primary" data-add-provider>＋ Aggiungi Provider</button>
+                  <button type="button" class="pm-player-btn pm-primary" data-add-provider>＋ ${tx("prov.add")}</button>
                 </div>
 
                 ${availableInactiveProviders.length ? `
-                  <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
-                    <select id="pm-prov-enable" class="pm-source-select" style="flex: 1;">
+                  <div class="pm-flex-g6-ac-mt4">
+                    <select id="pm-prov-enable" class="pm-source-select pm-f1">
                       ${availableInactiveProviders.map((ip) => `<option value="${esc(ip.id || ip.channel || ip.name)}">${esc(ip.name || ip.title || ip.id)}</option>`).join("")}
                     </select>
-                    <button type="button" class="pm-player-btn" data-enable-provider>Attiva canale Stream4me</button>
+                    <button type="button" class="pm-player-btn" data-enable-provider>${tx("prov.enable")}</button>
                   </div>
                 ` : ""}
 
                 ${providers.length ? `
-                  <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 6px;">
-                    <span class="muted" style="font-size: 0.8rem;">Provider attivi (${providers.length}):</span>
+                  <div class="pm-flex-col-g5-mt6">
+                    <span class="muted pm-t8">${tx("prov.active", { n: providers.length })}</span>
                     ${providers.map((p) => {
                       const pid = p.id || p.channel || p.name || "";
                       const pname = p.name || p.title || pid;
                       return `
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line); font-size: 0.82rem;">
+                        <div class="pm-flex-ac-jsb-5249">
                           <span>🧩 <strong>${esc(pname)}</strong> ${p.host ? `<span class="muted">(${esc(p.host)})</span>` : ""}</span>
-                          <button type="button" class="pm-player-btn" data-remove-provider="${esc(pid)}" style="padding: 2px 8px; font-size: 0.74rem;">🗑 Rimuovi</button>
+                          <button type="button" class="pm-player-btn" data-remove-provider="${esc(pid)}" style="padding: 2px 8px; font-size: 0.74rem;">🗑 ${tx("remove")}</button>
                         </div>
                       `;
                     }).join("")}
@@ -1373,54 +1381,54 @@ ${srcStates.kodi?.state === "absent" ? `<div class="pm-settings-section"><div st
                 ` : ""}
               </div>
 
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);">
-                <strong style="font-size: 0.86rem;">Installa Addon Custom da URL / Zip</strong>
-                <div style="display: flex; gap: 6px; margin-top: 6px;">
-                  <input type="text" id="pm-addon-input" placeholder="URL GitHub o percorso file .zip…" style="flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-                  <button type="button" class="pm-player-btn" data-install-addon>Installa Addon</button>
+              <div class="pm-mt10-fb10">
+                <strong class="pm-t86">${tx("addon.custom")}</strong>
+                <div class="pm-flex-g6-mt6">
+                  <input type="text" id="pm-addon-input" placeholder="${tx("addon.ph")}" class="pm-f1-mw0-t84-f5be">
+                  <button type="button" class="pm-player-btn" data-install-addon>${tx("addon.install")}</button>
                 </div>
               </div>
-              <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-                <strong style="font-size: 0.84rem;">Addon e sorgenti attive:</strong>
+              <div class="pm-flex-col-g6-mt8">
+                <strong class="pm-t84">${tx("addon.active")}</strong>
                 ${installedAddons.length ? installedAddons.map((a) => `
-                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-radius: 6px; background: var(--bg-2); font-size: 0.8rem;">
+                  <div class="pm-flex-ac-jsb-bfc5">
                     <span>🧩 ${esc(a.name || a.id)}</span>
                     <span class="muted">${esc(a.version || "")}</span>
                   </div>
                 `).join("") : ""}
                 ${activeRecipes.length ? activeRecipes.map((r) => `
-                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-radius: 6px; background: var(--bg-2); font-size: 0.8rem;">
+                  <div class="pm-flex-ac-jsb-bfc5">
                     <span>📜 ${esc(r.title || r.name || r.id)}</span>
-                    <span class="muted">ricetta</span>
+                    <span class="muted">${tx("recipe")}</span>
                   </div>
                 `).join("") : ""}
-                ${!installedAddons.length && !activeRecipes.length ? `<span class="muted" style="font-size: 0.8rem;">Nessun addon aggiuntivo trovato.</span>` : ""}
+                ${!installedAddons.length && !activeRecipes.length ? `<span class="muted pm-t8">${tx("addon.none")}</span>` : ""}
               </div>
             </div>
 `}
             <div class="pm-settings-section">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong style="font-size: 0.95rem;">Ricette web</strong> ${srcChip("ricette", catalogLine.chip)}
+              <div class="pm-flex-jsb-ac">
+                <strong class="pm-t95">${tx("set.recipes")}</strong> ${srcChip("ricette", catalogLine.chip)}
               </div>
               ${srcStates.ricette?.state === "absent" ? absentMsg("ricette-web") : `
-              <p class="muted pm-catalog-line" style="margin: 0; font-size: 0.82rem;">${esc(catalogLine.text)}</p>
-              <div><button type="button" class="pm-player-btn" data-refresh-catalog ${catalog?.refreshing ? "disabled" : ""}>⟳ Aggiorna catalogo</button></div>`}
+              <p class="muted pm-catalog-line pm-m0-t82">${esc(catalogLine.text)}</p>
+              <div><button type="button" class="pm-player-btn" data-refresh-catalog ${catalog?.refreshing ? "disabled" : ""}>⟳ ${tx("refreshCatalog")}</button></div>`}
             </div>
             <div class="pm-settings-section pm-player-prefs">
-              <strong style="font-size: 0.95rem;">Lettore</strong>
-              <label class="pm-pref-row"><input type="checkbox" data-pref-autonext ${prefs.autonext ? "checked" : ""}> Riproduci automaticamente il prossimo episodio</label>
-              <label class="pm-pref-row"><input type="checkbox" data-pref-skipintro ${prefs.skipIntro ? "checked" : ""}> Mostra il pulsante Salta intro</label>
-              <label class="pm-pref-row">Secondi da saltare <input type="number" class="pm-pref-secs" data-pref-skipsecs min="5" max="600" step="1" value="${esc(prefs.skipSecs)}" ${prefs.skipIntro ? "" : "disabled"}></label>
+              <strong class="pm-t95">${tx("set.player")}</strong>
+              <label class="pm-pref-row"><input type="checkbox" data-pref-autonext ${prefs.autonext ? "checked" : ""}> ${tx("set.autonext")}</label>
+              <label class="pm-pref-row"><input type="checkbox" data-pref-skipintro ${prefs.skipIntro ? "checked" : ""}> ${tx("set.skipintro")}</label>
+              <label class="pm-pref-row">${tx("set.skipsecs")} <input type="number" class="pm-pref-secs" data-pref-skipsecs min="5" max="600" step="1" value="${esc(prefs.skipSecs)}" ${prefs.skipIntro ? "" : "disabled"}></label>
             </div>
             <div class="pm-settings-section">
-              <strong style="font-size: 0.95rem;">Metadati e locandine</strong>
-              <p class="muted" style="margin: 0; font-size: 0.82rem;">Scarica automaticamente locandine ad alta risoluzione, trame, date di rilascio, generi e sfondi cinematografici da TMDb, TVDb e SteamGridDB per tutti i tuoi film e serie TV.</p>
-              <div style="margin-top: 6px;">
+              <strong class="pm-t95">${tx("set.meta")}</strong>
+              <p class="muted pm-m0-t82">${tx("set.metaHint")}</p>
+              <div class="pm-mt6">
                 <button type="button" class="pm-player-btn pm-primary" data-enrich-metadata>
-                  🔍 Arricchisci locandine e trame online
+                  🔍 ${tx("set.enrich")}
                 </button>
               </div>
-              <div class="pm-enrich-status muted" style="margin-top: 8px; font-size: 0.82rem;"></div>
+              <div class="pm-enrich-status muted pm-mt8-t82"></div>
             </div>
         </div>
       </div>
@@ -1434,20 +1442,20 @@ export { attachPlay, play, loadContinueCache };
 export function renderMediaWidgetHtml(item, esc = defaultEsc) {
   if (!item || isSeen(item) || !(resumeOf(item) > 0 || Number(item.resume_pos || item.pos || 0) > 0)) {
     return `
-      <div class="gs-empty-widget" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px 14px; gap: 10px; min-height: 120px;">
-        <div style="font-size: 2rem; color: var(--muted); line-height: 1;">🎬</div>
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <p style="margin: 0; font-size: 0.95rem; font-weight: 500; color: var(--text);">Nessun video in corso di riproduzione</p>
-          <p style="margin: 0; font-size: 0.8rem; color: var(--muted);">Guarda film o serie TV con Media locale</p>
+      <div class="gs-empty-widget pm-flex-col-ac-1d36">
+        <div class="pm-8486">🎬</div>
+        <div class="pm-flex-col-g2">
+          <p class="pm-m0-t95-54b1">${tx("widget.none")}</p>
+          <p class="pm-m0-t8-c416">${tx("widget.hint")}</p>
         </div>
         <button type="button" class="btn primary gs-media-open-btn" style="background: var(--accent); color: var(--bg); border: none; padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; margin-top: 4px;">
-          Apri Media locale
+          ${tx("widget.open")}
         </button>
       </div>
     `.trim();
   }
 
-  const title = item.title || "Contenuto multimediale";
+  const title = item.title || tr("media.item");
   const pos = Number(item.resume_pos ?? item.pos ?? 0);
   const dur = Number(item.duration ?? 0);
   let percent = resumeOf(item);
@@ -1477,34 +1485,34 @@ export function renderMediaWidgetHtml(item, esc = defaultEsc) {
 
   const key = compositeKey ? compositeKey(item) : `${item.source || "locale"}:${item.id ?? ""}`;
   const badge = badgeOf(item);
-  const badgeLabel = badge?.label || item.source_label || item.source || "Locale";
+  const badgeLabel = badgeText(badge) || item.source_label || item.source || tr("src.local");
 
   return `
-    <div class="gs-resume-card" style="display: flex; gap: 14px; align-items: center; width: 100%;">
-      <div class="gs-resume-cover" style="width: 140px; height: 85px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); position: relative; display: flex; align-items: center; justify-content: center;">
-        ${imgUrl ? `<img class="pm-poster-img" src="${esc(imgUrl)}" alt="" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy">` : `<div style="font-size: 2rem; color: var(--muted);">🎬</div>`}
+    <div class="gs-resume-card pm-flex-g14-ac-w100">
+      <div class="gs-resume-cover pm-fs0-ovh-rel-36c9">
+        ${imgUrl ? `<img class="pm-poster-img" src="${esc(imgUrl)}" alt="" style="width: 100%; height: 100%; object-fit: cover; display: block;" loading="lazy">` : `<div class="pm-d733">🎬</div>`}
         <span class="pm-source-badge" style="position: absolute; top: 4px; right: 4px; font-size: 0.7rem; padding: 2px 5px; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); color: var(--text);">${esc(badgeLabel)}</span>
       </div>
-      <div class="gs-resume-info" style="display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;">
-        <div style="min-width: 0;">
+      <div class="gs-resume-info pm-flex-col-g6-a4a1">
+        <div class="pm-mw0">
           <h3 class="gs-resume-title" style="margin: 0; font-size: 1rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(title)}">${esc(title)}</h3>
-          ${subtitle ? `<div class="gs-resume-meta" style="font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(subtitle)}</div>` : ""}
+          ${subtitle ? `<div class="gs-resume-meta pm-t8-ovh-ell-bd4f">${esc(subtitle)}</div>` : ""}
         </div>
-        <div style="display: flex; flex-direction: column; gap: 3px; width: 100%;">
-          <div class="gs-progress-bar" style="height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; width: 100%;">
+        <div class="pm-flex-col-g3-w100">
+          <div class="gs-progress-bar pm-ovh-w100-b380">
             <div style="width: ${percent}%; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.3s ease;"></div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.74rem; color: var(--muted);">
+          <div class="pm-flex-jsb-ac-2308">
             <span>${esc(timeInfo)}</span>
-            <span style="font-variant-numeric: tabular-nums;">${percent}%</span>
+            <span class="pm-a81c">${percent}%</span>
           </div>
         </div>
-        <div style="display: flex; gap: 8px; margin-top: 2px;">
+        <div class="pm-flex-g8-mt2">
           <button type="button" class="btn primary gs-media-play-btn" data-play-key="${esc(key)}" data-play-id="${esc(item.id ?? '')}" style="background: var(--accent); color: var(--bg); border: none; padding: 5px 14px; border-radius: 6px; font-weight: 600; font-size: 0.84rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-            ▶ Riproduci
+            ▶ ${tx("play")}
           </button>
           <button type="button" class="btn gs-media-open-btn" style="background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 5px 10px; border-radius: 6px; font-size: 0.84rem; cursor: pointer;">
-            Apri Media
+            ${tx("openMedia")}
           </button>
         </div>
       </div>
@@ -1519,8 +1527,8 @@ export function createMediaWidgetDef(gsInstance, ctxInstance) {
 
   const widgetDef = {
     id: "media:continue",
-    title: "Continua a guardare (Media)",
-    description: "Ultimo film o serie tv in riproduzione",
+    title: tr("w.continue"),
+    description: tr("w.continue.d"),
     category: "extensions",
     defaultSpan: 2,
     async render(container, context) {
@@ -1528,7 +1536,7 @@ export function createMediaWidgetDef(gsInstance, ctxInstance) {
       const gsRef = context?.gs || gsInstance || (typeof window !== "undefined" ? window.GS : null);
       const esc = (s) => (gsRef?.esc ? gsRef.esc(s) : defaultEsc(s));
 
-      container.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--muted); font-size: 0.85rem;">Caricamento in corso…</div>`;
+      container.innerHTML = `<div class="pm-tc-t85-e289">${tx("loading")}</div>`;
 
       // 1. Lettura cache locale di riproduzione
       let cached = [];
@@ -1608,7 +1616,7 @@ export function createMediaWidgetDef(gsInstance, ctxInstance) {
               play(playItem, gsRef, onDone);
             }
           } else if (typeof gsRef?.toast === "function") {
-            gsRef.toast("Player non pronto");
+            gsRef.toast(tr("player.notReady"));
           }
         });
       }
@@ -1635,37 +1643,37 @@ export function createExtraMediaWidgetDefs(gsInstance) {
       const container = isContainer ? arg1 : null;
       const ctx = isContainer ? arg2 : arg1;
       const c = ctxOf(ctx);
-      const html = safeCall(() => build(c), widgetEmpty("Nessun contenuto disponibile"));
+      const html = safeCall(() => build(c), widgetEmpty(tr("empty.content")));
       if (container) container.innerHTML = html;
       return html;
     },
   });
   return [
-    def("media:spotlight", "In evidenza (Media)", "Titolo in primo piano dalla libreria", 2, ({ esc, known }) => {
+    def("media:spotlight", tr("w.spot"), tr("w.spot.d"), 2, ({ esc, known }) => {
       const it = pickHeroItem(known, []);
-      if (!it) return widgetEmpty("Nessun titolo in evidenza");
+      if (!it) return widgetEmpty(tr("w.spot.empty"));
       const img = safeMediaUrl(it.backdrop || it.poster);
-      const badges = [sourceBadge?.(it.source)?.label || it.source, it.year, it.kind].filter(Boolean)
+      const badges = [badgeText(sourceBadge?.(it.source)) || it.source, it.year, it.kind].filter(Boolean)
         .map((b) => `<span class="pm-source-badge">${esc(b)}</span>`).join("");
       return `<div class="pm-widget-spotlight">${img ? `<img class="pm-poster-img" src="${esc(img)}" alt="" loading="lazy">` : ""}
-        <div class="pm-widget-spotlight-body"><h3>${esc(it.title || "Senza titolo")}</h3><div>${badges}</div>
-        <button type="button" class="btn primary gs-media-play-btn" data-play-key="${esc(compositeKey(it))}" data-play-id="${esc(it.id ?? "")}">▶ Riproduci</button></div></div>`;
+        <div class="pm-widget-spotlight-body"><h3>${esc(it.title || tr("untitled"))}</h3><div>${badges}</div>
+        <button type="button" class="btn primary gs-media-play-btn" data-play-key="${esc(compositeKey(it))}" data-play-id="${esc(it.id ?? "")}">▶ ${tx("play")}</button></div></div>`;
     }),
-    def("media:watchlist", "Watchlist (Media)", "Titoli da guardare", 2, ({ gs, esc }) => {
+    def("media:watchlist", tr("w.wl"), tr("w.wl.d"), 2, ({ gs, esc }) => {
       const list = sortAndFilterWatchlist(safeCall(() => loadWatchlistLocal(gs), []), { status: "all" }).slice(0, 12);
-      return list.length ? widgetLane(list, esc) : widgetEmpty("La Watchlist è vuota");
+      return list.length ? widgetLane(list, esc) : widgetEmpty(tr("w.wl.empty"));
     }),
-    def("media:next_episode", "Prossimo episodio (Media)", "Episodio successivo dell'ultima serie", 1, ({ esc, known }) => {
+    def("media:next_episode", tr("w.next"), tr("w.next.d"), 1, ({ esc, known }) => {
       const last = known.find((it) => it && (it.series || it.kind === "episodio"));
       const eps = last ? Object.values(groupEpisodes(known)[String(last.series || last.show || last.title || "Varie").trim()] || {}).flat() : [];
       const next = last && nextEpisode(eps, last.id);
-      return next ? widgetLane([next], esc) : widgetEmpty("Nessun prossimo episodio");
+      return next ? widgetLane([next], esc) : widgetEmpty(tr("w.next.empty"));
     }),
-    def("media:favorites", "Preferiti (Media)", "I tuoi titoli preferiti", 2, ({ gs, esc, known }) => {
+    def("media:favorites", tr("w.favs"), tr("w.favs.d"), 2, ({ gs, esc, known }) => {
       const favs = loadFavs(gs);
       // shortcut: only favorites present in the continue cache are shown, upgrade if the widget gets a library fetch
       const list = known.filter((it) => it && (favs.has(compositeKey(it)) || favs.has(String(it.id)))).slice(0, 12);
-      return list.length ? widgetLane(list, esc, true) : widgetEmpty("Nessun preferito");
+      return list.length ? widgetLane(list, esc, true) : widgetEmpty(tr("w.favs.empty"));
     }),
   ];
 }
@@ -1719,6 +1727,7 @@ function saveWatchlistLocal(gs, entries) {
 }
 
 export default function (gs, ctx) {
+  if (ctx?.t) { setT(ctx.t, ctx.lang); setPlayerT(ctx.t, ctx.lang); }
   const pluginId = ctx?.id || "media-locale";
   const apiBase = `/plugin-api/${pluginId}`;
   const esc = (s) => (gs?.esc ? gs.esc(s) : defaultEsc(s));
@@ -1727,7 +1736,15 @@ export default function (gs, ctx) {
   try { import("./remote.js").then((m) => m.startRemote?.(gs)).catch(() => {}); } catch { /* telefono non disponibile */ }
 
   const sidebarId = ctx?.id || "media";
-  gs.addSidebarItem({ id: sidebarId, label: "Media", icon: "🎬", view: sidebarId });
+  gs.addSidebarItem({ id: sidebarId, label: tr("nav"), icon: "🎬", view: sidebarId });
+  gs.addTutorial?.({
+    id: pluginId, view: sidebarId,
+    steps: [
+      { title: tr("tut.1.t"), text: tr("tut.1.x"), sel: ".pm-main-tabs" },
+      { title: tr("tut.2.t"), text: tr("tut.2.x"), sel: ".pm-view-mode-tabs" },
+      { title: tr("tut.3.t"), text: tr("tut.3.x"), sel: ".pm-settings-btn" },
+    ],
+  });
   registerMediaWidget(gs, ctx);
   if (typeof gs?.on === "function") {
     gs.on("dashboardReady", () => registerMediaWidget(gs, ctx));
@@ -1736,7 +1753,7 @@ export default function (gs, ctx) {
   if (typeof gs?.addSettingsTab === "function") {
     gs.addSettingsTab({
       id: "media-stream4me",
-      label: "Media & Stream4me",
+      label: tr("set.tab"),
       category: "streaming",
       async render(el) {
         if (!el) return;
@@ -1750,36 +1767,36 @@ export default function (gs, ctx) {
           } catch {}
           el.innerHTML = `
             <div class="pm-settings-section">
-              <strong style="font-size: 0.95rem;">Aggiungi o Gestisci Provider Stream4me</strong>
-              <p class="muted" style="margin: 0; font-size: 0.82rem;">Aggiungi provider personalizzati o rimuovi quelli esistenti da Stream4me.</p>
-              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                <input type="text" id="pm-prov-name" placeholder="Nome provider (es. MioSito)…" style="flex: 1; min-width: 140px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
-                <input type="text" id="pm-prov-host" placeholder="URL Host (es. https://miosito.it)…" style="flex: 1; min-width: 180px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;">
+              <strong class="pm-t95">${tx("prov.manage")}</strong>
+              <p class="muted pm-m0-t82">${tx("prov.manageHint")}</p>
+              <div class="pm-flex-wrap-g6">
+                <input type="text" id="pm-prov-name" placeholder="${tx("prov.namePh")}" class="pm-f1-t84-b179">
+                <input type="text" id="pm-prov-host" placeholder="${tx("prov.hostPh")}" class="pm-f1-t84-8999">
                 <select id="pm-prov-cat" class="pm-source-select">
-                  <option value="movie,tvshow">Film & Serie TV</option>
+                  <option value="movie,tvshow">${tx("prov.cat.both")}</option>
                   <option value="anime">Anime</option>
-                  <option value="movie">Solo Film</option>
-                  <option value="tvshow">Solo Serie TV</option>
-                  <option value="live">Canali Live</option>
+                  <option value="movie">${tx("prov.cat.movie")}</option>
+                  <option value="tvshow">${tx("prov.cat.tv")}</option>
+                  <option value="live">${tx("prov.cat.live")}</option>
                 </select>
-                <button type="button" class="pm-player-btn pm-primary" data-add-provider>＋ Aggiungi Provider</button>
+                <button type="button" class="pm-player-btn pm-primary" data-add-provider>＋ ${tx("prov.add")}</button>
               </div>
               ${inactive.length ? `
-                <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
-                  <select id="pm-prov-enable" class="pm-source-select" style="flex: 1;">
+                <div class="pm-flex-g6-ac-mt4">
+                  <select id="pm-prov-enable" class="pm-source-select pm-f1">
                     ${inactive.map((ip) => `<option value="${esc(ip.id || ip.channel || ip.name)}">${esc(ip.name || ip.title || ip.id)}</option>`).join("")}
                   </select>
-                  <button type="button" class="pm-player-btn" data-enable-provider>Attiva canale Stream4me</button>
+                  <button type="button" class="pm-player-btn" data-enable-provider>${tx("prov.enable")}</button>
                 </div>
               ` : ""}
-              <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 8px;">
+              <div class="pm-flex-col-g5-mt8">
                 ${provs.map((p) => {
                   const pid = p.id || p.channel || p.name || "";
                   const pname = p.name || p.title || pid;
                   return `
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line); font-size: 0.82rem;">
+                    <div class="pm-flex-ac-jsb-5ba9">
                       <span>🧩 <strong>${esc(pname)}</strong> ${p.host ? `<span class="muted">(${esc(p.host)})</span>` : ""}</span>
-                      <button type="button" class="pm-player-btn" data-remove-provider="${esc(pid)}" style="padding: 2px 8px; font-size: 0.74rem;">🗑 Rimuovi</button>
+                      <button type="button" class="pm-player-btn" data-remove-provider="${esc(pid)}" style="padding: 2px 8px; font-size: 0.74rem;">🗑 ${tx("remove")}</button>
                     </div>
                   `;
                 }).join("")}
@@ -1799,7 +1816,7 @@ export default function (gs, ctx) {
                 method: "POST",
                 body: { name, host, categories: cat.split(",").map((s) => s.trim()).filter(Boolean) },
               });
-              gs?.toast?.("Provider aggiunto");
+              gs?.toast?.(tr("prov.added"));
             } catch {}
             await refreshGlobalSettings();
             return;
@@ -1810,7 +1827,7 @@ export default function (gs, ctx) {
             if (!pid) return;
             try {
               await gs.api("/plugin-api/ricette-web/stream4me/providers", { method: "POST", body: { id: pid, enable: true } });
-              gs?.toast?.("Canale Stream4me attivato");
+              gs?.toast?.(tr("prov.enabled"));
             } catch {}
             await refreshGlobalSettings();
             return;
@@ -1821,7 +1838,7 @@ export default function (gs, ctx) {
             if (!pid) return;
             try {
               await gs.api("/plugin-api/ricette-web/stream4me/providers/remove", { method: "POST", body: { id: pid } });
-              gs?.toast?.("Provider rimosso");
+              gs?.toast?.(tr("prov.removed"));
             } catch {}
             await refreshGlobalSettings();
           }
@@ -1844,7 +1861,7 @@ export default function (gs, ctx) {
         play(playItem, gs, onClose);
       }
     } else if (typeof gs?.toast === "function") {
-      gs.toast("Player non pronto");
+      gs.toast(tr("player.notReady"));
     }
   }
 
@@ -1852,7 +1869,7 @@ export default function (gs, ctx) {
   let pmStorageHandler = null;
 
   const viewDef = {
-    title: "Media",
+    title: tr("nav"),
     async render(root) {
       if (!root) return;
       let currentTab = "tutti";
@@ -1919,34 +1936,34 @@ export default function (gs, ctx) {
       toolbar.style.cssText = "display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px;";
       toolbar.innerHTML = `
         <div class="pm-season-tabs pm-main-tabs" role="tablist">
-          <button type="button" role="tab" class="pm-season-tab pm-active" data-tab="tutti">✨ Tutti</button>
-          <button type="button" role="tab" class="pm-season-tab" data-tab="film">🎬 Film</button>
-          <button type="button" role="tab" class="pm-season-tab" data-tab="serie">📺 Serie TV</button>
-          <button type="button" role="tab" class="pm-season-tab" data-tab="anime">🇯🇵 Anime</button>
+          <button type="button" role="tab" class="pm-season-tab pm-active" data-tab="tutti">✨ ${tx("all")}</button>
+          <button type="button" role="tab" class="pm-season-tab" data-tab="film">🎬 ${tx("cat.film")}</button>
+          <button type="button" role="tab" class="pm-season-tab" data-tab="serie">📺 ${tx("cat.serie")}</button>
+          <button type="button" role="tab" class="pm-season-tab" data-tab="anime">🇯🇵 ${tx("cat.anime")}</button>
           <button type="button" role="tab" class="pm-season-tab" data-tab="watchlist">📋 Watchlist</button>
           <button type="button" role="tab" class="pm-season-tab" data-tab="stream4me">🧩 Stream4me</button>
-          <button type="button" role="tab" class="pm-season-tab" data-tab="musica">🎵 Musica</button>
+          <button type="button" role="tab" class="pm-season-tab" data-tab="musica">🎵 ${tx("cat.music")}</button>
         </div>
-        <select class="pm-source-select" aria-label="Filtra sorgente">
-          <option value="all">🌐 Tutte le sorgenti</option>
-          <option value="locale">📁 Solo locale</option>
-          <option value="server">🖥️ Server Jellyfin / Plex</option>
+        <select class="pm-source-select" aria-label="${tx("filter.source")}">
+          <option value="all">🌐 ${tx("filter.all")}</option>
+          <option value="locale">📁 ${tx("filter.local")}</option>
+          <option value="server">🖥️ ${tx("set.server")}</option>
           <option value="web">📡 Web & Stream4me</option>
         </select>
-        <div class="pm-view-mode-tabs" role="group" aria-label="Modalità vista">
-          <button type="button" class="pm-view-mode-btn ${viewMode === 'netflix' ? 'pm-active' : ''}" data-view-mode="netflix" title="Vista Panoramica a Caroselli">🍿 Panoramica</button>
-          <button type="button" class="pm-view-mode-btn ${viewMode === 'grid' ? 'pm-active' : ''}" data-view-mode="grid" title="Vista Locandine">⊞ Locandine</button>
-          <button type="button" class="pm-view-mode-btn ${viewMode === 'list' ? 'pm-active' : ''}" data-view-mode="list" title="Vista Elenco">☰ Elenco</button>
+        <div class="pm-view-mode-tabs" role="group" aria-label="${tx("view.mode")}">
+          <button type="button" class="pm-view-mode-btn ${viewMode === 'netflix' ? 'pm-active' : ''}" data-view-mode="netflix" title="${tx("view.netflix.t")}">🍿 ${tx("view.netflix")}</button>
+          <button type="button" class="pm-view-mode-btn ${viewMode === 'grid' ? 'pm-active' : ''}" data-view-mode="grid" title="${tx("view.grid.t")}">⊞ ${tx("view.grid")}</button>
+          <button type="button" class="pm-view-mode-btn ${viewMode === 'list' ? 'pm-active' : ''}" data-view-mode="list" title="${tx("view.list.t")}">☰ ${tx("view.list")}</button>
         </div>
-        <div style="flex: 1; min-width: 150px;">
-          <input type="search" class="pm-search" placeholder="Cerca film, serie, anime…" style="width: 100%; max-width: 260px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; font-size: 0.84rem;" aria-label="Cerca">
+        <div class="pm-f1-4ad8">
+          <input type="search" class="pm-search pm-w100-t84-aadf" placeholder="${tx("search.ph")}" aria-label="${tx("search")}">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <button type="button" class="pm-season-tab pm-primary" data-open-add-dialog title="Aggiungi cartella locale, Stream4me o flussi">＋ Aggiungi</button>
-          <button type="button" class="pm-season-tab pm-favs-toggle" data-toggle-favs>☆ Solo preferiti</button>
-          <button type="button" class="pm-season-tab" data-quick-enrich title="Scarica metadati e locandine online (TMDb / AniList)">🔍 Scarica locandine</button>
-          ${typeof document !== "undefined" && document.body?.classList.contains("media-window") ? "" : `<button type="button" class="pm-season-tab" data-open-media-window title="Apre Media in una finestra separata: il launcher resta libero (anche per giocare) mentre guardi">⧉ Finestra</button>`}
-          <button type="button" class="pm-season-tab pm-settings-btn" data-open-settings>⚙ Impostazioni Media</button>
+        <div class="pm-flex-g8-ac">
+          <button type="button" class="pm-season-tab pm-primary" data-open-add-dialog title="${tx("add.title")}">＋ ${tx("add")}</button>
+          <button type="button" class="pm-season-tab pm-favs-toggle" data-toggle-favs>☆ ${tx("favs.only")}</button>
+          <button type="button" class="pm-season-tab" data-quick-enrich title="${tx("enrich.q.title")}">🔍 ${tx("enrich.q")}</button>
+          ${typeof document !== "undefined" && document.body?.classList.contains("media-window") ? "" : `<button type="button" class="pm-season-tab" data-open-media-window title="${tx("window.title")}">⧉ ${tx("window")}</button>`}
+          <button type="button" class="pm-season-tab pm-settings-btn" data-open-settings>⚙ ${tx("settings.btn")}</button>
         </div>
       `;
 
@@ -2069,7 +2086,7 @@ export default function (gs, ctx) {
           await gs.api("/plugin-api/media-locale/watchlist", { method: "POST", body: merged });
         } catch (err) {
           // la copia locale c'è, ma sul disco non è arrivata: lo si dice invece di tacere, e verrà rimandata al prossimo avvio
-          gs?.toast?.(`Watchlist: salvataggio non riuscito (${err?.message || "errore"})`, true);
+          gs?.toast?.(tr("wl.saveFail", { err: err?.message || "" }), true);
         }
 
         // If Stream4me item not in library yet, pin it so the user never loses it
@@ -2087,7 +2104,7 @@ export default function (gs, ctx) {
         try {
           await gs.api("/plugin-api/media-locale/watchlist/remove", { method: "POST", body: { item_key: itemKey } });
         } catch (err) {
-          gs?.toast?.(`Watchlist: rimozione non riuscita (${err?.message || "errore"})`, true);
+          gs?.toast?.(tr("wl.removeFail", { err: err?.message || "" }), true);
         }
         // senza il pulsante «Libreria», i titoli Stream4me salvati seguono la watchlist: tolti da una, escono dall'altra
         const pid = gone?.item_id != null ? String(gone.item_id) : "";
@@ -2227,7 +2244,7 @@ export default function (gs, ctx) {
           }));
           if (res?.error) s4mError = String(res.error);
         } catch (err) {
-          s4mError = err?.message || "Errore durante l'esplorazione del provider";
+          s4mError = err?.message || tr("s4m.browseFail");
           s4mBrowsedItems = [];
         } finally {
           s4mLoading = false;
@@ -2258,7 +2275,7 @@ export default function (gs, ctx) {
           s4mSearchMeta = res && res.searched != null ? { searched: res.searched, failed: res.failed || [], pending: res.pending || [] } : null;
         } catch (err) {
           if (seq !== s4mSearchSeq) return;
-          s4mError = err?.message || "Errore ricerca online Stream4me";
+          s4mError = err?.message || tr("s4m.searchFailShort");
         } finally {
           if (seq === s4mSearchSeq) {
             s4mLoading = false;
@@ -2272,15 +2289,15 @@ export default function (gs, ctx) {
       function renderStreamSearchSection() {
         const q = currentQuery;
         if (activeS4mProvider || q.length < 2 || currentTab === "musica" || currentTab === "watchlist" || currentTab === "stream4me") return "";
-        if (s4mSearchQuery !== q) return `<div class="pm-search-status" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>Cerco «${esc(q)}» in tutti i provider Stream4me…</div>`;
-        if (s4mLoading) return `<div class="pm-search-status" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>Cerco «${esc(q)}» in tutti i provider Stream4me…</div>`;
-        if (s4mError) return `<p class="pm-search-status muted">Ricerca su Stream4me non riuscita: ${esc(s4mError)}</p>`;
+        if (s4mSearchQuery !== q) return `<div class="pm-search-status" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>${tx("s4m.searchingQ", { q })}</div>`;
+        if (s4mLoading) return `<div class="pm-search-status" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>${tx("s4m.searchingQ", { q })}</div>`;
+        if (s4mError) return `<p class="pm-search-status muted">${tx("s4m.searchFail", { err: s4mError })}</p>`;
         const lost = s4mSearchMeta ? (s4mSearchMeta.failed.length + s4mSearchMeta.pending.length) : 0;
         const note = s4mSearchMeta
-          ? `<span class="muted"> · ${esc(s4mSearchMeta.searched)} provider${lost ? `, ${esc(lost)} non ${lost === 1 ? "ha" : "hanno"} risposto in tempo` : ""}</span>`
+          ? `<span class="muted"> · ${tx("s4m.queried", { n: s4mSearchMeta.searched })}${lost ? `, ${tx("s4m.late", { n: lost })}` : ""}</span>`
           : "";
-        if (!s4mBrowsedItems.length) return `<p class="pm-search-status muted">Nessun risultato per «${esc(q)}» nei provider Stream4me${note ? ` (${esc(s4mSearchMeta.searched)} interrogati${lost ? `, ${esc(lost)} senza risposta` : ""})` : ""}.</p>`;
-        return `<section class="pm-search-s4me"><h3 class="pm-search-title">🔎 Su Stream4me (${esc(s4mBrowsedItems.length)})${note}</h3>
+        if (!s4mBrowsedItems.length) return `<p class="pm-search-status muted">${tx("s4m.noResults", { q })}${note ? ` (${tx("s4m.queried", { n: s4mSearchMeta.searched })}${lost ? `, ${tx("s4m.noAnswer", { n: lost })}` : ""})` : ""}</p>`;
+        return `<section class="pm-search-s4me"><h3 class="pm-search-title">🔎 ${tx("s4m.on", { n: s4mBrowsedItems.length })}${note}</h3>
           <div class="pm-grid">${s4mBrowsedItems.map((it) => {
             const key = compositeKey ? compositeKey(it) : String(it.id);
             return renderCardHtml(it, favs.has(key) || favs.has(String(it.id)), esc, { pinnedIds, watchlistMap, showPin: true });
@@ -2296,7 +2313,7 @@ export default function (gs, ctx) {
             syncItemsIndex();
             renderContent();
           } else {
-            content.innerHTML = `<p class="muted" style="padding: 32px 0; text-align: center;" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>Caricamento catalogo multimediale…</p>`;
+            content.innerHTML = `<p class="muted pm-tc-75fc" role="status"><span class="pm-loading-spin pm-inline" aria-hidden="true"></span>${tx("loading.catalog")}</p>`;
             animateSpinners(content);
           }
         }
@@ -2378,7 +2395,7 @@ export default function (gs, ctx) {
         catalogStatus = cat.ok ? cat.v : null;
         srcStates = {
           locale: { state: "ok" },
-          server: cfg.ok ? { state: serverConfigured.length ? "ok" : "unknown", text: serverConfigured.length ? "Connessa" : "Non configurato" } : { state: cfg.state },
+          server: cfg.ok ? { state: serverConfigured.length ? "ok" : "unknown", text: tr(serverConfigured.length ? "src.ok" : "src.notConfigured") } : { state: cfg.state },
           ricette: cat.ok ? { state: cat.v?.last_error ? "error" : "ok" } : { state: cat.state },
           kodi: adds.ok ? { state: "ok" } : { state: adds.state },
         };
@@ -2528,7 +2545,7 @@ export default function (gs, ctx) {
         chipsHost.innerHTML = renderSourceChips(sourceChips);
         tabBtns.forEach((b) => b.classList.toggle("pm-active", b.dataset.tab === currentTab));
         favsToggle.classList.toggle("pm-active", filterOnlyFavs);
-        favsToggle.textContent = filterOnlyFavs ? "★ Solo preferiti" : "☆ Solo preferiti";
+        favsToggle.textContent = (filterOnlyFavs ? "★ " : "☆ ") + tr("favs.only");
         sourceSelect.value = currentSource;
 
         if (currentTab === "watchlist") {
@@ -2544,7 +2561,7 @@ export default function (gs, ctx) {
 
         if (currentTab === "stream4me" || currentTab === "web") {
           const pinnedCarousel = !activeS4mProvider && !currentQuery && pinnedItems.length
-            ? renderCarouselHtml("📌 I tuoi titoli Stream4me salvati", pinnedItems, { favs, pinnedIds, watchlistMap }, esc)
+            ? renderCarouselHtml("📌 " + tr("car.pinned"), pinnedItems, { favs, pinnedIds, watchlistMap }, esc)
             : "";
           const browserHtml = renderStream4meBrowserHtml({
             installed: s4mInstalled || installedAddons.some((a) => (a.name || a.id || "").toLowerCase().includes("stream4me")),
@@ -2577,7 +2594,7 @@ export default function (gs, ctx) {
           if (!vis.length) {
             content.innerHTML = `
               ${onlineSearchBanner}
-              <p class="muted" style="padding: 28px 0; text-align: center;">Nessun titolo del catalogo corrisponde ai filtri selezionati.</p>
+              <p class="muted pm-tc-ce59">${tx("empty.filter")}</p>
             `;
             return;
           }
@@ -2586,7 +2603,7 @@ export default function (gs, ctx) {
           } else {
             content.innerHTML = `
               ${onlineSearchBanner}
-              <div class="pm-grid" style="margin-top: 10px;">
+              <div class="pm-grid pm-mt10">
                 ${vis.map((it) => {
                   const key = compositeKey ? compositeKey(it) : String(it.id);
                   const isFav = favs.has(key) || favs.has(String(it.id));
@@ -2623,11 +2640,11 @@ export default function (gs, ctx) {
           content.innerHTML = `
             <div class="pm-grid-view">
               ${heroHtml}
-              ${vis.length ? `<div class="pm-grid" style="margin-top: 14px;">${vis.map((it) => {
+              ${vis.length ? `<div class="pm-grid pm-mt14">${vis.map((it) => {
                 const key = compositeKey ? compositeKey(it) : String(it.id);
                 const isFav = favs.has(key) || favs.has(String(it.id));
                 return renderCardHtml(it, isFav, esc, { pinnedIds, watchlistMap });
-              }).join("")}</div>` : `<p class="muted" style="padding: 40px 0; text-align: center;">Nessun contenuto disponibile.</p>`}
+              }).join("")}</div>` : `<p class="muted pm-tc-c083">${tx("empty.content")}</p>`}
             </div>
           `;
           return;
@@ -2635,14 +2652,14 @@ export default function (gs, ctx) {
 
         // 1. Continua a guardare
         const resumeHtml = continueItems.length
-          ? renderCarouselHtml("🍿 Continua a guardare", continueItems, { type: "resume", favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("🍿 " + tr("car.continue"), continueItems, { type: "resume", favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         // 1b. Watchlist Carousel (Active items: plan_to_watch or watching, sorted by Priority Alta first)
         const activeWatchlist = sortAndFilterWatchlist(watchlistEntries, { status: "active", sortBy: "priority" })
           .filter((e) => e.status === "plan_to_watch" || e.status === "watching");
         const watchlistCarouselHtml = activeWatchlist.length
-          ? renderCarouselHtml("📋 La tua Watchlist (Priorità Alta)", activeWatchlist, { favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("📋 " + tr("car.wl"), activeWatchlist, { favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         // 2. Stream4me (Pinned + eventuali web items)
@@ -2650,13 +2667,13 @@ export default function (gs, ctx) {
           ? pinnedItems
           : vis.filter(isStream4meItem);
         const stream4meHtml = stream4mePool.length
-          ? renderCarouselHtml("🧩 In evidenza da Stream4me", stream4mePool, { favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("🧩 " + tr("car.s4m"), stream4mePool, { favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         // 3. Film
         const filmItems = vis.filter((it) => it.kind === "film" || (!it.series && it.kind !== "episodio" && it.kind !== "brano" && !isAnimeItem(it)));
         const filmHtml = filmItems.length
-          ? renderCarouselHtml("🎬 Film", filmItems, { favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("🎬 " + tr("cat.film"), filmItems, { favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         // 4. Serie TV (non anime)
@@ -2670,7 +2687,7 @@ export default function (gs, ctx) {
           return {
             name,
             ...seriesSummary(eps),
-            label: "Serie TV",
+            label: tr("cat.serie"),
             repItem: eps.find((e) => e.poster) || eps[0],
             allSeen: eps.length > 0 && eps.every(isSeen),
             isFav: favs.has("series:" + name),
@@ -2678,8 +2695,8 @@ export default function (gs, ctx) {
         });
         const tvStandalone = tvAll.filter((it) => !it.series && it.kind === "serie");
         const tvHtml = tvSummaries.length
-          ? renderCarouselHtml("📺 Serie TV", tvSummaries, { type: "series", favs, pinnedIds, watchlistMap }, esc)
-          : (tvStandalone.length ? renderCarouselHtml("📺 Serie TV", tvStandalone, { favs, pinnedIds, watchlistMap }, esc) : "");
+          ? renderCarouselHtml("📺 " + tr("cat.serie"), tvSummaries, { type: "series", favs, pinnedIds, watchlistMap }, esc)
+          : (tvStandalone.length ? renderCarouselHtml("📺 " + tr("cat.serie"), tvStandalone, { favs, pinnedIds, watchlistMap }, esc) : "");
 
         // 5. Anime
         const animeAll = vis.filter((it) => isAnimeItem(it));
@@ -2692,7 +2709,7 @@ export default function (gs, ctx) {
           return {
             name,
             ...seriesSummary(eps),
-            label: "Anime",
+            label: tr("cat.anime"),
             repItem: eps.find((e) => e.poster) || eps[0],
             allSeen: eps.length > 0 && eps.every(isSeen),
             isFav: favs.has("series:" + name),
@@ -2701,13 +2718,13 @@ export default function (gs, ctx) {
         const animeStandalone = animeAll.filter((it) => !it.series && it.kind !== "episodio");
         const animePool = animeSummaries.length ? animeSummaries : animeStandalone;
         const animeHtml = animePool.length
-          ? renderCarouselHtml("🇯🇵 Anime", animePool, { type: animeSummaries.length ? "series" : "card", favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("🇯🇵 " + tr("cat.anime"), animePool, { type: animeSummaries.length ? "series" : "card", favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         // 6. Musica
         const musicItems = vis.filter((it) => it.kind === "brano");
         const musicHtml = musicItems.length
-          ? renderCarouselHtml("🎵 Musica", musicItems, { favs, pinnedIds, watchlistMap }, esc)
+          ? renderCarouselHtml("🎵 " + tr("cat.music"), musicItems, { favs, pinnedIds, watchlistMap }, esc)
           : "";
 
         if (currentTab === "film") {
@@ -2715,7 +2732,7 @@ export default function (gs, ctx) {
             <div class="pm-netflix-home">
               ${heroHtml}
               ${filmHtml}
-              ${filmItems.length ? `<div class="pm-grid" style="margin-top: 14px;">${filmItems.map((it) => renderCardHtml(it, favs.has(compositeKey ? compositeKey(it) : String(it.id)), esc, { pinnedIds, watchlistMap })).join("")}</div>` : ""}
+              ${filmItems.length ? `<div class="pm-grid pm-mt14">${filmItems.map((it) => renderCardHtml(it, favs.has(compositeKey ? compositeKey(it) : String(it.id)), esc, { pinnedIds, watchlistMap })).join("")}</div>` : ""}
             </div>
           `;
         } else if (currentTab === "serie") {
@@ -2736,7 +2753,7 @@ export default function (gs, ctx) {
           content.innerHTML = `
             <div class="pm-netflix-home">
               ${musicHtml}
-              ${musicItems.length ? `<div class="pm-grid" style="margin-top: 14px;">${musicItems.map((it) => renderCardHtml(it, favs.has(compositeKey ? compositeKey(it) : String(it.id)), esc, { pinnedIds, watchlistMap })).join("")}</div>` : ""}
+              ${musicItems.length ? `<div class="pm-grid pm-mt14">${musicItems.map((it) => renderCardHtml(it, favs.has(compositeKey ? compositeKey(it) : String(it.id)), esc, { pinnedIds, watchlistMap })).join("")}</div>` : ""}
             </div>
           `;
         } else {
@@ -2751,7 +2768,7 @@ export default function (gs, ctx) {
               ${tvHtml}
               ${animeHtml}
               ${musicHtml}
-              ${!resumeHtml && !watchlistCarouselHtml && !stream4meHtml && !filmHtml && !tvHtml && !animeHtml && !musicHtml ? `<p class="muted" style="padding: 40px 0; text-align: center;">Nessun contenuto multimediale disponibile. Clicca su ⚙ Impostazioni Media per aggiungere cartelle o configurare server e addon.</p>` : ""}
+              ${!resumeHtml && !watchlistCarouselHtml && !stream4meHtml && !filmHtml && !tvHtml && !animeHtml && !musicHtml ? `<p class="muted pm-tc-c083">${tx("empty.home")}</p>` : ""}
             </div>
           `;
         }
@@ -2771,8 +2788,8 @@ export default function (gs, ctx) {
           const y = Math.min(Number(e.clientY || 120), (window?.innerHeight || 800) - 150);
           ctxMenuHost.innerHTML = `
             <div class="pm-ctx-menu" style="position: fixed; left: ${x}px; top: ${y}px; z-index: 10000;">
-              <button type="button" class="pm-ctx-item" data-open-provider="${esc(pid)}">📂 Apri provider</button>
-              <button type="button" class="pm-ctx-item" data-remove-provider="${esc(pid)}">🗑 Rimuovi provider</button>
+              <button type="button" class="pm-ctx-item" data-open-provider="${esc(pid)}">📂 ${tx("prov.open")}</button>
+              <button type="button" class="pm-ctx-item" data-remove-provider="${esc(pid)}">🗑 ${tx("prov.remove")}</button>
             </div>
           `;
           return;
@@ -2829,13 +2846,13 @@ export default function (gs, ctx) {
             wlImp.content = await new Promise((resolve, reject) => {
               const fr = new FileReader();
               fr.onload = () => resolve(String(fr.result || ""));
-              fr.onerror = () => reject(new Error("Impossibile leggere il file."));
+              fr.onerror = () => reject(new Error(tr("file.readFail")));
               fr.readAsText(f);
             });
             wlImp.filename = f.name;
             wlImp.error = "";
           } catch (err) {
-            wlImp.error = err?.message || "Impossibile leggere il file.";
+            wlImp.error = err?.message || tr("file.readFail");
           }
           renderWlImport();
           return;
@@ -2894,7 +2911,7 @@ export default function (gs, ctx) {
           if (id) {
             try { await gs.api(`${apiBase}/pos`, { method: "POST", body: { id, pos: 0, seen: true } }); } catch {}
           }
-          gs?.toast?.("Rimosso da «Continua a guardare»");
+          gs?.toast?.(tr("continue.removed"));
           renderContent();
           return;
         }
@@ -2909,7 +2926,7 @@ export default function (gs, ctx) {
             pinnedIds.delete(pid);
             pinnedItems = pinnedItems.filter((x) => String(x.id) !== pid);
             syncItemsIndex();
-            gs?.toast?.("Rimosso dalla Libreria");
+            gs?.toast?.(tr("lib.removed"));
             renderContent();
           }
           return;
@@ -2924,7 +2941,7 @@ export default function (gs, ctx) {
             const itemObj = itemsById.get(pid) || { id: pid };
             try { await pinStream4meItem(itemObj, pid); } catch {}
             syncItemsIndex();
-            gs?.toast?.("✓ Aggiunto alla tua Libreria!");
+            gs?.toast?.("✓ " + tr("lib.added"));
             renderContent();
           }
           return;
@@ -3016,10 +3033,10 @@ export default function (gs, ctx) {
           const itemObj = itemsByKey.get(k) || (id ? itemsById.get(id) : null);
           if (watchlistMap.has(k)) {
             await removeWatchlistEntry(k);
-            gs?.toast?.("Rimosso dalla Watchlist");
+            gs?.toast?.(tr("wl.removed"));
           } else {
             await upsertWatchlistEntry(k, { status: "plan_to_watch", priority: "medium" }, itemObj);
-            gs?.toast?.("📋 Aggiunto alla Watchlist!");
+            gs?.toast?.("📋 " + tr("wl.added"));
           }
           if (modalHost.innerHTML && selectedDetailTarget) renderDetail(selectedDetailTarget, selectedDetailSeason);
           renderContent();
@@ -3034,7 +3051,7 @@ export default function (gs, ctx) {
           const prio = wlAddBtn.dataset.wlAddPriority || "medium";
           const itemObj = itemsByKey.get(k) || (typeof selectedDetailTarget === "object" ? selectedDetailTarget : null);
           await upsertWatchlistEntry(k, { status: "plan_to_watch", priority: prio }, itemObj);
-          gs?.toast?.("📋 Aggiunto alla Watchlist!");
+          gs?.toast?.("📋 " + tr("wl.added"));
           if (modalHost.innerHTML && selectedDetailTarget) renderDetail(selectedDetailTarget, selectedDetailSeason);
           renderContent();
           return;
@@ -3049,7 +3066,7 @@ export default function (gs, ctx) {
           const inp = scope.querySelector(`[data-wl-note-input="${CSS?.escape ? CSS.escape(k) : k}"]`) || scope.querySelector("[data-wl-note-input]");
           const notes = inp ? inp.value.trim() : "";
           await upsertWatchlistEntry(k, { notes });
-          gs?.toast?.("Nota salvata ✓");
+          gs?.toast?.(tr("wl.noteSaved") + " ✓");
           if (modalHost.innerHTML && selectedDetailTarget) renderDetail(selectedDetailTarget, selectedDetailSeason);
           renderContent();
           return;
@@ -3061,7 +3078,7 @@ export default function (gs, ctx) {
           e.stopPropagation();
           const k = wlRemoveBtn.dataset.wlRemove;
           await removeWatchlistEntry(k);
-          gs?.toast?.("Rimosso dalla Watchlist");
+          gs?.toast?.(tr("wl.removed"));
           if (modalHost.innerHTML && selectedDetailTarget) renderDetail(selectedDetailTarget, selectedDetailSeason);
           renderContent();
           return;
@@ -3083,7 +3100,7 @@ export default function (gs, ctx) {
           const lk = wlPlayBtn.dataset.wlPlay;
           const linkedItem = itemsByKey.get(lk) || null;
           if (!linkedItem) {
-            gs?.toast?.("Titolo non disponibile: ricarica i cataloghi o riassocia la voce.");
+            gs?.toast?.(tr("wl.unavailable"));
           } else if (linkedItem.series && !isStream4meItem(linkedItem)) {
             await openItemDetail(linkedItem.series, null);
           } else if (linkedItem.series || linkedItem.kind === "episodio") {
@@ -3112,9 +3129,9 @@ export default function (gs, ctx) {
           e.stopPropagation();
           try {
             const n = await autoLinkWatchlist();
-            gs?.toast?.(n ? `🔗 Associate ${n} voci al catalogo` : "Nessuna nuova corrispondenza trovata");
+            gs?.toast?.(n ? "🔗 " + tr("wl.matched", { n }) : tr("wl.noMatch"));
           } catch (err) {
-            gs?.toast?.(`Associazione non salvata: ${err?.message || err}`);
+            gs?.toast?.(tr("wl.matchFail", { err: err?.message || err }));
           }
           renderContent();
           return;
@@ -3132,9 +3149,9 @@ export default function (gs, ctx) {
             a.download = `pozzo-watchlist-${prof}-${new Date().toISOString().slice(0, 10)}.json`;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-            gs?.toast?.("Backup della watchlist scaricato");
+            gs?.toast?.(tr("wl.exported"));
           } catch (err) {
-            gs?.toast?.(`Esportazione non riuscita: ${err?.message || err}`, true);
+            gs?.toast?.(tr("wl.exportFail", { err: err?.message || err }), true);
           }
           return;
         }
@@ -3157,7 +3174,7 @@ export default function (gs, ctx) {
           if (wlImp.provider === "anilist") body.username = wlImp.username;
           else body.content = wlImp.content;
           if (!(body.username || body.content)) {
-            wlImp.error = wlImp.provider === "anilist" ? "Inserisci il nome utente." : "Scegli un file o incolla la lista.";
+            wlImp.error = tr(wlImp.provider === "anilist" ? "wli.needUser" : "wli.needFile");
             renderWlImport();
             return;
           }
@@ -3170,7 +3187,7 @@ export default function (gs, ctx) {
             wlImp.skipped = res?.skipped || 0;
             wlImp.warnings = Array.isArray(res?.warnings) ? res.warnings : [];
             prepareImport();
-            if (!wlImp.raw.length) wlImp.error = "Nessuna voce trovata nell'origine indicata.";
+            if (!wlImp.raw.length) wlImp.error = tr("wli.none");
           } catch (err) {
             wlImp.error = err?.message || String(err);
             wlImp.prepared = null;
@@ -3182,7 +3199,7 @@ export default function (gs, ctx) {
         if (wlImp && e.target.closest("[data-wli-commit]")) {
           e.stopPropagation();
           if (wlImp.provider === "pozzo" && typeof window !== "undefined" && typeof window.confirm === "function"
-            && !window.confirm(`Ripristinare ${wlImp.prepared?.length || 0} voci dal backup? Le voci già presenti vengono aggiornate.`)) return;
+            && !window.confirm(tr("wli.restoreConfirm", { n: wlImp.prepared?.length || 0 }))) return;
           wlImp.busy = "commit"; wlImp.error = "";
           renderWlImport();
           try {
@@ -3193,7 +3210,7 @@ export default function (gs, ctx) {
             await loadWatchlist();
             syncItemsIndex();
             renderContent();
-            gs?.toast?.(`Importazione: ${res?.added ?? 0} aggiunte, ${res?.updated ?? 0} aggiornate, ${res?.skipped ?? 0} saltate`);
+            gs?.toast?.(tr("wli.done", { added: res?.added ?? 0, updated: res?.updated ?? 0, skipped: res?.skipped ?? 0 }));
           } catch (err) {
             wlImp.busy = "";
             wlImp.error = err?.message || String(err);
@@ -3230,10 +3247,10 @@ export default function (gs, ctx) {
               await gs.api("/plugin-api/ricette-web/stream4me/unpin", { method: "POST", body: { id: pid } });
               pinnedIds.delete(pid);
               pinnedItems = pinnedItems.filter((x) => String(x.id) !== pid);
-              gs?.toast?.("Rimosso dalla Libreria");
+              gs?.toast?.(tr("lib.removed"));
             } else {
               await pinStream4meItem(itemObj, pid);
-              gs?.toast?.("✓ Aggiunto alla tua Libreria!");
+              gs?.toast?.("✓ " + tr("lib.added"));
             }
           } catch {
             if (alreadyPinned) {
@@ -3270,7 +3287,7 @@ export default function (gs, ctx) {
           if (!s4mProviders.some((p) => String(p.id || p.name) === String(newProv.id))) {
             s4mProviders.push(newProv);
           }
-          gs?.toast?.("Provider aggiunto!");
+          gs?.toast?.(tr("prov.added"));
           if (showSettings) renderSettings();
           renderContent();
           return;
@@ -3291,7 +3308,7 @@ export default function (gs, ctx) {
             s4mProviders.push(found);
             s4mInactiveProviders = s4mInactiveProviders.filter((p) => String(p.id || p.channel || p.name) !== pid);
           }
-          gs?.toast?.("Canale Stream4me attivato!");
+          gs?.toast?.(tr("prov.enabled"));
           if (showSettings) renderSettings();
           renderContent();
           return;
@@ -3313,7 +3330,7 @@ export default function (gs, ctx) {
             activeS4mPath = "";
             s4mBrowsedItems = [];
           }
-          gs?.toast?.("Provider rimosso");
+          gs?.toast?.(tr("prov.removed"));
           if (showSettings) renderSettings();
           await loadData();
           renderContent();
@@ -3436,7 +3453,7 @@ export default function (gs, ctx) {
             if (window.pywebview?.api?.open_media) await window.pywebview.api.open_media();
             else window.open("/#media-window", "pozzo-media", "popup,width=1280,height=820");
           } catch (err) {
-            gs?.toast?.(`Finestra Media non aperta (${err?.message || "errore"})`, true);
+            gs?.toast?.(tr("window.fail", { err: err?.message || "" }), true);
           }
           return;
         }
@@ -3491,7 +3508,7 @@ export default function (gs, ctx) {
           try {
             catalogStatus = await gs.api("/plugin-api/ricette-web/catalog/refresh", { body: {} });
           } catch (err) {
-            gs?.toast?.(`Aggiornamento non riuscito: ${err?.message || err}`, true);
+            gs?.toast?.(tr("refresh.fail", { err: err?.message || err }), true);
             return;
           }
           renderSettings();
@@ -3505,16 +3522,16 @@ export default function (gs, ctx) {
         if (quickEnrichBtn || enrichMetaBtn) {
           e.stopPropagation();
           const stEl = modalHost.querySelector(".pm-enrich-status");
-          if (stEl) stEl.textContent = "Arricchimento metadati in corso…";
-          gs?.toast?.("Scaricamento locandine e metadati online avviato…");
+          if (stEl) stEl.textContent = tr("enrich.running");
+          gs?.toast?.(tr("enrich.started"));
           try {
             const res = await gs.api(`${apiBase}/enrich`, { method: "POST", body: {} });
-            gs?.toast?.(res?.message || `Metadati aggiornati (${res?.enriched ?? 0} arricchiti)`);
-            if (stEl) stEl.textContent = "Completato ✓";
+            gs?.toast?.(res?.message || tr("enrich.done", { n: res?.enriched ?? 0 }));
+            if (stEl) stEl.textContent = tr("done") + " ✓";
             await loadData();
           } catch (err) {
-            if (stEl) stEl.textContent = "Avviato in background ✓";
-            gs?.toast?.("Arricchimento metadati in esecuzione in background");
+            if (stEl) stEl.textContent = tr("enrich.bg") + " ✓";
+            gs?.toast?.(tr("enrich.bgToast"));
           }
           return;
         }
@@ -3544,10 +3561,10 @@ export default function (gs, ctx) {
             await gs.api(`${apiBase}/roots`, { body: { add: raw } });
             const res = await gs.api(`${apiBase}/scan`, { body: {} });
             roots = Array.isArray(res?.roots) ? res.roots : roots;
-            gs?.toast?.(`Scansione completata (${res?.items ?? 0} contenuti)`);
+            gs?.toast?.(tr("scan.done", { n: res?.items ?? 0 }));
             await loadData();
           } catch (err) {
-            gs?.toast?.(err?.message || "Impossibile aggiungere la cartella", true);
+            gs?.toast?.(err?.message || tr("folder.addFail"), true);
           } finally {
             scanning = false;
             renderSettings();
@@ -3567,7 +3584,7 @@ export default function (gs, ctx) {
             renderSettings();
             await loadData();
           } catch (err) {
-            gs?.toast?.(err?.message || "Impossibile rimuovere la cartella", true);
+            gs?.toast?.(err?.message || tr("folder.removeFail"), true);
           }
           return;
         }
@@ -3582,10 +3599,10 @@ export default function (gs, ctx) {
           try {
             const res = await gs.api(`${apiBase}/scan`, { body: {} });
             roots = Array.isArray(res?.roots) ? res.roots : roots;
-            gs?.toast?.(`Scansione completata (${res?.items ?? 0} contenuti)`);
+            gs?.toast?.(tr("scan.done", { n: res?.items ?? 0 }));
             await loadData();
           } catch (err) {
-            gs?.toast?.(err?.message || "Errore durante la scansione", true);
+            gs?.toast?.(err?.message || tr("scan.fail"), true);
           } finally {
             scanning = false;
             renderSettings();
@@ -3607,12 +3624,12 @@ export default function (gs, ctx) {
               user: modalHost.querySelector("#pm-server-user")?.value, password: modalHost.querySelector("#pm-server-pass")?.value,
             });
             await gs.api("/plugin-api/media-server/config", { body: payload });
-            if (stEl) stEl.textContent = "Salvato ✓";
-            gs?.toast?.("Configurazione server salvata");
+            if (stEl) stEl.textContent = tr("saved") + " ✓";
+            gs?.toast?.(tr("server.saved"));
             await loadData();
           } catch (err) {
-            if (stEl) stEl.textContent = "Errore";
-            gs?.toast?.(err?.message || "Errore salvataggio server", true);
+            if (stEl) stEl.textContent = tr("src.error");
+            gs?.toast?.(err?.message || tr("server.saveFail"), true);
           }
           return;
         }
@@ -3622,14 +3639,14 @@ export default function (gs, ctx) {
         if (testServerBtn) {
           e.stopPropagation();
           const stEl = modalHost.querySelector(".pm-server-status");
-          if (stEl) stEl.textContent = "Verifica…";
+          if (stEl) stEl.textContent = tr("src.unknown");
           try {
             const res = await gs.api(`/plugin-api/media-server/test?source=${encodeURIComponent(modalHost.querySelector("#pm-server-type")?.value || "jellyfin")}`);
-            if (stEl) stEl.textContent = res?.ok ? "Online ✓" : (res?.error || "Non raggiungibile");
-            gs?.toast?.(res?.ok ? "Server connesso con successo" : "Server non raggiungibile", !res?.ok);
+            if (stEl) stEl.textContent = res?.ok ? "Online ✓" : (res?.error || tr("unreachable"));
+            gs?.toast?.(tr(res?.ok ? "server.ok" : "server.down"), !res?.ok);
           } catch (err) {
             if (stEl) stEl.textContent = "Offline ✕";
-            gs?.toast?.(err?.message || "Test connessione fallito", true);
+            gs?.toast?.(err?.message || tr("server.testFail"), true);
           }
           return;
         }
@@ -3639,14 +3656,14 @@ export default function (gs, ctx) {
         if (cleanS4mBtn) {
           e.stopPropagation();
           cleanS4mBtn.disabled = true;
-          gs?.toast?.("Pulizia e aggiornamento librerie in corso…");
+          gs?.toast?.(tr("s4m.cleaning"));
           try {
             const r = await gs.api("/plugin-api/ricette-web/stream4me/cleanup", { method: "POST", body: {} });
-            gs?.toast?.(`Librerie aggiornate: ${r?.removed ?? 0} rimossi, ${r?.refreshed ?? 0} titoli riscansionati`);
+            gs?.toast?.(tr("s4m.cleaned", { removed: r?.removed ?? 0, refreshed: r?.refreshed ?? 0 }));
             await loadData();
             if (showSettings) renderSettings();
           } catch (err) {
-            gs?.toast?.(err?.message || "Pulizia non riuscita", true);
+            gs?.toast?.(err?.message || tr("s4m.cleanFail"), true);
             cleanS4mBtn.disabled = false;
           }
           return;
@@ -3656,7 +3673,7 @@ export default function (gs, ctx) {
         const installS4mBtn = e.target.closest("[data-install-stream4me]");
         if (installS4mBtn) {
           e.stopPropagation();
-          gs?.toast?.("Installazione Stream4me in corso…");
+          gs?.toast?.(tr("s4m.installing"));
           try {
             try {
               await gs.api("/plugin-api/ricette-web/stream4me/install", { method: "POST", body: {} });
@@ -3670,7 +3687,7 @@ export default function (gs, ctx) {
             if (showSettings) renderSettings();
             await loadData();
           } catch (err) {
-            gs?.toast?.(err?.message || "Impossibile installare Stream4me", true);
+            gs?.toast?.(err?.message || tr("s4m.installFail"), true);
           }
           return;
         }
@@ -3685,13 +3702,13 @@ export default function (gs, ctx) {
           try {
             const payload = val.startsWith("http") ? { url: val } : { path: val };
             await gs.api("/plugin-api/ricette-web/kodi_addons", { body: payload });
-            gs?.toast?.("Addon installato con successo");
+            gs?.toast?.(tr("addon.installed"));
             if (inp) inp.value = "";
             await loadAddonsAndRecipes();
             renderSettings();
             await loadData();
           } catch (err) {
-            gs?.toast?.(err?.message || "Impossibile installare addon", true);
+            gs?.toast?.(err?.message || tr("addon.installFail"), true);
           }
           return;
         }
@@ -3714,7 +3731,7 @@ export default function (gs, ctx) {
           return;
         }
 
-        // Clic su "ℹ Altre info" o card generica
+        // Clic su "ℹ ${tx("moreInfo")}" o card generica
         const detailBtn = e.target.closest("[data-detail-key], [data-detail-id], [data-s4me-open]");
         const playBtn = e.target.closest("[data-play-key], [data-play-id]");
 
@@ -3851,7 +3868,7 @@ export default function (gs, ctx) {
             if (id) {
               try { await gs.api(`${apiBase}/pos`, { method: "POST", body: { id, pos: 0, seen: true } }); } catch {}
             }
-            gs?.toast?.("Rimosso da «Continua a guardare»");
+            gs?.toast?.(tr("continue.removed"));
             renderContent();
           } else if (isPinned) {
             e.preventDefault();
@@ -3859,7 +3876,7 @@ export default function (gs, ctx) {
             pinnedIds.delete(String(id));
             pinnedItems = pinnedItems.filter((x) => String(x.id) !== String(id));
             syncItemsIndex();
-            gs?.toast?.("Rimosso dalla Libreria");
+            gs?.toast?.(tr("lib.removed"));
             renderContent();
           }
         } else if (e.key === "f" || e.key === "F") {

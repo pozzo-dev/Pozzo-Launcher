@@ -7,12 +7,12 @@ oppure con `eden --room`; senza --token/--web-api-url resta privata. L'ingresso 
 
 from __future__ import annotations
 
-import atexit
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+from . import onexit
 from .emuadapters import eden as _eden
 from .remote import emusetup
 
@@ -70,7 +70,7 @@ def stop(p: subprocess.Popen | None) -> None:
             p.kill()
 
 
-atexit.register(lambda: [stop(p) for p in list(_rooms)])
+onexit.register(lambda: [stop(p) for p in list(_rooms)])
 
 
 def config_file(exe: str | None) -> Path | None:

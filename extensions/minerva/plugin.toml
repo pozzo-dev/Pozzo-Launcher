@@ -1,14 +1,14 @@
 [plugin]
 name = "Store Minerva + Switch"
-version = "1.6"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "🏛️"
+icon = "⌂"
 screenshot = "screenshot.png"
-description = "Importa con un clic gli archivi Minerva per ogni console e configura store Switch, Switch 2 e PlayStation (NXBrew, Ziperto, superpsx)."
-long_description = "Espande istantaneamente le fonti dello Store Online con un solo clic. Configura automaticamente le directory di minerva-archive.org indicizzate dal progetto r-roms per decine di console retro, insieme a preset pronti per Nintendo Switch (NXBrew, Ziperto), Nintendo Switch 2 (NXBrew) e PlayStation 4/5 (superpsx), senza dover inserire a mano lunghi elenchi di indirizzi."
-how_it_works = "1. Installa l'estensione dallo store.\n2. Nella pagina dell'estensione trovi l'elenco dei preset disponibili suddivisi per piattaforma.\n3. Clicca su «Aggiungi preset Minerva» o «Aggiungi store Switch»: i link verranno configurati nello Store online.\n4. Premi «Leggi» accanto a una console per scaricare l'elenco aggiornato dei giochi disponibili."
-features = ["Archivi Minerva completi per oltre 30 console supportate", "Preset dedicati per Nintendo Switch (NXBrew game-index, Ziperto NSP/XCI) e Switch 2 (NXBrew switch-2-games)", "Riconoscimento automatico del formato dell'indice (cartelle Apache, indici JSON, tabelle)", "Download diretto compatibile con il nuovo Download Manager integrato"]
+description = "Con un clic aggiunge allo Store online gli archivi Minerva di ogni console e gli store preimpostati Switch, Switch 2, PS4 e PS5; poi una scheda per console per leggere i giochi."
+long_description = "«Importa store» aggiunge allo Store online di ogni console le cartelle di minerva-archive.org elencate dal progetto r-roms, più gli store preimpostati per Nintendo Switch (NXBrew, Ziperto), Switch 2 (NXBrew) e PlayStation 4 e 5 (superpsx). Non scarica nulla: ogni console ha la sua scheda con l'icona e il pulsante «Leggi», che scarica l'elenco dei giochi quando ti serve. Gli store che avevi già non vengono toccati."
+how_it_works = "1. Installa l'estensione e apri «Store Minerva» nella barra laterale.\n2. Premi «Importa store».\n3. Premi «Leggi» sulla scheda della console che ti interessa, oppure «Leggi i mai letti».\n4. I giochi compaiono nello Store online della console."
+features = ["Archivi Minerva per decine di console, con un clic", "Store preimpostati per Switch, Switch 2, PS4 e PS5", "Una scheda per console con giochi letti e «Leggi»", "Nessuno store già presente viene modificato"]
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 permissions = ["rete:r-roms.github.io", "impostazioni", "file:lettura"]
 load = "lazy"

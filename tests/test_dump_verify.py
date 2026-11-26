@@ -2,12 +2,11 @@
 
 from concurrent.futures import Future
 from pathlib import Path
-import sqlite3
 from types import SimpleNamespace
 
 from pozzo import scanner
 from pozzo.cache import Cache
-from pozzo.dumpverify import migrate_schema, report
+from pozzo.dumpverify import report
 from pozzo.platforms import get
 from pozzo.scanner import Game
 from pozzo.sources.libretro import Index, Libretro
@@ -93,17 +92,6 @@ def test_name_match_hashes_once_without_rereading_rom(tmp_path, monkeypatch):
     assert libretro.indexes["snes"].verify(game)["status"] == "verificata"
     assert len(calls) == 1, "verifica/identificazione riusano gli hash appena calcolati"
     cache.close()
-
-
-def test_match_by_migration_preserves_existing_library_and_is_idempotent(tmp_path):
-    db = sqlite3.connect(tmp_path / "library.db")
-    db.execute("CREATE TABLE games(id INTEGER PRIMARY KEY, title TEXT)")
-    db.execute("INSERT INTO games(title) VALUES('Gioco esistente')")
-    migrate_schema(db)
-    migrate_schema(db)
-    assert db.execute("SELECT title, match_by FROM games").fetchone() == ("Gioco esistente", "")
-    assert [row[1] for row in db.execute("PRAGMA table_info(games)")].count("match_by") == 1
-    db.close()
 
 
 def test_legacy_name_dat_cache_does_not_skip_file_hash(tmp_path):

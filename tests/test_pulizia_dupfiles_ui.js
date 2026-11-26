@@ -6,12 +6,16 @@ const { pathToFileURL } = require("url");
 
 (async () => {
   const L = await import(pathToFileURL(path.join(__dirname, "..", "extensions", "pulizia", "logica.js")).href);
+  // testi dell'estensione in italiano, come ctx.t
+  const IT = require(path.join(__dirname, "..", "extensions", "pulizia", "locales.json")).it;
+  const t = (k, p) => (IT[k] ?? k).replace(/\{(\w+)\}/g, (m, x) => (p && x in p ? p[x] : m));
 
   assert.strictEqual(L.fmtBytes(0), "0 B");
   assert.strictEqual(L.fmtBytes(512), "512 B");
   assert.strictEqual(L.fmtBytes(1536), "1,5 KB");
   assert.strictEqual(L.fmtBytes(3 * 1024 ** 3), "3,0 GB");
   assert.strictEqual(L.fmtBytes(null), "—");
+  assert.strictEqual(L.fmtBytes(1536, "en"), "1.5 KB");
 
   assert.strictEqual(L.baseName("C:\\Giochi\\a\\Doom.exe"), "Doom.exe");
   assert.strictEqual(L.baseName("/x/y.iso"), "y.iso");
@@ -33,9 +37,9 @@ const { pathToFileURL } = require("url");
   assert.strictEqual(L.linkable(gd, 0), false);
   assert.strictEqual(L.linkable({ ...gd, files: gd.files.slice(1) }, 0), true, "due copie sullo stesso disco, diverso dalla prima");
 
-  const conf = L.confirmText("delete", g, 0);
-  assert.ok(conf.startsWith("Eliminare definitivamente 2 copie:") && conf.includes("E:/c/Doom.iso") && conf.includes("Si tiene:\n  D:/a/Doom.iso"));
-  assert.ok(L.confirmText("hardlink", g, 0).startsWith("Sostituire con collegamenti (hardlink) 2 copie:"));
+  const conf = L.confirmText("delete", g, 0, t);
+  assert.ok(conf.startsWith("Eliminare definitivamente 2 copie?") && conf.includes("E:/c/Doom.iso") && conf.includes("Si tiene:\n  D:/a/Doom.iso"), conf);
+  assert.ok(L.confirmText("hardlink", g, 0, t).startsWith("Sostituire con collegamenti (hardlink) 2 copie?"));
 
   const after = L.afterApply(g, "delete", [{ path: "D:/b/Doom.iso", ok: true }, { path: "E:/c/Doom.iso", ok: false }]);
   assert.deepStrictEqual(after.files.map((x) => x.path), ["D:/a/Doom.iso", "E:/c/Doom.iso"]);

@@ -26,6 +26,7 @@ INDEX = EXT / "index.json"
 SKIP = {"__pycache__", ".pytest_cache"}
 NOT_PUBLISHED = {"index.json", "README.md", "LICENSE"}  # file del repository, non dell'estensione installata
 PREFIX, STORE = "pozzo-ext-", "pozzo-extensions"
+STORE_TEXT = ("name", "description", "long_description", "how_it_works", "features")  # campi della scheda traducibili
 GITATTRIBUTES = "# lo store verifica lo sha256 dei file serviti da GitHub raw: in locale devono essere identici (LF)\n" \
                 "* text=auto eol=lf\n*.png binary\n*.jpg binary\n*.webp binary\n*.woff2 binary\n"
 
@@ -58,6 +59,22 @@ def entry(d: Path, base: str) -> dict:
     for k in ("icon", "screenshot", "long_description", "how_it_works", "features", "permissions", "featured"):
         if k in m:
             out[k] = m[k]
+    # testi della scheda nello store, per lingua (chiavi plugin.* di locales.json): li legge chi non l'ha installata
+    out["i18n"] = {}
+    try:
+        locales = json.loads((d / "locales.json").read_text(encoding="utf-8")) if (d / "locales.json").is_file() else {}
+    except ValueError:
+        locales = {}
+    for lang, strings in sorted(locales.items()):
+        if not isinstance(strings, dict):
+            continue
+        tr = {k: strings[f"plugin.{k}"] for k in STORE_TEXT if isinstance(strings.get(f"plugin.{k}"), str)}
+        if "features" in tr:
+            tr["features"] = [x for x in tr["features"].split("\n") if x.strip()]
+        if tr:
+            out["i18n"][lang] = tr
+    if not out["i18n"]:
+        del out["i18n"]
     return out
 
 

@@ -34,6 +34,7 @@ def build_router(ctx) -> APIRouter:
             r.update(emulator="Port e app", paths=PT.user_files(Path(m["folder"]), m) if m else [],
                      roots=[Path(m["folder"])] if m else [])
         elif g.get("store"):  # gioco PC: percorsi dal manifest di Ludusavi, manuali o rilevati dalla partita
+            g = lib.game(g["id"])  # install_dir non sta in memoria
             r.update(emulator=g["store"], roots=[Path(g["install_dir"])] if g.get("install_dir") else [])
             man = LM.load(cfg)
             sid = g["key"].split(":", 1)[-1]

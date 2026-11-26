@@ -31,13 +31,13 @@ export function stale(games, years, now = Date.now() / 1000) {
     .sort((a, b) => a.grp.last - b.grp.last);
 }
 
-/** Che dati mancano: copertina, anno, genere, trovato dalle fonti. */
+/** Che dati mancano (codici, i testi li scrive l'interfaccia): found, cover, year, genre. */
 export function missing(g) {
   const out = [];
-  if (!g.found) out.push("non trovato");
-  if (!g.cover) out.push("copertina");
-  if (!g.year) out.push("anno");
-  if (!g.genres) out.push("genere");
+  if (!g.found) out.push("found");
+  if (!g.cover) out.push("cover");
+  if (!g.year) out.push("year");
+  if (!g.genres) out.push("genre");
   return out;
 }
 
@@ -45,13 +45,13 @@ export function incomplete(games) {
   return owned(games).map((g) => [g, missing(g)]).filter(([, m]) => m.length).map(([g, m]) => ({ g, m }));
 }
 
-/** Byte leggibili, con la virgola come in italiano: 1536 -> "1,5 KB". */
-export function fmtBytes(n) {
+/** Byte leggibili nella lingua dell'interfaccia: 1536 -> "1,5 KB" (it), "1.5 KB" (en). */
+export function fmtBytes(n, lang = "it") {
   if (n == null || isNaN(n)) return "—";
   const u = ["B", "KB", "MB", "GB", "TB"];
   let v = +n, i = 0;
   while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-  return i === 0 ? `${v} B` : `${v.toFixed(1).replace(".", ",")} ${u[i]}`;
+  return i === 0 ? `${v} B` : `${v.toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${u[i]}`;
 }
 
 /** Nome del file da un percorso (con / o \). */
@@ -77,13 +77,12 @@ export function linkable(group, keep = group.keep) {
   return f.every((_, j) => j === keep || (sameVol(j) && sameVol(keep)));
 }
 
-/** Testo del confirm() per l'azione ("hardlink" | "delete") sulle copie diverse da `keep`. */
-export function confirmText(action, group, keep = group.keep) {
+/** Testo del confirm() per l'azione ("hardlink" | "delete") sulle copie diverse da `keep`; t = testi dell'estensione. */
+export function confirmText(action, group, keep, t) {
   const others = group.files.filter((_, j) => j !== keep).map((f) => `  • ${f.path}`);
-  const tieni = `Si tiene:\n  ${group.files[keep].path}`;
-  if (action === "delete")
-    return [`Eliminare definitivamente ${others.length} ${others.length === 1 ? "copia" : "copie"}:`, ...others, tieni, "Non si puo' annullare."].join("\n");
-  return [`Sostituire con collegamenti (hardlink) ${others.length} ${others.length === 1 ? "copia" : "copie"}:`, ...others, tieni].join("\n");
+  const tieni = `${t("confirm.keep")}\n  ${group.files[keep].path}`;
+  if (action === "delete") return [t("confirm.delete", { n: others.length }), ...others, tieni, t("confirm.undo")].join("\n");
+  return [t("confirm.link", { n: others.length }), ...others, tieni].join("\n");
 }
 
 /** Gruppo dopo `dup-apply`: `results` = [{path, ok}]. Ritorna il gruppo aggiornato, o null se ne restano meno di due. */

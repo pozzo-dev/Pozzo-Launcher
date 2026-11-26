@@ -157,21 +157,21 @@ def test_library_and_api(tmp: Path):
         "    def ciao():\n"
         "        return {'ciao': gs.id, 'eventi': EVENTS}\n"
         "    gs.on('game_stopped', lambda d: EVENTS.append(d.get('title')))\n", encoding="utf-8")
-    # Statistiche non e' piu' inclusa: installata come farebbe lo store
+    # un'estensione vera, installata come farebbe lo store
     import shutil
-    shutil.copytree(Path(__file__).resolve().parent.parent / "extensions" / "statistiche", tmp / "plugins" / "statistiche")
+    shutil.copytree(Path(__file__).resolve().parent.parent / "extensions" / "riepilogo-annuale", tmp / "plugins" / "riepilogo-annuale")
     app = create_app(cfg)
     with TestClient(app) as c:
         ext = c.get("/api/extensions").json()
         assert {"default", "oled", "chiaro", "retro", "notte-blu"} <= {t["id"] for t in ext["themes"]}
         ids = {p["id"]: p for p in ext["plugins"]}
-        assert "prova" in ids and "statistiche" in ids and ids["prova"]["enabled"]
+        assert "prova" in ids and "riepilogo-annuale" in ids and ids["prova"]["enabled"]
         assert ext["plugins"][0]["id"] == "estensioni" and ext["plugins"][0]["locked"]  # lo store per primo
         assert c.get("/plugins/prova/frontend.js").status_code == 200
         assert c.get("/themes/oled/theme.css").status_code == 200
         assert c.get("/themes/oled/../../server.py").status_code == 404  # niente uscita dalla cartella del tema
         assert c.get("/plugin-api/prova/ciao").json()["ciao"] == "prova"
-        assert "per_piattaforma" in c.get("/plugin-api/statistiche/riepilogo").json()
+        assert "per_mese" in c.get("/plugin-api/riepilogo-annuale/anno").json()
         assert c.get("/api/extensions").json()["active_theme"] == "default"
         assert c.get("/api/extensions").json()["active_experience"] == "catalog"
         experiences = {x["id"]: x for x in ext["experiences"]}

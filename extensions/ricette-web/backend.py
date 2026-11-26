@@ -49,6 +49,17 @@ import soupsieve as sv
 from bs4 import BeautifulSoup
 from fastapi import Body, HTTPException, Request, Response
 
+_T = None  # gs.t dopo register(): testi nella lingua dell'interfaccia
+
+
+def tr(key: str, **p) -> str:
+    """Testo da locales.json; prima di register() (funzioni usate da sole, test) in italiano."""
+    if _T:
+        return _T(key, **p)
+    it = json.loads((Path(__file__).parent / "locales.json").read_text("utf-8")).get("it", {})
+    return it.get(key, key).format(**p)
+
+
 UA = "PozzoLauncher/1.0"
 TTL = 30 * 60  # 30 minuti di cache predefinita
 _SEARCH_WORKERS = 10           # provider interrogati insieme nella ricerca generale
@@ -137,7 +148,7 @@ def _check_forbidden(obj: object, path: str = "") -> None:
         for k, v in obj.items():
             k_lower = str(k).lower()
             if any(w in k_lower for w in FORBIDDEN_WORDS):
-                raise ValueError(f"Campo vietato: '{k}' (nessun codice eseguibile consentito)")
+                raise ValueError(tr("rv.forbidden", k=k))
             _check_forbidden(v, f"{path}.{k}" if path else str(k))
     elif isinstance(obj, list):
         for idx, item in enumerate(obj):
@@ -150,71 +161,71 @@ def parse_recipe(toml_text: str) -> dict:
     Solleva ValueError su campi ignoti, campi obbligatori mancanti o presenza di codice eseguibile.
     """
     if not isinstance(toml_text, str) or not toml_text.strip():
-        raise ValueError("Ricetta vuota o non valida")
+        raise ValueError(tr("rv.empty"))
     try:
         data = tomllib.loads(toml_text)
     except Exception as e:
-        raise ValueError(f"Errore di sintassi TOML: {e}") from e
+        raise ValueError(tr("rv.toml", err=e)) from e
 
     _check_forbidden(data)
 
     # Campi top-level
     for k in data:
         if k not in ALLOWED_TOP_KEYS:
-            raise ValueError(f"Campo ignoto: '{k}'")
+            raise ValueError(tr("rv.unknown", k=k))
     for k in REQUIRED_TOP_KEYS:
         if k not in data or not str(data[k]).strip():
-            raise ValueError(f"Campo obbligatorio mancante: '{k}'")
+            raise ValueError(tr("rv.required", k=k))
 
     if data["type"] not in ("html", "json", "rss"):
-        raise ValueError(f"Tipo sorgente non valido: '{data['type']}', attesi: html, json, rss")
+        raise ValueError(tr("rv.type", type=data['type']))
 
     if not re.match(r"^https?://[^\s]+$", str(data["start_url"]).strip()):
-        raise ValueError(f"start_url non valido: '{data['start_url']}'")
+        raise ValueError(tr("rv.starturl", url=data['start_url']))
 
     # Sezione [list]
     lst = data.get("list")
     if not isinstance(lst, dict):
-        raise ValueError("Sezione [list] mancante o non valida")
+        raise ValueError(tr("rv.section", sec="[list]"))
     for k in lst:
         if k not in ALLOWED_LIST_KEYS:
-            raise ValueError(f"Campo ignoto in [list]: '{k}'")
+            raise ValueError(tr("rv.unknownIn", sec="[list]", k=k))
     for k in REQUIRED_LIST_KEYS:
         if k not in lst or not str(lst[k]).strip():
-            raise ValueError(f"Campo obbligatorio mancante in [list]: '{k}'")
+            raise ValueError(tr("rv.requiredIn", sec="[list]", k=k))
 
     # Sezione [detail]
     det = data.get("detail")
     if not isinstance(det, dict):
-        raise ValueError("Sezione [detail] mancante o non valida")
+        raise ValueError(tr("rv.section", sec="[detail]"))
     for k in det:
         if k not in ALLOWED_DETAIL_KEYS:
-            raise ValueError(f"Campo ignoto in [detail]: '{k}'")
+            raise ValueError(tr("rv.unknownIn", sec="[detail]", k=k))
     for k in REQUIRED_DETAIL_KEYS:
         if k not in det or not str(det[k]).strip():
-            raise ValueError(f"Campo obbligatorio mancante in [detail]: '{k}'")
+            raise ValueError(tr("rv.requiredIn", sec="[detail]", k=k))
 
     # Sezione [episodes]
     if "episodes" in data:
         ep = data["episodes"]
         if not isinstance(ep, dict):
-            raise ValueError("Sezione [episodes] non valida")
+            raise ValueError(tr("rv.section", sec="[episodes]"))
         for k in ep:
             if k not in ALLOWED_EPISODES_KEYS:
-                raise ValueError(f"Campo ignoto in [episodes]: '{k}'")
+                raise ValueError(tr("rv.unknownIn", sec="[episodes]", k=k))
 
     # Sezione [pagination]
     if "pagination" in data:
         pg = data["pagination"]
         if not isinstance(pg, dict):
-            raise ValueError("Sezione [pagination] non valida")
+            raise ValueError(tr("rv.section", sec="[pagination]"))
         for k in pg:
             if k not in ALLOWED_PAGINATION_KEYS:
-                raise ValueError(f"Campo ignoto in [pagination]: '{k}'")
+                raise ValueError(tr("rv.unknownIn", sec="[pagination]", k=k))
         if "increment" in pg and not isinstance(pg["increment"], int):
-            raise ValueError("pagination.increment deve essere un intero")
+            raise ValueError(tr("rv.int", k="pagination.increment"))
         if "limit" in pg and not isinstance(pg["limit"], int):
-            raise ValueError("pagination.limit deve essere un intero")
+            raise ValueError(tr("rv.int", k="pagination.limit"))
 
     if not data.get("id"):
         data["id"] = re.sub(r"[^a-z0-9]+", "-", data["name"].lower()).strip("-")
@@ -727,7 +738,7 @@ def fetch_url(url: str, recipe: dict, cache_dir: Path, ttl: int = TTL,
     host = parsed.netloc.lower().split(":")[0]
     allowed_host = recipe.get("host", "").lower().split(":")[0]
     if host != allowed_host and not host.endswith("." + allowed_host):
-        raise ValueError(f"Host '{host}' non consentito dalla ricetta '{recipe.get('name')}' (atteso: {allowed_host})")
+        raise ValueError(tr("err.host", host=host, recipe=recipe.get('name'), allowed=allowed_host))
 
     url_hash = hashlib.sha1(url.encode()).hexdigest()[:16]
     meta_p = cache_dir / f"{url_hash}.json"
@@ -753,7 +764,7 @@ def fetch_url(url: str, recipe: dict, cache_dir: Path, ttl: int = TTL,
             log(f"ricette-web: robots.txt nega l'accesso a {url}")
             if body:
                 return body, meta
-            raise PermissionError(f"robots.txt vieta l'accesso a {url}")
+            raise PermissionError(tr("err.robots", url=url))
 
         _wait_rate_limit(allowed_host)
         headers = {"User-Agent": UA}
@@ -966,6 +977,8 @@ def load_recipes(ext_dir: Path | None = None) -> list[dict]:
 
 # ---------------------------------------------------------------- registrazione estensione
 def register(gs) -> None:
+    global _T
+    _T = getattr(gs, "t", None)
     try:
         from pozzo.app.extensions import user_dir
         cache = user_dir(gs.cfg, "ricette-web-cache")
@@ -989,8 +1002,8 @@ def register(gs) -> None:
 
     # Registra player integrato ed esterno
     try:
-        gs.add_player({"id": "integrato", "label": "Lettore integrato", "mode": "integrato"})
-        gs.add_player({"id": "esterno", "label": "Lettore esterno", "mode": "esterno"})
+        gs.add_player({"id": "integrato", "label": tr("player.builtin"), "mode": "integrato"})
+        gs.add_player({"id": "esterno", "label": tr("player.external"), "mode": "esterno"})
     except Exception:
         pass
 
@@ -1139,7 +1152,7 @@ def register(gs) -> None:
     def media_detail(id: str = "", request: Request = None):
         item_id = str(id or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -1155,7 +1168,7 @@ def register(gs) -> None:
                 ep = conn.execute("SELECT * FROM episodes WHERE id=?", (item_id,)).fetchone()
                 if ep is not None:
                     return to_item(ep, prog)
-                raise HTTPException(404, "elemento non trovato")
+                raise HTTPException(404, tr("err.notFound"))
 
             item = dict(row)
             item_id = str(item["id"])
@@ -1384,7 +1397,7 @@ def register(gs) -> None:
     def media_play_target(id: str = "", request: Request = None):
         item_id = str(id or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -1394,7 +1407,7 @@ def register(gs) -> None:
                 stream4me_sections()
                 row, table = find_row(conn, item_id)
             if row is None:
-                raise HTTPException(404, "elemento non trovato")
+                raise HTTPException(404, tr("err.notFound"))
 
             stream_url = (row["stream_url"] or "").strip()
             bridge = kodi_bridge_module()
@@ -1414,7 +1427,7 @@ def register(gs) -> None:
             if stream_url and bridge and hasattr(bridge, "_is_ad") and bridge._is_ad(stream_url):
                 stream_url = ""
             if not stream_url:
-                raise HTTPException(404, "flusso non disponibile")
+                raise HTTPException(404, tr("err.noStream"))
 
             pos = round(load_progress(conn, profile_id(request)).get(str(row["id"]), (0.0, 0))[0], 1)
             if is_vix(stream_url) and ("m3u8" in stream_url.lower() or "/playlist/" in stream_url):
@@ -1429,14 +1442,14 @@ def register(gs) -> None:
         data = body if isinstance(body, dict) else {}
         item_id = str(data.get("id") or id or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         try:
             row, table = find_row(conn, item_id)
             if row is None:
-                raise HTTPException(404, "elemento non trovato")
+                raise HTTPException(404, tr("err.notFound"))
             url = str(row["stream_url"] or row["url"] or "").strip()
             if (is_vix(url) or not url) and row["url"]:
                 url = resolve_stream(row, table, conn) or url  # token VixCloud fresco, mai quello salvato
@@ -1444,7 +1457,7 @@ def register(gs) -> None:
             conn.close()
 
         if not url.lower().startswith(("http://", "https://")):
-            raise HTTPException(400, "flusso non valido")
+            raise HTTPException(400, tr("err.badStream"))
 
         player = shutil.which("mpv") or shutil.which("vlc")
         if player:
@@ -1469,17 +1482,17 @@ def register(gs) -> None:
         target = urllib.parse.unquote(u or "").strip()
         host = _host(target)
         if not target.startswith(("http://", "https://")) or not (host in _PROXY_HOSTS or is_vix(target)):
-            raise HTTPException(403, "host non ammesso")
+            raise HTTPException(403, tr("err.hostDenied"))
         try:  # shortcut: controlla solo gli IP scritti per esteso, non la risoluzione DNS; da rafforzare se il proxy esce dal PC
             if ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback:
-                raise HTTPException(403, "host non ammesso")
+                raise HTTPException(403, tr("err.hostDenied"))
         except ValueError:
             pass
         headers = vix_headers(target)
         try:
             r = httpx.get(target, headers=headers, timeout=20.0, follow_redirects=True)
         except httpx.HTTPError as e:
-            raise HTTPException(502, f"VixCloud non raggiungibile: {e}")
+            raise HTTPException(502, tr("err.vixDown", err=e))
         if r.status_code >= 400:
             gs.log(f"ricette-web: VixCloud ha risposto {r.status_code} per {host}")
             raise HTTPException(r.status_code, f"VixCloud: {r.status_code}")
@@ -1496,7 +1509,7 @@ def register(gs) -> None:
         data = body if isinstance(body, dict) else {}
         item_id = str(data.get("id") or id or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
 
         position = float(data.get("pos", pos) or 0.0)
         flag = data.get("seen", seen)
@@ -1511,7 +1524,7 @@ def register(gs) -> None:
                 row = conn.execute("SELECT * FROM episodes WHERE id=?", (item_id,)).fetchone()
                 table = "episodes"
             if row is None:
-                raise HTTPException(404, "elemento non trovato")
+                raise HTTPException(404, tr("err.notFound"))
 
             pid = profile_id(request)
             prog = load_progress(conn, pid)
@@ -1555,12 +1568,12 @@ def register(gs) -> None:
     def kodi_addons_save(body: dict = Body(...)):
         bridge = kodi_bridge_module()
         if bridge is None:
-            raise HTTPException(503, "kodi_bridge.py non disponibile")
+            raise HTTPException(503, tr("err.noBridge"))
 
         if body.get("remove"):
             addon_id = str(body["remove"]).strip()
             if not re.fullmatch(r"[A-Za-z0-9._-]+", addon_id):
-                raise HTTPException(400, "id addon non valido")
+                raise HTTPException(400, tr("err.addonId"))
             shutil.rmtree(addons_root / addon_id, ignore_errors=True)  # solo addon dentro kodi-addons/
             conn = sqlite3.connect(db_path)
             try:
@@ -1572,14 +1585,14 @@ def register(gs) -> None:
 
         source = str(body.get("url") or body.get("path") or "").strip()
         if not source:
-            raise HTTPException(400, "serve 'url' o 'path'")
+            raise HTTPException(400, tr("err.urlOrPath"))
         try:
             addon = bridge.install_kodi_addon(source, addons_root)
         except Exception as e:
-            raise HTTPException(400, f"installazione addon fallita: {e}")
+            raise HTTPException(400, tr("err.addonInstall", err=e))
         addon_id = str(addon.get("id") or "")
         if not addon_id:
-            raise HTTPException(400, "addon.xml senza id")
+            raise HTTPException(400, tr("err.addonNoId"))
 
         count = 0
         conn = sqlite3.connect(db_path)
@@ -1610,7 +1623,7 @@ def register(gs) -> None:
     def stream4me_install(body: dict | None = Body(None)):
         bridge = kodi_bridge_module()
         if bridge is None:
-            raise HTTPException(503, "kodi_bridge.py non disponibile")
+            raise HTTPException(503, tr("err.noBridge"))
         data = body if isinstance(body, dict) else {}
         force = bool(data.get("force", False))
         s4me_dir = _find_s4me_dir(bridge)
@@ -1625,7 +1638,7 @@ def register(gs) -> None:
         try:
             res = bridge.install_kodi_addon(source, addons_root)
         except Exception as e:
-            raise HTTPException(400, f"installazione Stream4me fallita: {e}")
+            raise HTTPException(400, tr("err.s4mInstall", err=e))
         if hasattr(bridge, "_clear_stream4me_caches"):
             bridge._clear_stream4me_caches()
         s4me_dir = Path(res["path"]) if res and res.get("path") else _find_s4me_dir(bridge)
@@ -1747,7 +1760,7 @@ def register(gs) -> None:
         name = str(data.get("name") or "").strip()
         host = str(data.get("host") or data.get("url") or "").strip().rstrip("/")
         if not name or not re.match(r"^https?://", host, re.I):
-            raise HTTPException(400, "name e host (http/https) obbligatori")
+            raise HTTPException(400, tr("err.nameHost"))
         prov_id = re.sub(r"[^a-z0-9_-]+", "-", str(data.get("id") or name).lower()).strip("-") or "custom"
         raw_cats = data.get("categories")
         if isinstance(raw_cats, str):
@@ -1832,7 +1845,7 @@ def register(gs) -> None:
         data = body if isinstance(body, dict) else {}
         prov_id = str(data.get("id") or "").strip()
         if not prov_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
         cfg_data = _load_prov_cfg()
         if prov_id not in cfg_data["disabled"]:
             cfg_data["disabled"].append(prov_id)
@@ -1983,14 +1996,14 @@ def register(gs) -> None:
     def stream4me_pin(body: dict = Body(...)):
         raw = body.get("item") if isinstance(body, dict) and isinstance(body.get("item"), dict) else body
         if not isinstance(raw, dict):
-            raise HTTPException(400, "item non valido")
+            raise HTTPException(400, tr("err.badItem"))
         title = str(raw.get("title") or "").strip()
         url = str(raw.get("url") or raw.get("stream_url") or "").strip()
         item_id = str(raw.get("id") or "").strip()
         if not item_id and (url or title):
             item_id = "s4me:pin:" + hashlib.sha1(f"{url}:{title}".encode("utf-8")).hexdigest()[:12]
         if not item_id or not title:
-            raise HTTPException(400, "id e title obbligatori")
+            raise HTTPException(400, tr("err.idTitle"))
         kind = str(raw.get("kind") or "film")
         if kind not in KINDS:
             kind = "film"
@@ -2079,7 +2092,7 @@ def register(gs) -> None:
     def stream4me_unpin(body: dict = Body(...)):
         item_id = str((body or {}).get("id") or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
         conn = sqlite3.connect(db_path)
         try:
             conn.execute("DELETE FROM items WHERE id=? AND recipe_id='stream4me:pinned'", (item_id,))
@@ -2201,21 +2214,21 @@ def register(gs) -> None:
         t0 = time.time()
         err = None
         try:
-            refresh_state["progress"] = "Catalogo ricette"
+            refresh_state["progress"] = tr("pr.recipes")
             sync_catalog()
             bridge = kodi_bridge_module()
             s4me_dir = _find_s4me_dir(bridge)
             can_browse = bridge is not None and hasattr(bridge, "browse_stream4me_channel")
             ok_tags: list[str] = []
             if bridge is not None and hasattr(bridge, "get_stream4me_sections"):
-                refresh_state["progress"] = "Sezioni Stream4me"
+                refresh_state["progress"] = tr("pr.sections")
                 sec_map = bridge.get_stream4me_sections(s4me_dir if (s4me_dir and s4me_dir.is_dir()) else None, force=True)
                 _store_sections(sec_map)
             if can_browse:
                 custom = _load_prov_cfg().get("custom") or []
                 providers, _ = _build_providers_state(bridge, s4me_dir)
                 for i, p in enumerate(providers, 1):
-                    refresh_state["progress"] = f"Provider {i}/{len(providers)}: {p.get('id')}"
+                    refresh_state["progress"] = tr("pr.provider", i=i, n=len(providers), id=p.get('id'))
                     try:
                         found = bridge.browse_stream4me_channel(s4me_dir, p["id"], timeout=8.0, custom_providers=custom).get("items") or []
                     except Exception as e:
@@ -2236,7 +2249,7 @@ def register(gs) -> None:
                 finally:
                     conn.close()
             elif can_browse:
-                err = "nessun titolo Stream4me ricevuto: catalogo precedente mantenuto"
+                err = tr("pr.empty")
         except Exception as e:
             err = str(e) or e.__class__.__name__
             gs.log(f"ricette-web: refresh catalogo fallito: {e}")
@@ -2251,7 +2264,7 @@ def register(gs) -> None:
         with refresh_lock:
             th = None
             if not refresh_state["refreshing"]:
-                refresh_state.update(refreshing=True, progress="Avvio")
+                refresh_state.update(refreshing=True, progress=tr("pr.start"))
                 th = threading.Thread(target=_do_refresh, daemon=True, name="ricette-refresh")
                 th.start()
         if wait and th is not None:

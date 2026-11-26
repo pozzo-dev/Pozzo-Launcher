@@ -10,6 +10,7 @@ from pathlib import Path
 DIR = Path(__file__).parent / "data" / "locales"
 SOURCE = "it"
 current: ContextVar[str] = ContextVar("lang", default=SOURCE)  # lingua della richiesta in corso (cookie gs_lang)
+last = SOURCE  # lingua dell'ultima richiesta: la usano i lavori in background, che una richiesta non ce l'hanno
 
 
 def languages() -> list[str]:

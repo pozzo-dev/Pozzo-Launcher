@@ -210,29 +210,6 @@ def _media_url(path: str | None) -> str | None:
     return f"{MEDIA_URL}/{path.lstrip('/')}"
 
 
-def console_ids(c: RAClient | None = None, active_only: bool = False, games_only: bool = False) -> list[dict]:
-    """Elenco delle console supportate da RetroAchievements (`API_GetConsoleIDs.php`)."""
-    rc = _resolve_client(c)
-    params = {}
-    if active_only:
-        params["a"] = 1
-    if games_only:
-        params["g"] = 1
-    raw = rc.get_json("API_GetConsoleIDs.php", params)
-    out = []
-    for item in (raw if isinstance(raw, list) else []):
-        if not isinstance(item, dict):
-            continue
-        out.append({
-            "id": int(item.get("ID") or item.get("id") or 0),
-            "name": str(item.get("Name") or item.get("name") or ""),
-            "icon_url": item.get("IconURL") or item.get("iconUrl"),
-            "active": bool(item.get("Active", item.get("active", True))),
-            "is_game_system": bool(item.get("IsGameSystem", item.get("isGameSystem", True))),
-        })
-    return out
-
-
 def user_progress(c: RAClient | None = None, username: str | None = None,
                   count: int = 500, offset: int = 0) -> list[dict]:
     """Progresso di completamento dell'utente su tutti i giochi giocati (`API_GetUserCompletionProgress.php`)."""

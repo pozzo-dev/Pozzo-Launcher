@@ -297,7 +297,7 @@ Un amico entra nella tua partita da casa sua: il suo telefono fa da **secondo co
    fuori casa e incolla il suo **indirizzo pubblico**: un tunnel Cloudflare (`cloudflared tunnel --url
    https://localhost:8766`), ngrok o Tailscale Funnel. Lasciandolo vuoto l'invito vale solo sulla rete di casa.
 2. Premi **Crea invito per un amico** e mandagli il **link** e il **codice di 6 cifre**. L'invito dura 10 minuti, vale
-   una volta e per un ospite solo; per farlo entrare di nuovo serve un invito nuovo.
+   una volta e per un ospite solo; l'accesso dell'ospite scade dopo 12 ore, per farlo entrare di nuovo serve un invito nuovo.
 3. L'amico apre il link, scrive il codice e il suo nome, e si ritrova il controller già aperto: il suo telefono è il
    controller del **giocatore 2** (o del primo posto libero).
 4. **Video**: l'amico installa [Moonlight](https://moonlight-stream.org), aggiunge il PC all'indirizzo che gli dai (da

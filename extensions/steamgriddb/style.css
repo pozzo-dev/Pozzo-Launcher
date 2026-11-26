@@ -1,0 +1,5 @@
+/* SteamGridDB: scheda delle impostazioni */
+.sg-form { gap: var(--space-2); margin: var(--space-2) 0; }
+.sg-form input { width: 320px; max-width: 100%; }
+.sg-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.sg-link:hover, .sg-link:focus-visible { text-decoration: underline; }

@@ -1,14 +1,14 @@
 [plugin]
 name = "Pulizia libreria"
-version = "1.1"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "🧹"
+icon = "⌫"
 screenshot = "screenshot.png"
-description = "Individua giochi duplicati, titoli mai avviati o dimenticati da anni e metadati mancanti, con azioni rapide di massa e badge «DUP»."
-long_description = "Mantieni la tua collezione ordinata e impeccabile. Questa estensione scansiona l'intero archivio per rilevare file doppi (stesso gioco su cartelle diverse), giochi aggiunti a mano con eseguibili identici, titoli abbandonati da più di un anno e copertine o descrizioni mancanti. Consente di nascondere o ripulire centinaia di elementi con un solo clic."
-how_it_works = "1. Installa l'estensione e clicca su «Pulizia libreria» nella barra laterale sinistra.\n2. Scegli la scheda da analizzare: Duplicati, Mai avviati, Fermi da anni o Dati incompleti.\n3. Sulle copertine dei giochi doppi compare l'etichetta «DUP».\n4. Seleziona più giochi ed esegui azioni di massa: Nascondi, Segna come abbandonato, Sposta nel backlog o Rimuovi doppioni manuali."
-features = ["Rilevamento intelligente di eseguibili e parametri duplicati", "Filtri veloci per giochi mai avviati o inattivi da oltre 365 giorni", "Azioni cumulative su selezioni multiple", "Badge visivo «DUP» integrato direttamente nella griglia della libreria"]
+description = "Quanto c'è da sistemare in un colpo d'occhio: doppioni, giochi mai avviati o fermi da anni, dati mancanti e file identici su disco, con azioni su più giochi insieme."
+long_description = "In cima trovi un riquadro per ogni problema con il numero di giochi coinvolti. Aprine uno: le copertine si selezionano con un clic e le azioni (nascondi, abbandonato, da giocare) valgono per tutti i selezionati. I doppioni hanno il badge «DUP» anche nella libreria. «File identici» cerca copie dello stesso file in cartelle diverse e ti dice quanto spazio liberi, collegandole o eliminandole."
+how_it_works = "1. Installa l'estensione e apri «Pulizia» nella barra laterale.\n2. Scegli un riquadro: Doppioni, Mai avviati, Fermi da anni, Dati mancanti o File identici.\n3. Seleziona le copertine e scegli un'azione in alto.\n4. Per i file identici scegli la copia da tenere, poi collega o elimina le altre."
+features = ["Riquadri con quanto c'è da sistemare", "Copertine da selezionare e azioni su più giochi insieme", "Badge «DUP» sui doppioni nella libreria", "File identici su disco: spazio liberabile, collegamento o eliminazione"]
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 permissions = ["libreria:lettura", "libreria:scrittura", "file:lettura", "file:scrittura"]
 load = "lazy"

@@ -152,6 +152,21 @@ def test_uninstall_ppsspp_tiene_memstick(tmp_path, monkeypatch):
     assert sav.is_file() and not (d / "ppsspp.exe").exists()
 
 
+@pytest.mark.parametrize("emu, rel", [("flycast", "data/G_vmu_save_A1.bin"), ("flycast", "emu.cfg"),
+                                      ("cemu", "mlc01/usr/save/00050000/x/a.bin"), ("vita3k", "ux0/user/00/savedata/P/a"),
+                                      ("xenia", "content/x/a.bin"), ("retroarch", "retroarch.cfg"),
+                                      ("retroarch", "playlists/a.lpl")])
+@win_only
+def test_uninstall_tiene_i_dati_di_ogni_emulatore(tmp_path, monkeypatch, emu, rel):
+    EI, cfg, _ = _installed(tmp_path, monkeypatch)
+    d = _fake_install(EI, cfg, tmp_path, emu)
+    sav = d / rel
+    sav.parent.mkdir(parents=True, exist_ok=True)
+    sav.write_text("s")
+    EI.uninstall(cfg, emu, keep_data=True)
+    assert sav.is_file() and not (d / f"{emu}.exe").exists()
+
+
 @win_only
 def test_uninstall_appdata_condivisa(tmp_path, monkeypatch):
     EI, cfg, _ = _installed(tmp_path, monkeypatch)
@@ -190,16 +205,6 @@ def test_uninstall_tutto(tmp_path, monkeypatch):
     assert "duckstation" not in cfg.emulators and not EI.installed(cfg).get("duckstation")
     with pytest.raises(RuntimeError):
         EI.uninstall(cfg, "duckstation")
-
-
-@win_only
-def test_make_portable(tmp_path, monkeypatch):
-    EI, cfg, exe = _installed(tmp_path, monkeypatch)
-    monkeypatch.setenv("APPDATA", str(tmp_path / "ad"))
-    mark = EI.make_portable(cfg, "duckstation")
-    assert mark == exe.parent / "portable.txt" and mark.is_file()
-    with pytest.raises(ValueError):
-        EI.make_portable(cfg, "retroarch")
 
 
 @win_only

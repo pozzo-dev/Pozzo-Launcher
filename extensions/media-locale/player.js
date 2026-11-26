@@ -4,6 +4,12 @@ export const CONTINUE_KEY = "gs.pm_continue_watching";
 export const AUDIO_PREF_KEY = "gs.pm_audio_lang";
 export const HANDOFF_KEY = "gs.pm_handoff"; // passaggio dell'episodio in corso alla finestra Media separata
 
+// testi: ctx.t arriva da frontend.js con setPlayerT; prima (test, import) restano le chiavi
+let tr = (k) => k;
+let lang = "it";
+export const setPlayerT = (fn, l) => { tr = fn; if (l) lang = l; };
+const tx = (k, p) => String(tr(k, p)).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 const HANDOFF_FIELDS = ["id", "source", "kind", "title", "series", "season", "episode", "year", "poster", "provider",
   "seen", "resume_pos", "duration", "episode_count", "season_count"];
 const slimItem = (e) => {
@@ -52,15 +58,15 @@ export function episodeLabel(ep) {
 export function renderEpisodesPanel(list, cur, season, esc) {
   const seasons = [...new Set(list.map(seasonOf))].sort((a, b) => a - b);
   const tabs = seasons.length > 1
-    ? `<div class="pm-eps-tabs" role="tablist">${seasons.map((n) => `<button type="button" role="tab" data-season="${n}" class="${n === season ? "pm-on" : ""}">Stagione ${n}</button>`).join("")}</div>`
+    ? `<div class="pm-eps-tabs" role="tablist">${seasons.map((n) => `<button type="button" role="tab" data-season="${n}" class="${n === season ? "pm-on" : ""}">${tx("season.n", { n })}</button>`).join("")}</div>`
     : "";
   const rows = list.map((ep, i) => ({ ep, i })).filter(({ ep }) => seasonOf(ep) === season).map(({ ep, i }) => `
     <li><button type="button" class="pm-eps-item${i === cur ? " pm-cur" : ""}${isSeen(ep) ? " pm-seen" : ""}" data-i="${i}" ${i === cur ? 'aria-current="true"' : ""}>
       <span class="pm-eps-num">${ep.episode != null ? esc(ep.episode) : "·"}</span>
-      <span class="pm-eps-body"><b>${esc(ep.title || `Episodio ${ep.episode ?? i + 1}`)}</b>${ep.overview ? `<small>${esc(ep.overview)}</small>` : ""}</span>
+      <span class="pm-eps-body"><b>${esc(ep.title || tr("ep.n", { n: ep.episode ?? i + 1 }))}</b>${ep.overview ? `<small>${esc(ep.overview)}</small>` : ""}</span>
       <span class="pm-eps-mark" aria-hidden="true">${i === cur ? "▶" : (isSeen(ep) ? "✓" : "")}</span>
     </button></li>`).join("");
-  return `<div class="pm-eps-head"><strong>Episodi</strong><button type="button" class="pm-ctl-btn" data-eps-close aria-label="Chiudi elenco episodi">✕</button></div>${tabs}<ul class="pm-eps-list">${rows}</ul>`;
+  return `<div class="pm-eps-head"><strong>${tx("p.episodes")}</strong><button type="button" class="pm-ctl-btn" data-eps-close aria-label="${tx("p.closeEps")}">✕</button></div>${tabs}<ul class="pm-eps-list">${rows}</ul>`;
 }
 
 /** «1:05 / 42:10»; la durata ancora ignota (HLS in caricamento) resta «0:00». */
@@ -68,12 +74,18 @@ export function clockText(cur, dur) {
   return `${formatDuration(Math.max(0, Math.floor(cur || 0)))} / ${formatDuration(Number.isFinite(dur) && dur > 0 ? Math.floor(dur) : 0)}`;
 }
 
-const LANG_NAMES = { it: "Italiano", en: "Inglese", ja: "Giapponese", jp: "Giapponese", es: "Spagnolo", fr: "Francese", de: "Tedesco", pt: "Portoghese", ko: "Coreano", zh: "Cinese" };
+// nome della lingua nella lingua dell'interfaccia («jp» non è un codice ISO ma lo usano alcuni flussi)
+function langName(code) {
+  try {
+    const n = new Intl.DisplayNames([lang], { type: "language", fallback: "none" }).of(code === "jp" ? "ja" : code);
+    return n ? n[0].toLocaleUpperCase(lang) + n.slice(1) : "";
+  } catch { return ""; }
+}
 
 /** Etichetta leggibile di una traccia audio HLS ({name, lang}). */
 export function audioTrackLabel(t, i = 0) {
   const code = String(t?.lang || "").toLowerCase().split("-")[0];
-  return LANG_NAMES[code] || t?.name || (code ? code.toUpperCase() : `Traccia ${i + 1}`);
+  return (code && langName(code)) || t?.name || (code ? code.toUpperCase() : tr("p.track", { n: i + 1 }));
 }
 
 /** Indice della traccia con la lingua preferita; -1 se non c'è (si lascia la scelta del lettore). */
@@ -258,37 +270,37 @@ function loadHls() {
   return _hlsLoading;
 }
 
-const CONTROLS_HTML = `
+const controlsHtml = () => `
   <div class="pm-ctl" id="pm-ctl">
-    <input type="range" class="pm-ctl-seek" id="pm-seek" min="0" max="1000" value="0" step="1" aria-label="Posizione">
+    <input type="range" class="pm-ctl-seek" id="pm-seek" min="0" max="1000" value="0" step="1" aria-label="${tx("p.position")}">
     <div class="pm-ctl-row">
-      <button type="button" class="pm-ctl-btn" id="pm-c-prev" aria-label="Episodio precedente" title="Episodio precedente (P)" hidden>⏮</button>
-      <button type="button" class="pm-ctl-btn" id="pm-c-play" aria-label="Riproduci" title="Riproduci / pausa (spazio)">▶</button>
-      <button type="button" class="pm-ctl-btn" id="pm-c-next" aria-label="Episodio successivo" title="Episodio successivo (N)" hidden>⏭</button>
-      <button type="button" class="pm-ctl-btn" id="pm-c-back" aria-label="Indietro di 10 secondi" title="-10 s (←)">⟲</button>
-      <button type="button" class="pm-ctl-btn" id="pm-c-fwd" aria-label="Avanti di 10 secondi" title="+10 s (→)">⟳</button>
-      <button type="button" class="pm-ctl-btn" id="pm-c-mute" aria-label="Volume" title="Muto (M)">🔊</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-prev" aria-label="${tx("p.prev")}" title="${tx("p.prev")} (P)" hidden>⏮</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-play" aria-label="${tx("play")}" title="${tx("p.playPause")}">▶</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-next" aria-label="${tx("p.next")}" title="${tx("p.next")} (N)" hidden>⏭</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-back" aria-label="${tx("p.back10")}" title="-10 s (←)">⟲</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-fwd" aria-label="${tx("p.fwd10")}" title="+10 s (→)">⟳</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-mute" aria-label="Volume" title="${tx("p.mute")} (M)">🔊</button>
       <input type="range" class="pm-ctl-vol" id="pm-vol" min="0" max="100" value="100" aria-label="Volume">
       <span class="pm-ctl-time" id="pm-time">0:00 / 0:00</span>
       <span class="pm-ctl-spacer"></span>
-      <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-skip" aria-label="Salta intro" title="Salta intro (I)" hidden>⏭ Salta intro</button>
-      <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-eps" aria-label="Tutti gli episodi" title="Tutti gli episodi (E)" hidden>☰ Episodi</button>
+      <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-skip" aria-label="${tx("p.skipIntro")}" title="${tx("p.skipIntro")} (I)" hidden>⏭ ${tx("p.skipIntro")}</button>
+      <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-eps" aria-label="${tx("p.allEps")}" title="${tx("p.allEps")} (E)" hidden>☰ ${tx("p.episodes")}</button>
       <div class="pm-ctl-menuwrap" id="pm-sub-wrap" hidden>
-        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-sub" aria-haspopup="menu" aria-label="Sottotitoli" title="Sottotitoli">CC</button>
+        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-sub" aria-haspopup="menu" aria-label="${tx("p.subs")}" title="${tx("p.subs")}">CC</button>
         <div class="pm-ctl-menu" role="menu" hidden></div>
       </div>
       <div class="pm-ctl-menuwrap" id="pm-audio-wrap" hidden>
-        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-audio" aria-haspopup="menu" aria-label="Lingua audio" title="Lingua audio">🌐 Audio</button>
+        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-audio" aria-haspopup="menu" aria-label="${tx("p.audio")}" title="${tx("p.audio")}">🌐 Audio</button>
         <div class="pm-ctl-menu" role="menu" hidden></div>
       </div>
       <div class="pm-ctl-menuwrap" id="pm-speed-wrap">
-        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-speed" aria-haspopup="menu" aria-label="Velocità" title="Velocità">1×</button>
+        <button type="button" class="pm-ctl-btn pm-ctl-text" id="pm-c-speed" aria-haspopup="menu" aria-label="${tx("p.speed")}" title="${tx("p.speed")}">1×</button>
         <div class="pm-ctl-menu" role="menu" hidden></div>
       </div>
-      <button type="button" class="pm-ctl-btn" id="pm-c-fs" aria-label="Schermo intero" title="Schermo intero (F)">⛶</button>
+      <button type="button" class="pm-ctl-btn" id="pm-c-fs" aria-label="${tx("p.fs")}" title="${tx("p.fs")} (F)">⛶</button>
     </div>
   </div>
-  <aside class="pm-eps" id="pm-eps" aria-label="Episodi" hidden></aside>`;
+  <aside class="pm-eps" id="pm-eps" aria-label="${tx("p.episodes")}" hidden></aside>`;
 
 /** Tenta di aprire il file o l'url nel lettore esterno. */
 export async function openExternal(gs, item, target, apiPrefix = "/plugin-api/media-locale") {
@@ -305,7 +317,7 @@ export async function openExternal(gs, item, target, apiPrefix = "/plugin-api/me
     }
     await gs.api(`${apiPrefix}/external`, { body: { id: item?.id } });
   } catch (err) {
-    gs?.toast?.(err?.message || "Impossibile aprire su internet", true);
+    gs?.toast?.(err?.message || tr("p.openWebFail"), true);
   }
 }
 
@@ -316,12 +328,12 @@ function showLoadingOverlay(doc, item, gs) {
   const el = doc.createElement("div");
   el.className = "pm-player-overlay pm-loading";
   el.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
-  const label = item.series ? `${item.series} — ${item.title || ""}` : (item.title || "Riproduzione");
+  const label = item.series ? `${item.series} — ${item.title || ""}` : (item.title || tr("p.playback"));
   el.innerHTML = `<div class="pm-loading-box" role="status" aria-live="polite">
     <div class="pm-loading-spin" aria-hidden="true"></div>
     <div class="pm-loading-title">${esc(label)}</div>
-    <div class="pm-loading-sub">Apertura in corso…</div>
-    <button type="button" class="pm-player-btn" data-loading-cancel>Annulla</button>
+    <div class="pm-loading-sub">${tx("p.opening")}</div>
+    <button type="button" class="pm-player-btn" data-loading-cancel>${tx("cancel")}</button>
   </div>`;
   const state = {
     cancelled: false,
@@ -348,7 +360,7 @@ export function animateSpinners(root) {
 
 export async function play(gs, item, onClose, opts = {}) {
   if (!hasValidId(item)) {
-    gs?.toast?.("Elemento non valido", true);
+    gs?.toast?.(tr("p.badItem"), true);
     return null;
   }
 
@@ -373,14 +385,14 @@ export async function play(gs, item, onClose, opts = {}) {
     target = await gs.api(`${apiPrefix}/play_target?id=${encodeURIComponent(item.id)}${srcQuery}`);
   } catch (err) {
     loading?.remove();
-    if (!loading?.cancelled) gs?.toast?.(err?.message || "Errore nel caricamento del file", true);
+    if (!loading?.cancelled) gs?.toast?.(err?.message || tr("p.loadFail"), true);
     return null;
   }
   if (loading?.cancelled) return null; // l'utente ha annullato mentre si risolveva il flusso
   loading?.remove();
 
   if (!target) {
-    gs?.toast?.("Sorgente non trovata", true);
+    gs?.toast?.(tr("p.noSource"), true);
     return null;
   }
 
@@ -459,7 +471,7 @@ function setupControls(overlay, video, esc, toggleFullscreen, eps = { list: [], 
   }
 
   const setSpeed = (v) => { video.playbackRate = v; $("#pm-c-speed").textContent = `${v}×`; };
-  fillMenu(speedWrap, SPEEDS.map((v) => ({ value: v, label: v === 1 ? "Normale" : `${v}×` })), 1, setSpeed);
+  fillMenu(speedWrap, SPEEDS.map((v) => ({ value: v, label: v === 1 ? tr("p.normal") : `${v}×` })), 1, setSpeed);
 
   const toggle = () => { if (video.paused) video.play().catch(() => {}); else video.pause(); };
   const jump = (d) => { video.currentTime = seekTarget(video.currentTime, d, video.duration); };
@@ -485,8 +497,8 @@ function setupControls(overlay, video, esc, toggleFullscreen, eps = { list: [], 
   $("#pm-c-fs").addEventListener("click", () => toggleFullscreen());
   seek.addEventListener("input", () => { scrubbing = true; if (video.duration > 0) video.currentTime = (Number(seek.value) / 1000) * video.duration; });
   seek.addEventListener("change", () => { scrubbing = false; });
-  video.addEventListener("play", () => { playBtn.textContent = "⏸"; playBtn.setAttribute("aria-label", "Pausa"); wake(); });
-  video.addEventListener("pause", () => { playBtn.textContent = "▶"; playBtn.setAttribute("aria-label", "Riproduci"); box.classList.remove("pm-idle"); });
+  video.addEventListener("play", () => { playBtn.textContent = "⏸"; playBtn.setAttribute("aria-label", tr("p.pause")); wake(); });
+  video.addEventListener("pause", () => { playBtn.textContent = "▶"; playBtn.setAttribute("aria-label", tr("play")); box.classList.remove("pm-idle"); });
   video.addEventListener("timeupdate", syncTime);
   video.addEventListener("durationchange", syncTime);
   video.addEventListener("volumechange", syncVol);
@@ -501,7 +513,7 @@ function setupControls(overlay, video, esc, toggleFullscreen, eps = { list: [], 
     },
     /** Sottotitoli: voce «Disattivati» (-1) più le tracce; compare solo se ce n'è almeno una. */
     setSubs(tracks, cur, onPick) {
-      const items = [{ value: -1, label: "Disattivati" }, ...tracks.map((t, i) => ({ value: i, label: audioTrackLabel(t, i) }))];
+      const items = [{ value: -1, label: tr("p.off") }, ...tracks.map((t, i) => ({ value: i, label: audioTrackLabel(t, i) }))];
       fillMenu(subWrap, items, cur, onPick);
       subWrap.hidden = false;
     },
@@ -537,14 +549,14 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
   const doc = document;
   const esc = gs?.esc || ((s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])));
 
-  let titleText = item.title || "Riproduzione";
+  let titleText = item.title || tr("p.playback");
   if (item.series) {
     const s = item.season != null ? `S${item.season}` : "";
     const e = item.episode != null ? `E${item.episode}` : "";
     const ep = (s || e) ? ` — ${s}${e}` : "";
     titleText = `${item.series}${ep}: ${item.title || ""}`;
   } else if (item.album) {
-    titleText = `${item.title || "Brano"} — ${item.album}`;
+    titleText = `${item.title || tr("p.track1")} — ${item.album}`;
   }
 
   const overlay = doc.createElement("div");
@@ -642,7 +654,7 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
     const fsBtn = overlay.querySelector("#pm-c-fs");
     if (fsBtn) {
       fsBtn.innerHTML = isFullscreen ? "🗗" : "⛶";
-      fsBtn.title = isFullscreen ? "Esci da schermo intero (F)" : "Schermo intero (F)";
+      fsBtn.title = (isFullscreen ? tr("p.fsExit") : tr("p.fs")) + " (F)";
     }
   }
 
@@ -714,7 +726,7 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
       if (w.pywebview?.api?.open_media) await w.pywebview.api.open_media();
       else w.open("/#media-window", "pozzo-media", "popup,width=1280,height=820");
     } catch (err) {
-      gs?.toast?.(`Finestra Media non aperta (${err?.message || "errore"})`, true);
+      gs?.toast?.(tr("window.fail", { err: err?.message || "" }), true);
     }
   }
 
@@ -743,9 +755,9 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
     nextCard = doc.createElement("div");
     nextCard.className = "pm-nextup";
     nextCard.setAttribute?.("role", "status");
-    nextCard.innerHTML = `<div class="pm-nextup-title">Prossimo episodio tra <b data-nu-secs>${secs}</b> s</div>
+    nextCard.innerHTML = `<div class="pm-nextup-title">${tx("p.nextIn", { secs: "§" }).replace("§", `<b data-nu-secs>${secs}</b>`)}</div>
       <div class="pm-nextup-ep">${esc(episodeLabel(target))} · ${esc(target.title || "")}</div>
-      <div class="pm-nextup-btns"><button type="button" class="pm-player-btn pm-primary" data-nu-now>Riproduci ora</button><button type="button" class="pm-player-btn" data-nu-cancel>Annulla</button></div>`;
+      <div class="pm-nextup-btns"><button type="button" class="pm-player-btn pm-primary" data-nu-now>${tx("p.playNow")}</button><button type="button" class="pm-player-btn" data-nu-cancel>${tx("cancel")}</button></div>`;
     nextCard.querySelector("[data-nu-now]")?.addEventListener("click", () => switchEpisode(target));
     nextCard.querySelector("[data-nu-cancel]")?.addEventListener("click", cancelNext);
     (overlay.querySelector(".pm-player") || overlay).appendChild(nextCard);
@@ -802,7 +814,7 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
       if (typeof MediaMetadata === "function") {
         const poster = String(item.poster || "");
         ms.metadata = new MediaMetadata({
-          title: item.title || "", artist: item.series || "", album: item.series ? `Stagione ${item.season ?? 1}` : (item.album || ""),
+          title: item.title || "", artist: item.series || "", album: item.series ? tr("season.n", { n: item.season ?? 1 }) : (item.album || ""),
           artwork: /^https?:\/\//i.test(poster) || /^\/(?!\/)/.test(poster) ? [{ src: poster }] : [],
         });
       }
@@ -875,16 +887,16 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
   if (!browserPlayable) {
     overlay.innerHTML = `
       <div class="pm-player-modal" style="width:100%;max-width:640px;background:var(--panel,#18181b);border:1px solid var(--line,#27272a);border-radius:12px;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 40px rgba(0,0,0,0.6);">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line,#27272a);padding-bottom:10px;">
+        <div class="pm-flex-ac-jsb-4095">
           <h3 class="pm-title" style="margin:0;font-size:1.05rem;font-weight:600;">${esc(titleText)}</h3>
-          <button type="button" class="pm-player-btn" id="pm-close-x" aria-label="Chiudi" style="padding:4px 8px;font-size:1rem;line-height:1;">✕</button>
+          <button type="button" class="pm-player-btn" id="pm-close-x" aria-label="${tx("close")}" style="padding:4px 8px;font-size:1rem;line-height:1;">✕</button>
         </div>
         <div class="pm-player-fallback">
-          <p class="pm-player-fallback-text">Questo formato non può essere riprodotto direttamente nel browser.</p>
-          <button type="button" class="pm-player-external" id="pm-open-ext" title="Apre il flusso fuori dal launcher: nel lettore del sistema (mpv, VLC) o nel browser">🌐 Apri su internet</button>
+          <p class="pm-player-fallback-text">${tx("p.unsupported")}</p>
+          <button type="button" class="pm-player-external" id="pm-open-ext" title="${tx("p.openWeb.title")}">🌐 ${tx("p.openWeb")}</button>
         </div>
         <div class="pm-player-actions" style="justify-content:flex-end;">
-          <button type="button" class="pm-player-btn" id="pm-close-btn">Chiudi</button>
+          <button type="button" class="pm-player-btn" id="pm-close-btn">${tx("close")}</button>
         </div>
       </div>
     `;
@@ -909,20 +921,20 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
     <div class="pm-player-modal" style="width:100%;max-width:960px;background:var(--panel,#18181b);border:1px solid var(--line,#27272a);border-radius:12px;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 40px rgba(0,0,0,0.6);">
       <div class="pm-player-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line,#27272a);padding-bottom:8px;">
         <h3 class="pm-title" style="margin:0;font-size:1.05rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(titleText)}</h3>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="pm-player-btn" id="pm-close-x" aria-label="Chiudi" style="padding:4px 8px;font-size:1rem;line-height:1;">✕</button>
+        <div class="pm-flex-ac-g8">
+          <button type="button" class="pm-player-btn" id="pm-close-x" aria-label="${tx("close")}" style="padding:4px 8px;font-size:1rem;line-height:1;">✕</button>
         </div>
       </div>
       <div class="pm-player" style="${isAudio ? 'aspect-ratio:auto;padding:28px 16px;display:flex;align-items:center;justify-content:center;background:var(--bg-2,#111);' : ''}">
         <${mediaTag} class="pm-player-video" ${isAudio ? "controls" : ""} autoplay playsinline style="${isAudio ? 'width:100%;max-width:600px;height:54px;' : ''}"></${mediaTag}>
-        ${isAudio ? "" : CONTROLS_HTML}
+        ${isAudio ? "" : controlsHtml()}
       </div>
       <div class="pm-player-actions">
         <div class="pm-player-actions-left">
-          ${typeof document !== "undefined" && document.body?.classList.contains("media-window") ? "" : `<button type="button" class="pm-player-external" id="pm-open-window" title="Continua questo episodio in una finestra separata: il launcher resta libero (anche per giocare)">⧉ Apri in una nuova finestra</button>`}
-          <button type="button" class="pm-player-external" id="pm-open-ext" title="Apre il flusso fuori dal launcher: nel lettore del sistema (mpv, VLC) o nel browser">🌐 Apri su internet</button>
+          ${typeof document !== "undefined" && document.body?.classList.contains("media-window") ? "" : `<button type="button" class="pm-player-external" id="pm-open-window" title="${tx("p.window.title")}">⧉ ${tx("p.window")}</button>`}
+          <button type="button" class="pm-player-external" id="pm-open-ext" title="${tx("p.openWeb.title")}">🌐 ${tx("p.openWeb")}</button>
         </div>
-        <button type="button" class="pm-player-btn pm-primary" id="pm-close-btn">Chiudi</button>
+        <button type="button" class="pm-player-btn pm-primary" id="pm-close-btn">${tx("close")}</button>
       </div>
     </div>
   `;
@@ -960,7 +972,7 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
       if (Hls && Hls.isSupported()) {
         hls = new Hls();
         hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (data?.fatal) showPlayError("Impossibile riprodurre questo flusso (HLS). Prova «Apri su internet».");
+          if (data?.fatal) showPlayError(tr("p.hlsFail"));
         });
         // menu «Audio» e «Sottotitoli» nei controlli: compaiono solo se la playlist offre le tracce
         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
@@ -991,13 +1003,13 @@ function openOverlay(gs, item, target, browserPlayable, apiPrefix, onClose, opts
       } else if (mediaEl.canPlayType("application/vnd.apple.mpegurl")) {
         mediaEl.src = streamSrc;
       } else {
-        showPlayError("Il flusso HLS non è riproducibile qui. Usa «Apri su internet».");
+        showPlayError(tr("p.hlsUnsupported"));
       }
     });
   } else if (streamSrc) {
     mediaEl.src = streamSrc;
   }
-  mediaEl.addEventListener("error", () => { if (!isHls || !hls) showPlayError("Impossibile riprodurre questo file. Prova «Apri su internet»."); });
+  mediaEl.addEventListener("error", () => { if (!isHls || !hls) showPlayError(tr("p.fileFail")); });
 
   function applyResume() {
     if (resumeApplied) return;

@@ -3,16 +3,24 @@
 Le copie vivono in root(cfg) (di default cache/fastcopy), marcata da ensure_root() con il file
 `.pozzo-fastcopy`: purge_stale() svuota una root solo se si chiama 'fastcopy' o se e' marcata,
 cosi' non tocca cartelle non nostre.
+
+I file che la partita crea o cambia nella copia (salvataggi accanto alla ROM o nella cartella del gioco) tornano
+accanto all'originale con sync_back(), sempre prima di cancellare la copia; mark() registra com'era alla partenza.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import threading
 import time
 from pathlib import Path
 
+from .archiverun import _snap, in_use
+
 MARKER = ".pozzo-fastcopy"
+COPY_LIST = ".pozzo-copy.json"  # dentro ogni copia: cartella dell'originale e file alla partenza
 CHUNK = 8 * 1024 * 1024
 _PROGRESS_MIN_S = 0.25  # al massimo ~4 aggiornamenti al secondo
 _MB = 1024 * 1024
@@ -180,6 +188,57 @@ def copy(src: Path, dest_dir: Path, on_progress=None, cancel=None) -> Path:
     return dest_dir / src.name
 
 
+def mark(d: Path, src: Path) -> None:
+    """Registra com'e' la copia di `src` in `d` prima della partita, per sync_back()."""
+    _write_list(d, {"base": str(Path(src).parent), "files": {r: s for r, s in _snap(d).items() if r != COPY_LIST}})
+
+
+def _write_list(d: Path, man: dict) -> None:
+    tmp = d / (COPY_LIST + ".tmp")
+    tmp.write_text(json.dumps(man), encoding="utf-8")
+    os.replace(tmp, d / COPY_LIST)
+
+
+def sync_back(d: Path) -> None:
+    """Riporta accanto all'originale i file creati o cambiati nella copia. FastCopyError se non ci riesce o se
+    l'originale e' cambiato nel frattempo (non si sovrascrive): la copia va tenuta."""
+    d = Path(d)
+    try:
+        man = json.loads((d / COPY_LIST).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return  # copia mai arrivata alla partenza (annullata): niente da riportare
+    except (OSError, ValueError) as e:
+        raise FastCopyError(f"Salvataggi della copia non leggibili ({e}): restano in {d}") from e
+    base, start, bad = Path(man["base"]), man["files"], []
+    changed = {r: list(s) for r, s in _snap(d).items() if r != COPY_LIST and start.get(r) != list(s)}
+    for rel, sig in changed.items():
+        dst = base / rel
+        try:
+            st = dst.stat() if dst.exists() else None
+            # 2 s: granularita' delle date su FAT/exFAT; l'originale deve essere quello copiato (o gia' aggiornato da qui)
+            known = st is None or any(st.st_size == s[0] and abs(st.st_mtime_ns - s[1]) <= 2e9
+                                      for s in (start.get(rel), sig) if s)
+            if not known:
+                bad.append(f"{rel}: l'originale e' cambiato nel frattempo")
+                continue
+            if not base.is_dir():
+                raise FileNotFoundError(f"cartella non trovata: {base}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dst.with_name(dst.name + ".pozzo-tmp")
+            try:
+                shutil.copy2(d / rel, tmp)
+                os.replace(tmp, dst)
+            finally:
+                tmp.unlink(missing_ok=True)
+            start[rel] = sig
+        except OSError as e:
+            bad.append(f"{rel}: {e.strerror or e}")
+    if changed:
+        _write_list(d, man)
+    if bad:
+        raise FastCopyError(f"Salvataggi non riportati in {base} ({bad[0]}): la copia resta in {d}")
+
+
 def _cleanup(dest_dir: Path, src: Path, base: Path, files: list[Path]) -> None:
     """Rimuove la copia parziale (file, siblings, cartella) e la destinazione se resta vuota."""
     for f in files:
@@ -211,7 +270,8 @@ def remove(path: Path, cfg=None) -> None:
 
 
 def purge_stale(cfg) -> int:
-    """All'avvio: cancella il contenuto di root(cfg) (copie rimaste da un crash). Restituisce le voci tolte."""
+    """All'avvio: cancella il contenuto di root(cfg) (copie rimaste da un crash), dopo averne riportato i salvataggi;
+    una copia che non si riesce a riportare, o di un gioco ancora aperto, resta. Restituisce le voci tolte."""
     r = root(cfg)
     try:
         if not r.is_dir() or not _safe(r):
@@ -220,5 +280,11 @@ def purge_stale(cfg) -> int:
     except OSError:
         return 0
     for v in voci:
-        _rm(v)
+        try:
+            if in_use(v):
+                continue
+            sync_back(v)
+            _rm(v)
+        except (FastCopyError, OSError):
+            continue
     return sum(1 for v in voci if not v.exists())

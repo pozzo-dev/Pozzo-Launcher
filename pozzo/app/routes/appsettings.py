@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import sys
-import threading
 import unicodedata
 import uuid
 from pathlib import Path
@@ -16,6 +14,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from .. import extensions as X
+from ..server import quit_app
 from ... import config as C, profilecfg as PC
 from ...library import automation as A, fastcopy as FC, launcher as L
 from ... import i18n as I
@@ -403,7 +402,7 @@ def build_router(ctx) -> APIRouter:
     @router.post("/api/app/quit")
     def api_quit():
         """Chiude l'app dal menu File (solo dal PC: il telefono non ha accesso a questa rotta)."""
-        threading.Timer(0.5, os._exit, args=(0,)).start()
+        quit_app(0.5)
         return {"ok": True}
 
     @router.post("/api/cache/thumbs/clear")

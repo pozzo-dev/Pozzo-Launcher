@@ -1,14 +1,14 @@
 [plugin]
 name = "Link → Store"
-version = "1.1"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "🔗"
+icon = "⇄"
 screenshot = "screenshot.png"
-description = "Converte elenchi di link web (repack, archivi e siti di download) in store consultabili all'interno del launcher, ordinati per console o per PC."
-long_description = "Automatizza la catalogazione dei tuoi siti preferiti. Incollando l'indirizzo di una pagina HTML che raccoglie collegamenti a giochi, l'estensione analizza la struttura del documento (titoli H2, H3, liste puntate) e aggiunge automaticamente ogni sezione come fonte store della console corrispondente o come store per PC."
-how_it_works = "1. Installa l'estensione e apri la sezione Link → Store dalla barra laterale o dalle impostazioni degli store.\n2. Incolla l'URL della pagina web da analizzare e seleziona la console di destinazione (o Store PC).\n3. L'estensione scansiona i tag HTML e mostra un'anteprima dei link trovati con i rispettivi titoli.\n4. Conferma con «Aggiungi come store»: i titoli compariranno direttamente nelle ricerche dello Store online!"
-features = ["Parser HTML euristico per titoli, categorie e link di download", "Integrazione diretta con il Gestore dei download nativo", "Raggruppamento per console o repack PC", "Salvataggio immediato nelle impostazioni senza necessità di riavviare"]
+description = "Da una pagina che raccoglie siti di giochi agli store dell'app, in tre passi: incolli l'indirizzo, scegli i link, decidi a quale console vanno."
+long_description = "Incolla l'indirizzo di una pagina che elenca siti di giochi: l'estensione la legge e raggruppa i link per titolo di sezione. Scegli quelli che ti interessano, a gruppi o uno per uno, e per ogni gruppo la console di destinazione (proposta in base al titolo) o lo store PC. Con «Leggi subito» gli elenchi dei giochi si scaricano appena aggiunti."
+how_it_works = "1. Installa l'estensione e apri «Link → Store» nella barra laterale.\n2. Incolla l'indirizzo della pagina e premi «Leggi la pagina».\n3. Scegli i link, a gruppi o uno per uno, e premi «Avanti».\n4. Controlla la console proposta per ogni gruppo e premi «Aggiungi»."
+features = ["Procedura in tre passi", "Link raggruppati per sezione, da scegliere a gruppi", "Console proposta dal titolo del gruppo", "Lettura immediata degli store aggiunti"]
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 permissions = ["rete:*", "impostazioni", "file:lettura", "file:scrittura"]
 load = "lazy"

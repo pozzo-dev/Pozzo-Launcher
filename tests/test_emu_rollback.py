@@ -57,3 +57,37 @@ def test_update_keeps_bak_and_records_version(tmp_path, monkeypatch):
     assert E.check_updates(cfg)[0]["update"] is False
     E.rollback("rpcs3", cfg)
     assert (dest / "rpcs3.exe").read_text() == "old" and not (tmp_path / "emus" / "rpcs3.bak").exists()
+
+
+def test_rollback_tiene_i_salvataggi_fatti_dopo_l_aggiornamento(tmp_path, monkeypatch):
+    cfg, dest = _setup(tmp_path, monkeypatch, ["rpcs3.exe"])
+    sav = dest / "dev_hdd0" / "home" / "save.dat"
+    sav.parent.mkdir(parents=True)
+    sav.write_text("prima")
+    (dest / "Sys").mkdir()  # file del programma (Dolphin): tornano quelli della versione vecchia
+    (dest / "Sys" / "gc.txt").write_text("v1")
+    E.install(cfg, "rpcs3", say=lambda *_: None)
+    sav.write_text("dopo")
+    sav.with_name("nuovo.dat").write_text("n")
+    (dest / "Sys" / "gc.txt").write_text("v2")
+    E.rollback("rpcs3", cfg)
+    assert (dest / "rpcs3.exe").read_text() == "old" and (dest / "Sys" / "gc.txt").read_text() == "v1"
+    assert sav.read_text() == "dopo" and sav.with_name("nuovo.dat").exists()
+    assert [p.name for p in dest.parent.iterdir() if p.is_dir() and p.name.startswith("rpcs3")] == ["rpcs3"]
+
+
+def test_copia_a_meta_non_resta_come_versione_precedente(tmp_path, monkeypatch):
+    cfg, dest = _setup(tmp_path, monkeypatch, ["rpcs3.exe"])
+    real = E.shutil.copytree
+
+    def boom(src, dst, **kw):
+        real(src, dst, **kw)
+        raise OSError("disco pieno")
+
+    monkeypatch.setattr(E.shutil, "copytree", boom)
+    try:
+        E.install(cfg, "rpcs3", say=lambda *_: None)
+        assert False, "doveva fallire"
+    except OSError:
+        pass
+    assert (dest / "rpcs3.exe").read_text() == "old" and not E._bak(dest).exists()

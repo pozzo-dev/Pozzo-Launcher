@@ -17,12 +17,22 @@ import re
 import time
 import unicodedata
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 STATUSES = ("plan_to_watch", "watching", "on_hold", "completed", "dropped")
 CATEGORIES = ("film", "serie", "anime")
 MAX_ENTRIES = 5000
 MAX_TITLE = 300
 ANILIST_URL = "https://graphql.anilist.co"
+_T = None  # gs.t impostato da backend.register(): errori nella lingua dell'interfaccia
+
+
+def tr(key: str, **p) -> str:
+    """Testo da locales.json; senza backend (test) in italiano."""
+    if _T:
+        return _T(key, **p)
+    it = json.loads((Path(__file__).parent / "locales.json").read_text("utf-8")).get("it", {})
+    return it.get(key, key).format(**p)
 
 _ANILIST_STATUS = {"CURRENT": "watching", "REPEATING": "watching", "COMPLETED": "completed",
                    "PLANNING": "plan_to_watch", "PAUSED": "on_hold", "DROPPED": "dropped"}
@@ -78,7 +88,7 @@ class _Out:
         if len(self.entries) >= MAX_ENTRIES:
             self.skipped += 1
             if not self.warnings:
-                self.warnings.append(f"Importate solo le prime {MAX_ENTRIES} voci.")
+                self.warnings.append(tr("wi.max", n=MAX_ENTRIES))
             return
         category = category if category in CATEGORIES else ""
         ext = {k: v for k, v in (kw.get("ext_ids") or {}).items() if v not in (None, "", 0)}
@@ -138,11 +148,11 @@ def fetch_anilist(username: str, client=None, report=None) -> list[dict]:
         import httpx as client
     username = (username or "").strip()
     if not username:
-        raise ValueError("Inserisci il nome utente AniList.")
+        raise ValueError(tr("wi.user"))
     try:
         r = client.post(ANILIST_URL, json={"query": _ANILIST_QUERY, "variables": {"u": username}}, timeout=10)
     except Exception as e:  # rete assente, timeout, DNS
-        raise ValueError(f"AniList non raggiungibile: {e}") from e
+        raise ValueError(tr("wi.down", err=e)) from e
     try:
         body = r.json()
     except Exception:
@@ -151,21 +161,21 @@ def fetch_anilist(username: str, client=None, report=None) -> list[dict]:
     if errors or getattr(r, "status_code", 200) >= 400:
         msg = " ".join(str(x.get("message", "")) for x in errors if isinstance(x, dict)).lower()
         if "private" in msg or getattr(r, "status_code", 0) == 403:
-            raise ValueError("La lista AniList di questo utente è privata: rendila pubblica nelle impostazioni.")
+            raise ValueError(tr("wi.private"))
         if "not found" in msg or getattr(r, "status_code", 0) == 404 or not msg:
-            raise ValueError(f"Utente AniList «{username}» non trovato.")
-        raise ValueError(f"AniList ha risposto con un errore: {msg}")
+            raise ValueError(tr("wi.noUser", user=username))
+        raise ValueError(tr("wi.apiError", err=msg))
     return parse_anilist(body, report)
 
 
 # ------------------------------------------------------------------ MyAnimeList
 def parse_mal_xml(text: str, report=None) -> list[dict]:
     if re.search(r"<!\s*(doctype|entity)", text or "", re.I):
-        raise ValueError("File XML non valido: DOCTYPE/ENTITY non ammessi.")
+        raise ValueError(tr("wi.xmlEntity"))
     try:
         root = ET.fromstring((text or "").lstrip("﻿").strip())
     except ET.ParseError as e:
-        raise ValueError(f"File XML non valido: {e}") from e
+        raise ValueError(tr("wi.xml", err=e)) from e
     out = _Out("mal")
     for a in root.iter("anime"):
         g = lambda k: (a.findtext(k) or "").strip()  # noqa: E731
@@ -223,7 +233,7 @@ def parse_json(text: str, report=None) -> list[dict]:
     try:
         data = json.loads((text or "").lstrip("﻿"))
     except ValueError as e:
-        raise ValueError(f"File JSON non valido: {e}") from e
+        raise ValueError(tr("wi.json", err=e)) from e
     if isinstance(data, dict):
         data = next((data[k] for k in ("items", "entries", "list", "watchlist") if isinstance(data.get(k), list)), [data])
     out = _Out("json")
@@ -252,13 +262,13 @@ def parse_text(text: str, report=None) -> list[dict]:
 def parse_pozzo(text: str, report=None) -> list[dict]:
     """Backup JSON di Pozzo (GET watchlist/export): conserva chiavi, note, priorita', voto, stato e avanzamento."""
     if len(text or "") > 10_000_000:
-        raise ValueError("File troppo grande.")
+        raise ValueError(tr("wi.big"))
     try:
         data = json.loads((text or "").lstrip("\ufeff"))
     except ValueError as e:
-        raise ValueError(f"File JSON non valido: {e}") from e
+        raise ValueError(tr("wi.json", err=e)) from e
     if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("entries"), list):
-        raise ValueError("Non è un backup della watchlist di Pozzo (versione 1).")
+        raise ValueError(tr("wi.notBackup"))
     out = _Out("pozzo")
     for el in data["entries"]:
         if not isinstance(el, dict):
@@ -288,14 +298,14 @@ def run_import(provider: str, content: str = "", username: str = "", client=None
     report: dict = {"skipped": 0, "warnings": []}
     content = content or ""
     if len(content) > 10_000_000:
-        raise ValueError("File troppo grande.")
+        raise ValueError(tr("wi.big"))
     if provider == "anilist":
         entries = fetch_anilist(username, client, report)
     elif provider in ("mal", "csv", "json", "text", "pozzo"):
         entries = {"mal": parse_mal_xml, "csv": parse_csv, "json": parse_json, "text": parse_text,
                    "pozzo": parse_pozzo}[provider](content, report)
     else:
-        raise ValueError("Servizio di importazione sconosciuto.")
+        raise ValueError(tr("wi.service"))
     return {"entries": entries, "skipped": report["skipped"], "warnings": report["warnings"]}
 
 

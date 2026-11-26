@@ -1,14 +1,14 @@
 [plugin]
 name = "Diario di gioco"
-version = "1.0"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "📔"
+icon = "✎"
 screenshot = "screenshot.png"
-description = "Aggiunge una scheda diario nel dettaglio di ogni gioco con appunti datati, trucchi, password e il registro cronologico di tutte le tue sessioni di gioco."
-long_description = "Tieni traccia dei tuoi progressi, delle sensazioni di gioco e delle informazioni cruciali. Nella scheda di ogni titolo della libreria viene integrata una sezione Diario in cui annotare pensieri personali, promemoria su dove eri rimasto, password dei livelli e strategie. Si affianca alla cronologia automatica delle sessioni con orari di inizio, durata e data."
-how_it_works = "1. Installa l'estensione e apri il dettaglio di qualsiasi gioco in libreria.\n2. Scorrendo verso il basso o nella scheda laterale troverai il blocco «Diario di gioco».\n3. Scrivi un appunto nel campo di testo e premi Salva: verrà registrato con la data e l'ora attuali.\n4. Puoi consultare l'elenco di tutte le sessioni passate (durata effettiva e timestamp di avvio) registrate automaticamente dal launcher."
-features = ["Note personali datate salvate in locale in formato sicuro", "Cronologia reale delle sessioni di gioco con durata al minuto", "Modifica e cancellazione rapida degli appunti", "Condivisione delle note tra profili o backup integrato"]
+description = "La storia di ogni gioco giorno per giorno: partite, note datate, schermate e copie dei salvataggi in un'unica linea del tempo nella scheda del gioco."
+long_description = "Nella scheda di ogni gioco compare il Diario: una linea del tempo, giorno per giorno, che mette insieme le partite registrate da Pozzo, le note che scrivi (a che punto sei, un trucco, una password), le schermate e le copie dei salvataggi. In alto vedi il tempo totale e quante volte hai giocato. Tutto resta sul tuo PC."
+how_it_works = "1. Installa l'estensione e apri la scheda di un gioco.\n2. Nella sezione «Diario» scrivi una nota e premi «Aggiungi»: finisce nel giorno di oggi.\n3. Partite, schermate e salvataggi compaiono da soli, nel giorno in cui sono successi."
+features = ["Linea del tempo per giorno nella scheda del gioco", "Note datate: progressi, trucchi, password", "Partite, schermate e copie dei salvataggi insieme", "Tempo totale e numero di partite in alto"]
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 permissions = ["libreria:lettura", "impostazioni"]
 load = "lazy"

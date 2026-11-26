@@ -19,7 +19,6 @@ eseguibile diverso (es. un'altra versione di PCSX2), argomenti e argomenti aggiu
 
 from __future__ import annotations
 
-import atexit
 import json
 import os
 import re
@@ -31,7 +30,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from .. import platforms as P, switchfiles as SF
+from .. import onexit, platforms as P, switchfiles as SF
 from . import archiverun, automation, fastcopy, foreground, magpie
 
 RA = "retroarch"
@@ -443,16 +442,6 @@ def ryujinx_data_dir(exe: str | Path) -> Path:
     return Path(os.environ.get("APPDATA", str(Path.home()))) / "Ryujinx"
 
 
-def register_switch_update(exe: str | Path, base: Path, siblings: list[Path]) -> Path | None:
-    """Ryujinx: l'aggiornamento piu' nuovo del gioco (stesso Title ID, accanto al base) va in games/<id>/updates.json,
-    che e' quello che l'emulatore carica: il gioco parte gia' aggiornato, senza installare nulla. Ritorna il file scelto.
-    Gli altri aggiornamenti gia' elencati restano; si riscrive solo se cambia qualcosa."""
-    from .. import switchcontent as SC
-    info = SC.gather(base, siblings, SC.choices(None))
-    SC.write_ryujinx(ryujinx_data_dir(exe), info)
-    return info["update"]
-
-
 def switch_roots(cfg, path: Path) -> list[Path]:
     """Cartelle Switch da dare a Eden come contenuti esterni: quelle della console nelle cartelle ROM;
     se non si trovano (disco scollegato, config strana) almeno quella del gioco."""
@@ -469,6 +458,40 @@ def _needs_extract(pl: dict, platform: P.Platform, target: Path) -> bool:
     return target.suffix.lower() == ".zip" and (pl["emulator"] != RA or platform.cd)
 
 
+EXTRACT_LIST = ".pozzo-estratti.json"  # {file: [byte, mtime]} messi dallo ZIP: il resto l'ha scritto l'emulatore
+
+
+def _extracted(d: Path) -> dict | None:
+    try:
+        return json.loads((d / EXTRACT_LIST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _played(d: Path) -> set[str]:
+    """File dello ZIP che l'emulatore ha riscritto (es. un .sav incluso)."""
+    now = archiverun._snap(d)
+    return {n for n, sig in (_extracted(d) or {}).items() if n in now and list(now[n]) != sig}
+
+
+def _evict(d: Path):
+    """Libera un gioco estratto togliendo solo i file dello ZIP: i salvataggi che l'emulatore ha scritto li' restano."""
+    now, known = archiverun._snap(d), _extracted(d)
+    if known is None:  # estratto da una versione senza elenco, o estrazione a meta': si toglie solo il piu' grande
+        known = {n: list(now[n]) for n in sorted(now, key=lambda n: now[n][0])[-1:]}
+    mine = _played(d)
+    for n in known.keys() - mine:
+        try:
+            (d / n).unlink(missing_ok=True)
+        except OSError:  # aperto: al prossimo giro
+            return
+    if set(archiverun._snap(d)) <= {EXTRACT_LIST}:
+        shutil.rmtree(d, ignore_errors=True)
+        return
+    (d / EXTRACT_LIST).write_text(json.dumps({n: known[n] for n in mine}), encoding="utf-8")
+    os.utime(d, (0, 0))  # in fondo: non toglie il posto ai giochi recenti
+
+
 def _extract(cfg, target: Path, ident: str, on_status) -> Path:
     root = Path(cfg.cache) / "extract"
     dest = root / ident
@@ -478,20 +501,29 @@ def _extract(cfg, target: Path, ident: str, on_status) -> Path:
             raise LaunchError("ZIP vuoto")
         main = max(infos, key=lambda i: i.file_size)
         out = dest / Path(main.filename).name
-        if out.exists() and out.stat().st_size == main.file_size:
+        mine = _played(dest)
+        if out.exists() and (out.stat().st_size == main.file_size or out.name in mine):
             os.utime(dest)
             return out
         dest.mkdir(parents=True, exist_ok=True)
         on_status(f"Estrazione di {main.filename} ({main.file_size / 2**30:.1f} GB)...")
         for info in infos:  # estrae tutto (es. .cue + .bin)
+            if Path(info.filename).name in mine:
+                continue
             z.extract(info, dest)
             ex = dest / info.filename
             if ex.parent != dest:
                 shutil.move(str(ex), dest / ex.name)
+        names, old = {Path(i.filename).name for i in infos}, _extracted(dest) or {}
+        (dest / EXTRACT_LIST).write_text(json.dumps(
+            {n: old[n] if n in mine else s for n, s in archiverun._snap(dest).items() if n in names}), encoding="utf-8")
     # tiene solo gli ultimi MAX_EXTRACTED giochi estratti
     olds = sorted((d for d in root.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime, reverse=True)
     for d in olds[MAX_EXTRACTED:]:
-        shutil.rmtree(d, ignore_errors=True)
+        try:
+            _evict(d)
+        except OSError:  # pulizia non riuscita: il gioco parte lo stesso
+            pass
     return out
 
 
@@ -961,7 +993,8 @@ class Launcher:
         self._comp_pid = None
         self._fg = None  # foreground.Watcher della sessione
         self._mp = None  # magpie.Scaler della sessione
-        atexit.register(self._unfreeze)  # mai lasciare un processo sospeso se Pozzo esce
+        self._t0, self._recorded = 0.0, False
+        onexit.register(self._unfreeze)  # mai lasciare un processo sospeso se Pozzo esce
         try:  # copie «disco veloce» rimaste da un crash (tenute se l'utente le vuole riusare)
             if (cfg.app.get("fastcopy") or {}).get("delete_after", True):
                 fastcopy.purge_stale(cfg)
@@ -1172,6 +1205,22 @@ class Launcher:
         self._unfreeze()
         return max(0.0, time.time() - t0 - self._paused_total)
 
+    def _record(self, key: str, played: float):
+        with self.lock:  # una volta per partita: la chiusura dell'app e la fine del gioco possono arrivare insieme
+            if self._recorded:
+                return
+            self._recorded = True
+        self.user.record_play(key, played)
+
+    def close_session(self):
+        """Pozzo si chiude con il gioco ancora aperto: il tempo si registra adesso, dopo nessuno lo conta."""
+        st = self.running()
+        if st.get("status") == "running":
+            try:
+                self._record(st["key"], self.played_since(self._t0))
+            except Exception as e:  # noqa: BLE001 - la chiusura continua comunque
+                print(f"tempo di gioco non registrato: {type(e).__name__}: {e}", file=sys.stderr)
+
     def splash(self, gid: int, title: str):
         """Splash di avvio nella UI (impostazione launch.splash, default acceso); sparisce al primo piano del gioco."""
         if (self.cfg.app.get("launch") or {}).get("splash", True):
@@ -1238,22 +1287,35 @@ class Launcher:
         dst = d / src.name
         fc["dir"] = d
         if dst.exists() and fastcopy.same(dst, src):
+            fastcopy.mark(d, src)
             return dst  # copia rimasta (delete_after = false), completa e aggiornata: niente da ricopiare
         if d.exists():
+            if fastcopy.in_use(d):  # Pozzo riavviato durante la partita
+                fc["dir"] = None
+                raise fastcopy.FastCopyError("Il gioco è ancora aperto: chiudilo e riprova")
+            try:  # copia di una partita interrotta: i suoi salvataggi prima di tutto
+                fastcopy.sync_back(d)
+            except fastcopy.FastCopyError as e:
+                if not dst.exists():
+                    raise
+                self._set(message=str(e))
+                return dst  # si gioca da li': ha i salvataggi piu' recenti
             fastcopy.remove(d, self.cfg)
         out = fastcopy.copy(src, d, on_progress=lambda f, t: self._set(message=f"Copia su disco veloce… {int(f * 100)}%"),
                             cancel=self._stop_evt)
         if self._stop_evt.is_set():
             raise fastcopy.FastCopyError("Copia annullata")
+        fastcopy.mark(d, src)
         return out
 
     def _fast_done(self, fc: dict):
-        """Fine partita (prima di «finished»): toglie la copia se previsto. Mai in errore, mai con il gioco vivo."""
+        """Fine partita (prima di «finished»): riporta i salvataggi e toglie la copia se previsto. Mai in errore, mai con
+        il gioco vivo."""
         d, fc["dir"] = fc.get("dir"), None
-        if d and (self.cfg.app.get("fastcopy") or {}).get("delete_after", True):
-            self._fast_remove(d)
+        if d:
+            self._fast_remove(d, keep=not (self.cfg.app.get("fastcopy") or {}).get("delete_after", True))
 
-    def _fast_remove(self, d: Path):
+    def _fast_remove(self, d: Path, keep: bool = False):
         try:
             proc = getattr(self, "_proc", None)
             if proc is not None and proc.poll() is None:
@@ -1264,7 +1326,11 @@ class Launcher:
             track = getattr(self, "_track", None)
             if track and Path(track).is_dir() and self._game_procs(str(track)):
                 return
-            fastcopy.remove(d, self.cfg)
+            fastcopy.sync_back(d)
+            if not keep:
+                fastcopy.remove(d, self.cfg)
+        except fastcopy.FastCopyError as e:
+            self._set(message=str(e))
         except Exception:
             pass
 
@@ -1385,27 +1451,13 @@ class Launcher:
         if proc and (self.profile_of(key) or {}).get("companion_close") and proc.poll() is None:
             proc.terminate()
 
-    @staticmethod
-    def _game_procs(folder: str) -> list:
-        """Processi in esecuzione il cui eseguibile sta nella cartella del gioco."""
-        try:
-            import psutil
-        except ImportError:
-            return []
-        root = os.path.normcase(os.path.abspath(folder)) + os.sep
-        out = []
-        for p in psutil.process_iter(["exe"]):
-            exe = p.info.get("exe")
-            if exe and os.path.normcase(exe).startswith(root):
-                out.append(p)
-        return out
+    _game_procs = staticmethod(archiverun.procs_in)
 
     def _run_pc(self, key: str, launch: dict, install_dir: str, store_id: str = "", fast: bool = False):
         fc, ar = {"dir": None}, []
         try:
             if fast:
                 rels = self._fast_rels(launch, install_dir, store_id)
-                # shortcut: i salvataggi scritti dentro la cartella copiata vanno persi alla cancellazione (nessuna copia indietro), sincronizzarli quando serve
                 root = self._fast_copy(key, Path(install_dir), fc)
                 launch = {**launch, **{k: str(root / r) for k, r in rels.items()}}
                 install_dir = str(root)
@@ -1489,11 +1541,11 @@ class Launcher:
                     resends = 0 if is_uri else LAUNCH_RESENDS.get(store_id, 0)
                 if lname and self._game_procs(track) and (self.cfg.app.get("launch") or {}).get("hide_launcher", True):
                     threading.Thread(target=hide_launcher_windows, args=(lname, 15), daemon=True).start()  # il gioco passa avanti
-                t0 = time.time() if self._game_procs(track) else t0
+                t0 = self._t0 = time.time() if self._game_procs(track) else t0
                 while self._game_procs(track) and not self._stop_evt.is_set():
                     self._stop_evt.wait(3)
             played = self.played_since(t0) if (not via_launcher or track) else 0
-            self.user.record_play(key, played)
+            self._record(key, played)
             self._end_companion(comp, key)
             self._job = None
             job and job.close()
@@ -1521,6 +1573,7 @@ class Launcher:
             self.state.update(kw)
             st = dict(self.state)
         if kw.get("status") == "running" and prev != "running":
+            self._t0, self._recorded = time.time(), False
             try:
                 self.user.mark_started(st["key"])
             except Exception:  # i dati utente non devono impedire di giocare
@@ -1623,7 +1676,7 @@ class Launcher:
                 if code not in (0, None) and played < QUICK_CRASH_S and not stopped:
                     errf.seek(0)
                     log = "\n".join(errf.read().decode("utf-8", "replace").splitlines()[-50:])
-            self.user.record_play(key, played)
+            self._record(key, played)
             self._end_companion(comp, key)
             self._job = None
             job and job.close()
@@ -1647,6 +1700,7 @@ class Launcher:
                     self._set(message=f"Crash all'avvio: riprovo con {fb['label']}")
                     self._set(emulator=alt["emulator"], emulator_id=alt["emulator"], exe=alt["exe"])
                     alt["trial"] = True
+                    self._t0, self._recorded = time.time(), False  # il ritentativo e' una partita nuova
                     return self._run_emu(key, platform, path, alt, src, fc, retry=True)
                 self._fast_done(fc)  # dopo la scelta: il ritentativo qui sopra riusa la copia veloce
                 self._set(status="error", played=played, code=code, message=f"{pl['emulator']} si e' chiuso subito (codice {code})",

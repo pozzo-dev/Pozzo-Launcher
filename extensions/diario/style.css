@@ -1,6 +1,21 @@
-.di-form { display: flex; gap: 8px; align-items: flex-start; }
-.di-form textarea { flex: 1; resize: vertical; }
-.di-list { list-style: none; padding: 0; margin: 8px 0 0; }
-.di-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
-.di-voce { background: var(--bg-3); border-radius: 8px; padding: 8px 10px !important; margin-bottom: 6px; }
-.di-del { float: right; background: none; border: 0; color: var(--muted); cursor: pointer; }
+/* Diario: riepilogo, campo per una nota, linea del tempo per giorno */
+.di-sum { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-3); }
+.di-sum b { font-size: var(--type-lg); }
+.di-form { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: var(--space-4); }
+.di-form textarea { flex: 1; resize: vertical; min-height: 44px; }
+.di-days { list-style: none; margin: 0; padding: 0; }
+.di-days > li { position: relative; padding-left: var(--space-5); border-left: 2px solid var(--line); padding-bottom: var(--space-4); }
+.di-days > li::before { content: ""; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.di-days h4 { margin: 0 0 var(--space-2); font-size: var(--type-sm); color: var(--muted); }
+.di-days h4::first-letter { text-transform: uppercase; }
+.di-days ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.di-item { display: grid; grid-template-columns: 22px 1fr; gap: var(--space-2); align-items: start; }
+.di-ico { color: var(--muted); text-align: center; line-height: 1.5; }
+.di-time { color: var(--muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; margin-right: var(--space-1); }
+.di-note > div { position: relative; padding: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--bg-3); }
+.di-note p { margin: var(--space-1) 0 0; white-space: normal; }
+.di-del { position: absolute; top: var(--space-1); right: var(--space-1); width: 26px; height: 26px; opacity: .6; }
+.di-del:hover, .di-del:focus-visible { opacity: 1; }
+.di-shots { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.di-shots img { width: 140px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--line); }
+.di-empty { margin: 0; }

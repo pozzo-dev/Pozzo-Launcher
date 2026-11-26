@@ -1,6 +1,6 @@
 """Calendario uscite: prossime uscite da RAWG (chiave in Impostazioni › Fonti), per la lista dei desideri e per i tuoi generi.
 
-GET /plugin-api/calendario-uscite/uscite[?giorni=180]
+GET /plugin-api/calendario-uscite/uscite[?giorni=180&tutti=0]   tutti=1: senza il filtro sui tuoi generi
     -> {"desideri": [...], "prossime": [...], "generi": ["Azione", ...]}   ogni voce: {titolo, data, giorni, piattaforme, copertina, generi}
 
 Le risposte restano in memoria 6 ore: la lista dei desideri costa una richiesta a titolo, e il piano gratuito di RAWG
@@ -100,25 +100,25 @@ def register(gs):
                 break
             time.sleep(1.5 * (tentativo + 1))
         if r is None or r.status_code >= 500:
-            raise HTTPException(503, "RAWG non risponde al momento (errore del sito): riprova tra poco")
+            raise HTTPException(503, gs.t("err.down"))
         if r.status_code in (401, 403):
-            raise HTTPException(400, "Chiave RAWG non valida o quota esaurita (Impostazioni › Fonti)")
+            raise HTTPException(400, gs.t("err.key"))
         if r.status_code != 200:
             raise HTTPException(502, f"RAWG: HTTP {r.status_code}")
         return r.json()
 
     @gs.route("uscite")
-    def uscite(giorni: int = 180):
+    def uscite(giorni: int = 180, tutti: bool = False):
         key = (getattr(gs.cfg, "rawg", {}) or {}).get("api_key", "")
         if not key:
-            raise HTTPException(400, "Serve la chiave gratuita di RAWG: Impostazioni › Fonti (rawg.io/apidocs)")
+            raise HTTPException(400, gs.t("err.nokey"))
         if not 7 <= giorni <= 730:
-            raise HTTPException(400, "Intervallo non valido (7-730 giorni)")
+            raise HTTPException(400, gs.t("err.range"))
         from pozzo.sync import profile_path
         lib = sqlite3.connect(cache / "library.db") if (cache / "library.db").exists() else None
         user = sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
         try:
-            slugs = generi_preferiti(lib) if lib else []
+            slugs = generi_preferiti(lib) if lib and not tutti else []
             try:
                 titoli = [t for (t,) in user.execute("SELECT title FROM wishlist ORDER BY added DESC") if t]
             except sqlite3.Error:

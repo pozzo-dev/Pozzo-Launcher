@@ -1,15 +1,33 @@
-.ob-serie { font-size: 20px; margin-bottom: 8px; }
-.ob-row { position: relative; padding: 10px 36px 10px 12px; margin-bottom: 8px; max-width: 720px;
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
-.ob-row.done { border-color: var(--accent); }
-.ob-row .muted { margin-left: 8px; }
-.ob-track { height: 8px; border-radius: 4px; background: var(--bg-3); margin-top: 6px; overflow: hidden; }
-.ob-fill { height: 100%; background: var(--accent); }
-.ob-del { position: absolute; top: 8px; right: 8px; background: none; border: 0; color: var(--muted); cursor: pointer; }
-.ob-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 22px; }
-.ob-form input { width: 80px; }
-.ob-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-width: 900px; }
-.ob-badge { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px;
-  background: var(--bg-2); border: 1px solid var(--line); opacity: .6; }
-.ob-badge.on { opacity: 1; border-color: var(--accent); }
-.ob-badge span { font-size: 22px; }
+/* Obiettivi: serie in evidenza, schede con anello di avanzamento, distintivi */
+.ob-streak { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); margin-bottom: var(--space-6);
+  max-width: 640px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-2); }
+.ob-streak > b { font-size: 48px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ob-streak.on > b { color: var(--accent); }
+.ob-streak div { display: flex; flex-direction: column; gap: 2px; }
+.ob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-3); max-width: 1100px; }
+.ob-card { position: relative; display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center;
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
+.ob-card div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ob-card.done { border-color: var(--good, var(--accent)); }
+.ob-card.offer { border-style: dashed; }
+.ob-cover { width: 44px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-sm); }
+.ob-glyph { width: 44px; text-align: center; font-size: 26px; color: var(--accent); }
+.ob-ring { position: relative; width: 56px; height: 56px; flex: none; }
+.ob-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ob-ring circle { fill: none; stroke-width: 6; }
+.ob-ring .bg { stroke: var(--bg-3); }
+.ob-ring .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .8s var(--motion-ease); }
+.ob-card.done .ob-ring .fg, .ob-badge.on .ob-ring .fg { stroke: var(--good, var(--accent)); }
+.ob-ring span { position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--type-xs); font-weight: 700; }
+.ob-del { opacity: .5; }
+.ob-del:hover, .ob-del:focus-visible { opacity: 1; }
+.ob-custom { margin-top: var(--space-4); max-width: 760px; }
+.ob-custom summary { cursor: pointer; color: var(--accent); }
+.ob-form { margin-top: var(--space-3); gap: var(--space-2); }
+.ob-form input { width: 90px; }
+.ob-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); max-width: 1100px; }
+.ob-badge { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3); text-align: center;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); opacity: .7; }
+.ob-badge.on { opacity: 1; border-color: var(--good, var(--accent)); }
+.ob-badge .ob-ring span { font-size: 20px; color: var(--good, var(--accent)); }
+@media (prefers-reduced-motion: reduce) { .ob-ring .fg { transition: none; } }

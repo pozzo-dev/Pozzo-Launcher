@@ -3,8 +3,10 @@
 GET /plugin-api/pc-adatto/hw
   -> {"cpu": {"name","cores","threads","mhz","tier"}, "ram_gb", "gpu": {"name","vram_gb","tier"}, "incerto": bool}
 GET /plugin-api/pc-adatto/check/{game_id}
-  -> {"verdict": "ok"|"impostazioni"|"insufficiente"|"sconosciuto", "reasons": [str], "suggestions": [str],
-      "hw": <come sopra>, "requirements": {...}}
+  -> {"verdict": "ok"|"impostazioni"|"insufficiente"|"sconosciuto",
+      "meters": [{"part": "cpu"|"gpu"|"ram", "have", "min", "rec", "status": "ok"|"rec"|"min"|None}],
+      "note": codice|None, "tips": [codice], "hw": <come sopra>, "requirements": {...}}
+Testi di note e tips nel locales.json dell'estensione (note.<codice>, tip.<codice>): li scrive l'interfaccia.
 """
 
 import json
@@ -164,23 +166,22 @@ def gpu_tier(name: str) -> tuple[int, bool]:
 # ---------- requisiti per console: (cpu min, gpu min, ram min, cpu cons., gpu cons., ram cons., consigli) ----------
 EASY = (1, 1, 2, 1, 1, 4, [])
 REQ = {
-    "ps3": (3, 3, 8, 4, 4, 16, ["Usa Vulkan come renderer", "Risoluzione 720p (scala 100%)", "SPU decoder: ASMJIT",
-                                "Disattiva lo scaling di risoluzione e il post-processing"]),
-    "switch": (3, 3, 8, 4, 4, 16, ["Usa Vulkan", "Risoluzione 1x", "Disattiva la modalità docked", "Abilita le shader cache"]),
-    "wiiu": (3, 3, 8, 4, 4, 16, ["Usa Vulkan", "Mantieni la risoluzione nativa"]),
-    "ps2": (2, 2, 4, 3, 3, 8, ["Risoluzione interna 1x-2x", "Renderer Vulkan o D3D11"]),
-    "gc": (2, 2, 4, 3, 3, 8, ["Vulkan o D3D11", "Risoluzione interna 1x-2x"]),
-    "wii": (2, 2, 4, 3, 3, 8, ["Vulkan o D3D11", "Risoluzione interna 1x-2x"]),
-    "xbox360": (4, 3, 8, 5, 4, 16, ["Usa Vulkan o D3D12", "Risoluzione nativa", "Limita i frame a 30"]),
-    "xbox": (2, 2, 4, 3, 3, 8, ["Risoluzione interna 1x"]),
-    "psp": (2, 2, 4, 2, 2, 4, ["Rendering 1x-2x"]),
-    "psvita": (3, 2, 8, 4, 3, 8, ["Risoluzione 1x"]),
-    "3ds": (2, 2, 4, 3, 2, 8, ["Risoluzione interna 1x-2x", "Abilita le shader cache"]),
-    "n64": (1, 1, 4, 2, 2, 4, ["Usa il plugin video ParaLLEl o GLideN64"]),
-    "dreamcast": (2, 2, 4, 2, 2, 4, ["Risoluzione nativa"]),
-    "saturn": (2, 1, 4, 3, 2, 4, ["Usa il core Mednafen Saturn (richiede CPU veloce)"]),
-    "ps4": (4, 4, 16, 5, 5, 16, ["Emulazione sperimentale: aspettati problemi"]),
-    "ps5": (5, 5, 16, 5, 5, 32, ["Emulazione sperimentale: aspettati problemi"]),
+    "ps3": (3, 3, 8, 4, 4, 16, ["vulkan", "res720", "spu", "nopost"]),
+    "switch": (3, 3, 8, 4, 4, 16, ["vulkan", "res1x", "undocked", "shaders"]),
+    "wiiu": (3, 3, 8, 4, 4, 16, ["vulkan", "native"]),
+    "ps2": (2, 2, 4, 3, 3, 8, ["res12x", "vulkan_d3d11"]),
+    "gc": (2, 2, 4, 3, 3, 8, ["vulkan_d3d11", "res12x"]),
+    "wii": (2, 2, 4, 3, 3, 8, ["vulkan_d3d11", "res12x"]),
+    "xbox360": (4, 3, 8, 5, 4, 16, ["vulkan_d3d12", "native", "fps30"]),
+    "xbox": (2, 2, 4, 3, 3, 8, ["res1x"]),
+    "psp": (2, 2, 4, 2, 2, 4, ["res12x"]),
+    "psvita": (3, 2, 8, 4, 3, 8, ["res1x"]),
+    "3ds": (2, 2, 4, 3, 2, 8, ["res12x", "shaders"]),
+    "n64": (1, 1, 4, 2, 2, 4, ["n64video"]),
+    "dreamcast": (2, 2, 4, 2, 2, 4, ["native"]),
+    "saturn": (2, 1, 4, 3, 2, 4, ["mednafen"]),
+    "ps4": (4, 4, 16, 5, 5, 16, ["experimental"]),
+    "ps5": (5, 5, 16, 5, 5, 32, ["experimental"]),
 }
 for _p in ("nes fds snes gb gbc gba nds virtualboy pokemini gameandwatch mastersystem megadrive gamegear sega32x segacd "
            "psx atari2600 atari5200 atari7800 atarilynx atarijaguar atarist atari800 pcengine pcenginecd pcfx neogeo "
@@ -190,21 +191,30 @@ for _p in ("nes fds snes gb gbc gba nds virtualboy pokemini gameandwatch masters
     REQ.setdefault(_p, EASY)
 
 
+def meters(h: dict, mins: tuple, recs: tuple) -> list[dict]:
+    """Un indicatore per CPU, scheda video e RAM: status "ok" (consigliato), "rec" (sotto il consigliato),
+    "min" (sotto il minimo), None (requisito sconosciuto). Livelli CPU/GPU da 1 a 5, RAM in GB."""
+    out = []
+    for part, have, mn, rc in zip(("cpu", "gpu", "ram"), (h["cpu"]["tier"], h["gpu"]["tier"], h["ram_gb"]), mins, recs):
+        eff = have + 0.5 if part == "ram" else have  # 16 GB installati = ~15,9 GB visti da Windows: non e' «sotto i 16»
+        st = None if mn is None and rc is None else "min" if mn is not None and eff < mn else "rec" if rc is not None and eff < rc else "ok"
+        out.append({"part": part, "have": have, "min": mn, "rec": rc, "status": st})
+    return out
+
+
+def verdict(ms: list[dict]) -> str:
+    st = {m["status"] for m in ms}
+    return ("insufficiente" if "min" in st else "impostazioni" if "rec" in st else "ok" if "ok" in st else "sconosciuto")
+
+
 def verdict_console(plat: str, h: dict) -> dict | None:
     r = REQ.get(plat)
     if not r:
         return None
     cmin, gmin, rmin, crec, grec, rrec, tips = r
-    reasons, v = [], "ok"
-    for label, have, mn, rc in (("CPU", h["cpu"]["tier"], cmin, crec), ("Scheda video", h["gpu"]["tier"], gmin, grec),
-                                ("RAM", h["ram_gb"], rmin, rrec)):
-        if have < mn:
-            v = "insufficiente"
-            reasons.append(f"{label} sotto il minimo per questa console")
-        elif have < rc:
-            v = v if v == "insufficiente" else "impostazioni"
-            reasons.append(f"{label} sotto il livello consigliato")
-    return {"verdict": v, "reasons": reasons, "suggestions": tips if v != "ok" else [],
+    ms = meters(h, (cmin, gmin, rmin), (crec, grec, rrec))
+    v = verdict(ms)
+    return {"verdict": v, "meters": ms, "note": None, "tips": tips if v != "ok" else [],
             "requirements": {"min": {"cpu": cmin, "gpu": gmin, "ram_gb": rmin},
                              "recommended": {"cpu": crec, "gpu": grec, "ram_gb": rrec}}}
 
@@ -240,20 +250,6 @@ def text_tier(fn, text: str | None) -> int | None:
     return min(ts) if ts else None
 
 
-def compare(req: dict, h: dict, label: str) -> tuple[str | None, list[str]]:
-    """('ok'|'sotto'|None se non confrontabile, motivi)."""
-    bad, seen = [], False
-    for nome, have, need in (("CPU", h["cpu"]["tier"], text_tier(cpu_tier, req["cpu"])),
-                             ("Scheda video", h["gpu"]["tier"], text_tier(gpu_tier, req["gpu"])),
-                             ("RAM", h["ram_gb"], req["ram_gb"])):
-        if need is None:
-            continue
-        seen = True
-        if have < need:
-            bad.append(f"{nome} sotto i requisiti {label}")
-    return ("sotto" if bad else "ok" if seen else None), bad
-
-
 def steam_reqs(appid: str, cache: Path) -> dict | None:
     try:
         data = json.loads(cache.read_text("utf-8"))
@@ -275,19 +271,11 @@ def steam_reqs(appid: str, cache: Path) -> dict | None:
 
 def verdict_steam(raw: dict, h: dict) -> dict:
     mn, rc = parse_req(raw.get("min", "")), parse_req(raw.get("rec", ""))
-    reqs = {"minimum": mn, "recommended": rc}
-    a, ra = compare(mn, h, "minimi")
-    b, rb = compare(rc, h, "consigliati")
-    if a == "sotto":
-        return {"verdict": "insufficiente", "reasons": ra, "suggestions": [], "requirements": reqs}
-    if b == "sotto":
-        return {"verdict": "impostazioni", "reasons": rb, "requirements": reqs,
-                "suggestions": ["Abbassa qualità grafica e risoluzione", "Disattiva ombre e anti-aliasing pesanti"]}
-    if a or b:
-        return {"verdict": "ok", "reasons": ["Soddisfa i requisiti consigliati" if b else "Soddisfa i requisiti minimi"],
-                "suggestions": [], "requirements": reqs}
-    return {"verdict": "sconosciuto", "reasons": ["Requisiti non interpretabili: leggi il testo grezzo"],
-            "suggestions": [], "requirements": reqs}
+    need = lambda q: (text_tier(cpu_tier, q["cpu"]), text_tier(gpu_tier, q["gpu"]), q["ram_gb"])  # noqa: E731
+    ms = meters(h, need(mn), need(rc))
+    v = verdict(ms)
+    return {"verdict": v, "meters": ms, "note": "unparsed" if v == "sconosciuto" else None,
+            "tips": ["lowgfx", "noshadows"] if v == "impostazioni" else [], "requirements": {"minimum": mn, "recommended": rc}}
 
 
 def check(db: sqlite3.Connection, gid: int, cache: Path) -> dict | None:
@@ -300,10 +288,10 @@ def check(db: sqlite3.Connection, gid: int, cache: Path) -> dict | None:
     if res is None:
         m = re.search(r"/app/(\d+)", page or "")
         raw = steam_reqs(m[1], cache) if m and store == "steam" else None
-        res = verdict_steam(raw, h) if raw else {"verdict": "sconosciuto", "suggestions": [], "requirements": {},
-                                                 "reasons": ["Nessun requisito disponibile per questo gioco"]}
+        res = verdict_steam(raw, h) if raw else {"verdict": "sconosciuto", "meters": meters(h, (None,) * 3, (None,) * 3),
+                                                 "tips": [], "requirements": {}, "note": "noreq"}
     if h["incerto"] and res["verdict"] != "sconosciuto":
-        res["reasons"].append("Stima incerta: componenti non riconosciuti con sicurezza")
+        res["note"] = "uncertain"
     return {**res, "hw": h}
 
 
@@ -318,12 +306,12 @@ def register(gs):
     @gs.route("check/{game_id}")
     def check_route(game_id: int):
         if not db_path.exists():
-            raise HTTPException(404, "libreria non trovata")
+            raise HTTPException(404, gs.t("err.lib"))
         db = sqlite3.connect(db_path)
         try:
             r = check(db, game_id, cache)
         finally:
             db.close()
         if r is None:
-            raise HTTPException(404, "gioco non trovato")
+            raise HTTPException(404, gs.t("err.game"))
         return r

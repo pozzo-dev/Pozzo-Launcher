@@ -55,26 +55,26 @@ def main():
         assert ids == [S.STORE_ID], ids  # nell'app c'e' solo lo store
         cat = {x["id"]: x for x in S.catalog(cfg)["items"]}
         assert set(cat) == {d.name for d in T.EXT.iterdir() if (d / "plugin.toml").exists()}      # tutte quelle del repository
-        assert {"linkstores", "minerva", "statistiche"} <= set(cat) and cat["statistiche"]["state"] == "available"
+        assert {"linkstores", "minerva", "riepilogo-annuale"} <= set(cat) and cat["riepilogo-annuale"]["state"] == "available"
 
-        r = S.install(cfg, "statistiche")
-        assert r["ok"] and (plugins / "statistiche" / "backend.py").is_file()
+        r = S.install(cfg, "riepilogo-annuale")
+        assert r["ok"] and (plugins / "riepilogo-annuale" / "backend.py").is_file()
         ps = X.list_plugins(cfg)
-        assert [p["id"] for p in ps] == [S.STORE_ID, "statistiche"] and ps[0]["locked"] and ps[1]["enabled"]
+        assert [p["id"] for p in ps] == [S.STORE_ID, "riepilogo-annuale"] and ps[0]["locked"] and ps[1]["enabled"]
         cat = {x["id"]: x for x in S.catalog(cfg)["items"]}
-        assert cat["statistiche"]["state"] == "installed"
-        assert cat["statistiche"]["installed_permissions"] == ["libreria:lettura"] and cat["minerva"]["installed_permissions"] is None
+        assert cat["riepilogo-annuale"]["state"] == "installed"
+        assert cat["riepilogo-annuale"]["installed_permissions"] == ["libreria:lettura"] and cat["minerva"]["installed_permissions"] is None
         print("ok  installazione da indice locale, store per primo")
 
         # aggiornamento: versione piu' alta nell'indice -> «update», reinstallando si sostituisce la cartella
         idx = json.loads((repo / "index.json").read_text(encoding="utf-8"))
-        st = next(e for e in idx["extensions"] if e["id"] == "statistiche")
+        st = next(e for e in idx["extensions"] if e["id"] == "riepilogo-annuale")
         st["version"] = "9.0"
         (repo / "index.json").write_text(json.dumps(idx), encoding="utf-8")
-        assert {x["id"]: x for x in S.catalog(cfg)["items"]}["statistiche"]["state"] == "update"
-        (plugins / "statistiche" / "vecchio.txt").write_text("x")
-        S.install(cfg, "statistiche")
-        assert not (plugins / "statistiche" / "vecchio.txt").exists()
+        assert {x["id"]: x for x in S.catalog(cfg)["items"]}["riepilogo-annuale"]["state"] == "update"
+        (plugins / "riepilogo-annuale" / "vecchio.txt").write_text("x")
+        S.install(cfg, "riepilogo-annuale")
+        assert not (plugins / "riepilogo-annuale" / "vecchio.txt").exists()
         assert not [d for d in plugins.iterdir() if d.name.startswith(".")]  # niente .tmp/.old lasciati
         print("ok  aggiornamento")
 
@@ -97,9 +97,9 @@ def main():
         assert not (t / "fuori.py").exists() and not (plugins.parent / "fuori.py").exists()
         print("ok  rifiutati: sha256 sbagliato, percorsi nei nomi, versione minima, store")
 
-        S.remove(cfg, "statistiche")
-        assert not (plugins / "statistiche").exists()
-        expect(lambda: S.remove(cfg, "statistiche"), "non installata")
+        S.remove(cfg, "riepilogo-annuale")
+        assert not (plugins / "riepilogo-annuale").exists()
+        expect(lambda: S.remove(cfg, "riepilogo-annuale"), "non installata")
 
         # copia di sviluppo collegata: lo store non la aggiorna ne' la cancella (sarebbero i sorgenti)
         link = plugins / "linkstores"
@@ -185,9 +185,9 @@ def test_fonti(t: Path):
     ids = sorted(d.name for d in T.extension_dirs(T.EXT))
     assert [r["repo"] for r in store["repos"]] == [f"utente/{T.PREFIX}{i}" for i in ids]
     assert all(r["ref"].startswith("v") for r in store["repos"])
-    one = out / f"{T.PREFIX}statistiche"
+    one = out / f"{T.PREFIX}riepilogo-annuale"
     idx = json.loads((one / "index.json").read_text(encoding="utf-8"))["extensions"]
-    assert len(idx) == 1 and idx[0]["id"] == "statistiche" and idx[0]["base"] == "./"
+    assert len(idx) == 1 and idx[0]["id"] == "riepilogo-annuale" and idx[0]["base"] == "./"
     assert {"README.md", "LICENSE", "index.json"}.isdisjoint(idx[0]["files"])      # file del repository, non dell'estensione
     assert (one / "README.md").exists() and (one / ".gitattributes").exists()
     # index <cartella> rigenera lo stesso indice dal repository separato (la cartella si chiama pozzo-ext-<id>)
@@ -196,17 +196,17 @@ def test_fonti(t: Path):
     assert (one / "index.json").read_text(encoding="utf-8") == before
 
     # store locale che rimanda ai repository con "url" (al posto di repo+ref, che richiederebbe GitHub)
-    local = {"version": 1, "repos": [{"url": str(out / f"{T.PREFIX}{i}" / "index.json")} for i in ("stasera", "diario")]
+    local = {"version": 1, "repos": [{"url": str(out / f"{T.PREFIX}{i}" / "index.json")} for i in ("anniversari", "diario")]
              + [{"url": str(t / "manca" / "index.json")}, {"repo": "non valido!"}]}
     (t / "store.json").write_text(json.dumps(local), encoding="utf-8")
     cfg = cfg_in(t, t / "store.json")
     plugins = X.user_dir(cfg, "plugins")
     cat = S.catalog(cfg)
-    assert sorted(x["id"] for x in cat["items"]) == ["diario", "stasera"], cat["items"]
+    assert sorted(x["id"] for x in cat["items"]) == ["anniversari", "diario"], cat["items"]
     src = cat["sources"][0]
     assert src["official"] and src["count"] == 2 and len(src["errors"]) == 2      # un repository irraggiungibile non toglie gli altri
-    S.install(cfg, "stasera")
-    assert (plugins / "stasera" / "logica.js").is_file() and not (plugins / "stasera" / "README.md").exists()
+    S.install(cfg, "anniversari")
+    assert (plugins / "anniversari" / "frontend.js").is_file() and not (plugins / "anniversari" / "README.md").exists()
 
     # seconda fonte (un altro store, letto da disco perche' l'utente non puo' aggiungere percorsi locali): stessa estensione
     # in entrambe -> vince lo store ufficiale; una nuova -> compare con la sua fonte

@@ -18,10 +18,10 @@ MAX_TESTO = 4000
 MAX_SESSIONI = 60
 
 
-def _group(lib: sqlite3.Connection, gid: int):
+def _group(lib: sqlite3.Connection, gid: int, msg: str = "Gioco non trovato"):
     row = lib.execute("SELECT grp FROM games WHERE id=?", (gid,)).fetchone()
     if not row:
-        raise HTTPException(404, "Gioco non trovato")
+        raise HTTPException(404, msg)
     keys = [k for (k,) in lib.execute("SELECT key FROM games WHERE grp=?", (row[0],))]
     return row[0], keys
 
@@ -55,7 +55,7 @@ def register(gs):
     def gioco(id: int):
         lib, user = open_dbs()
         try:
-            grp, keys = _group(lib, id)
+            grp, keys = _group(lib, id, gs.t("err.game"))
             ss = sessioni(user, keys)
         finally:
             lib.close()
@@ -68,10 +68,10 @@ def register(gs):
     def aggiungi(body: dict = Body(...)):
         testo = str(body.get("testo") or "").strip()[:MAX_TESTO]
         if not testo:
-            raise HTTPException(400, "Scrivi qualcosa")
+            raise HTTPException(400, gs.t("err.empty"))
         lib = sqlite3.connect(cache / "library.db")
         try:
-            grp, _ = _group(lib, int(body.get("id") or 0))
+            grp, _ = _group(lib, int(body.get("id") or 0), gs.t("err.game"))
         finally:
             lib.close()
         with lock:
@@ -87,13 +87,13 @@ def register(gs):
     def elimina(body: dict = Body(...)):
         lib = sqlite3.connect(cache / "library.db")
         try:
-            grp, _ = _group(lib, int(body.get("id") or 0))
+            grp, _ = _group(lib, int(body.get("id") or 0), gs.t("err.game"))
         finally:
             lib.close()
         with lock:
             lista = voci(grp)
             resto = [v for v in lista if v["t"] != body.get("t")]
             if len(resto) == len(lista):
-                raise HTTPException(404, "Voce non trovata")
+                raise HTTPException(404, gs.t("err.note"))
             salva(grp, resto)
         return {"ok": True}

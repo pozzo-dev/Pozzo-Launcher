@@ -1,21 +1,14 @@
 [plugin]
 name = "Il mio PC ce la fa?"
-version = "1.0"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "💻"
+icon = "▤"
 screenshot = "screenshot.png"
-description = "Verifica se il tuo PC è abbastanza potente per far girare ogni gioco e suggerisce le impostazioni ottimali per gli emulatori."
-long_description = "Rileva automaticamente la configurazione hardware del tuo computer (processore, scheda video e memoria RAM) e la confronta con i requisiti del titolo selezionato. Per i giochi PC Steam verifica la compatibilità con i requisiti minimi e consigliati ufficiali; per i giochi su console emulata consulta una matrice di requisiti per piattaforma offrendo consigli mirati sulle impostazioni dell'emulatore (come l'uso di Vulkan, la risoluzione interna, il compilatore shader o il frameskip)."
-how_it_works = "1. Installa l'estensione e riavvia Pozzo Launcher.\n2. Clicca su qualsiasi gioco nella libreria per aprire la scheda di dettaglio.\n3. Nella sezione «Il mio PC ce la fa?» visualizzerai il verdetto immediato a colori: «Gira bene», «Gira con queste impostazioni» o «Probabilmente troppo pesante».\n4. Consulta i motivi del giudizio e la checklist dei componenti hardware rilevati a confronto con i requisiti minimi e raccomandati.\n5. Se il gioco è emulato, segui i suggerimenti grafici indicati per massimizzare la fluidità senza scatti."
-features = [
-  "Rilevamento hardware trasparente di CPU, GPU e RAM tramite comandi di sistema",
-  "Verdetto prestazionale istantaneo con badge colorato ad alta leggibilità",
-  "Confronto analitico con requisiti minimi e consigliati ufficiali dello store Steam",
-  "Consigli specifici sulle impostazioni grafiche degli emulatori (Vulkan, upscale, ecc.)",
-  "Pannello a tendina espandibile con le specifiche dettagliate del tuo computer",
-  "Nessun impatto sulle prestazioni grazie alla cache in memoria delle verifiche"
-]
+description = "Nella scheda di ogni gioco un semaforo ti dice se il tuo PC lo regge, con tre indicatori (processore, scheda video, memoria) e le impostazioni consigliate per gli emulatori."
+long_description = "Confronta il tuo hardware con i requisiti del gioco: per i giochi Steam usa i requisiti minimi e consigliati dello store, per le console emulate quelli tipici dell'emulatore. Il risultato è un semaforo (verde, giallo, rosso) e tre barre che mostrano dove sei rispetto al minimo e al consigliato. Se serve, trovi le impostazioni da cambiare per farlo girare meglio."
+how_it_works = "1. Installa l'estensione e apri la scheda di un gioco.\n2. Nella sezione «Il mio PC ce la fa?» trovi il semaforo e le tre barre.\n3. Le tacche sulle barre segnano il minimo e il consigliato.\n4. Se il semaforo è giallo, segui le impostazioni consigliate."
+features = ["Semaforo: gira bene, gira abbassando le impostazioni, troppo pesante", "Tre indicatori con minimo e consigliato", "Requisiti Steam e degli emulatori delle console", "Impostazioni consigliate per farlo girare meglio"]
 permissions = ["rete:store.steampowered.com", "libreria:lettura", "avvio"]  # avvio: PowerShell (Windows), sysctl/system_profiler (macOS), lspci/nvidia-smi (Linux) per leggere CPU/GPU/RAM
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 load = "lazy"

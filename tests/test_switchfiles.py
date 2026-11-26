@@ -1,6 +1,5 @@
 """Switch: base, aggiornamenti e DLC dal nome; l'aggiornamento non e' un gioco a parte e parte con il base (Ryujinx)."""
 
-import json
 import sys
 from pathlib import Path
 
@@ -68,22 +67,6 @@ def test_la_scansione_non_mostra_l_aggiornamento_come_gioco(tmp_path):
     solo_up, = _files(tmp_path, "Orfano [0100BBBB0000B800][v65536].nsp")
     names = sorted(p.name for p, _ in list_entries(P.PLATFORMS["switch"], tmp_path))
     assert names == sorted([base.name, other.name, solo_up.name]), names  # l'aggiornamento senza base resta visibile
-
-
-def test_ryujinx_riceve_l_aggiornamento_piu_nuovo(tmp_path, monkeypatch):
-    monkeypatch.setattr(sys, "platform", "win32")  # percorso APPDATA: e' il caso Windows
-    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
-    exe = tmp_path / "emu" / "Ryujinx.exe"
-    exe.parent.mkdir()
-    base, up1, up2 = _files(tmp_path, "G [0100AAAA0000A000][v0].nsp", "G [0100AAAA0000A800][v65536].nsp", "G [0100AAAA0000A800][v131072].nsp")
-    got = L.register_switch_update(exe, base, [base, up1, up2])
-    f = tmp_path / "appdata" / "Ryujinx" / "games" / "0100aaaa0000a000" / "updates.json"
-    cfg = json.loads(f.read_text("utf-8"))
-    assert got == up2 and cfg["selected"] == str(up2) and set(cfg["paths"]) == {str(up1), str(up2)}
-    assert L.register_switch_update(exe, base, [base]) is None  # nessun aggiornamento: non tocca nulla
-    (tmp_path / "emu" / "portable").mkdir()  # modalita' portable: i dati stanno accanto all'exe
-    L.register_switch_update(exe, base, [base, up2])
-    assert (tmp_path / "emu" / "portable" / "games" / "0100aaaa0000a000" / "updates.json").is_file()
 
 
 def test_resolve_target_sceglie_il_base(tmp_path):

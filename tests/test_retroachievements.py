@@ -36,7 +36,6 @@ def test_console_ids_mapping():
 
 
 def test_endpoints_and_session_cache():
-    consoles_body = (FIXTURES / "ra_consoles.json").read_text(encoding="utf-8")
     gamelist_body = (FIXTURES / "ra_gamelist.json").read_text(encoding="utf-8")
     uprog_body = (FIXTURES / "ra_user_progress.json").read_text(encoding="utf-8")
     gprog_body = (FIXTURES / "ra_game_progress.json").read_text(encoding="utf-8")
@@ -49,8 +48,6 @@ def test_endpoints_and_session_cache():
         if q.get("y") != "FAKE_RA_KEY":
             return httpx.Response(401, json={"message": "Unauthorized"})
         path = request.url.path
-        if path.endswith("/API_GetConsoleIDs.php"):
-            return httpx.Response(200, text=consoles_body, headers={"content-type": "application/json"})
         if path.endswith("/API_GetGameList.php"):
             assert q.get("i") == "1"
             assert q.get("h") == "1"
@@ -65,9 +62,6 @@ def test_endpoints_and_session_cache():
         return httpx.Response(404)
 
     with ra.client("TestPlayer", "FAKE_RA_KEY", transport=httpx.MockTransport(handler)) as c:
-        systems = ra.console_ids(c)
-        assert len(systems) == 4 and systems[0]["id"] == 1 and systems[0]["name"] == "Mega Drive"
-
         games = ra.game_list(c, "megadrive")
         assert len(games) == 3
         assert games[0]["id"] == 3684
@@ -95,7 +89,7 @@ def test_endpoints_and_session_cache():
         assert a0["badge_url"] == "https://media.retroachievements.org/Badge/250336.png"
         assert a1["id"] == 10 and a1["unlocked"] is False
 
-    print("ok  endpoint console_ids, game_list, user_progress, game_progress e cache di sessione")
+    print("ok  endpoint game_list, user_progress, game_progress e cache di sessione")
 
 
 def test_matching_and_rom_hash():

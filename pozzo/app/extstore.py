@@ -182,6 +182,15 @@ def catalog(cfg) -> dict:
                 pass
         item = {k: e.get(k) or m.get(k) for k in ("id", "name", "version", "description", "author", "min_app", "source", "official",
                                                   "icon", "screenshot", "screenshots", "long_description", "how_it_works", "features", "base", "featured")}
+        # testi nella lingua dell'interfaccia: dall'indice (i18n) o, se c'e', dal locales.json della copia locale
+        tr = X.pick_lang(e["i18n"], X.ext_lang()) if isinstance(e.get("i18n"), dict) else {}
+        if not tr and (repo_ext / e["id"]).is_dir():
+            loc = X.pick_lang(X.ext_locales(repo_ext / e["id"]), X.ext_lang())
+            tr = {k: loc[f"plugin.{k}"] for k in ("name", "description", "long_description", "how_it_works", "features")
+                  if isinstance(loc.get(f"plugin.{k}"), str)}
+            if "features" in tr:
+                tr["features"] = [x for x in tr["features"].split("\n") if x.strip()]
+        item.update({k: v for k, v in tr.items() if v})
         raw = e["permissions"] if "permissions" in e else m.get("permissions")  # l'indice verificato prima del repository locale
         perms = [x for x in raw if isinstance(x, str)] if isinstance(raw, list) else []
         item.update({"permissions": perms, "permissions_unknown": raw is None,

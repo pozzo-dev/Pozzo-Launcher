@@ -99,15 +99,6 @@ function setStorageItem(key, value) {
   } catch { /* storage non disponibile */ }
 }
 
-function removeStorageItem(key) {
-  try {
-    const s = getStorage();
-    if (!s) return;
-    if (typeof s.removeItem === "function") s.removeItem(key);
-    else delete s[key];
-  } catch { /* storage non disponibile */ }
-}
-
 /* ------------------------------------------------------------------ pulsantiera app: preferenze */
 const APPS_SIZES = ["s", "m", "l"];
 const APPS_SHAPES = ["rounded", "square", "circle"];

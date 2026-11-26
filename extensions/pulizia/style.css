@@ -1,10 +1,35 @@
-.pl-tabs, .pl-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.pl-years { margin-left: 8px; color: var(--muted); }
-.pl-list { list-style: none; padding: 0; margin: 12px 0 0; max-width: 900px; }
-.pl-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
-.pl-list label { display: flex; gap: 8px; align-items: baseline; }
-.pl-disk { margin-top: 28px; max-width: 900px; }
-.pl-dup-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
-.pl-dup-file { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
-.pl-dup-file code { font-size: 12px; word-break: break-all; }
-.pl-tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+/* Pulizia: riquadri riassuntivi come schede, griglia di copertine selezionabili, file identici */
+.pl-sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--space-3); max-width: 1200px; margin-bottom: var(--space-5); }
+.pl-sum-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: var(--space-3) var(--space-4); text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); color: var(--text); font: inherit; cursor: pointer; }
+.pl-sum-card b { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pl-sum-card small { font-size: var(--type-xs); }
+.pl-sum-card:hover, .pl-sum-card:focus-visible { border-color: var(--accent); }
+.pl-sum-card.on { border-color: var(--accent); background: var(--bg-3); box-shadow: inset 0 -3px 0 var(--accent); }
+.pl-bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+  padding: var(--space-2) 0; margin-bottom: var(--space-3); background: var(--bg); }
+.pl-count { margin-right: auto; color: var(--muted); }
+.pl-years { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); }
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); max-width: 1200px; }
+.pl-card { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
+.pl-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pl-pick { position: relative; display: block; cursor: pointer; }
+.pl-pick input { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 1; width: 20px; height: 20px; accent-color: var(--accent); }
+.pl-covers { position: relative; display: block; aspect-ratio: 3 / 4; background: linear-gradient(145deg, var(--bg-3), var(--bg-2)); }
+.pl-covers b { position: absolute; inset: auto 0 0; padding: var(--space-2); font-size: var(--type-xs); }
+.pl-covers img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pl-card.stack .pl-covers img:nth-child(2) { inset: 8px -8px -8px 8px; opacity: .55; z-index: -0; }
+.pl-card.stack .pl-covers img:nth-child(1) { z-index: 1; box-shadow: var(--elevation-2); }
+.pl-card.on .pl-covers img { opacity: .75; }
+.pl-info { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3) var(--space-3); min-width: 0; }
+.pl-info b, .pl-info span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pl-info .muted, .pl-extra { font-size: var(--type-xs); }
+.pl-extra { color: var(--warn); }
+.pl-open { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 1; width: 28px; height: 28px; background: var(--panel); }
+.pl-disk { max-width: 1000px; }
+.pl-dup-card { padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
+.pl-dup-card header { display: flex; align-items: baseline; gap: var(--space-3); }
+.pl-dup-card header b { font-size: var(--type-lg); color: var(--accent); }
+.pl-dup-file { display: flex; gap: var(--space-2); align-items: baseline; padding: var(--space-1) 0; }
+.pl-dup-file code { font-size: var(--type-xs); word-break: break-all; color: var(--muted); }

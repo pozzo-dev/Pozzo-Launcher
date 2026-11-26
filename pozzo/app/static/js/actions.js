@@ -151,7 +151,7 @@ function openCtx(e, g) {
     if (!g.installed && g.store === "steam") rows.push({ l: "⬇ " + t("h.steamcmd.menu"), f: () => steamcmdDownload(g.id) });
     rows.push({ l: "🛒 " + t("h.act.storePage"), f: () => api(`/api/game/${g.id}/store-page`, { body: {} }) });
   }
-  if (wofAvailable(g)) rows.push({ l: "🗜 " + t("w.wof.title"), f: () => openWof(g) });
+  if (wofAvailable(g)) rows.push({ l: "🗜 " + t("w.wof.title"), f: () => openWof("game", g.id), wof: 1 });
   if (g.store !== "online") rows.push({ l: "🖥 " + t("h.act.shortcut"), f: async () => {
     await api(`/api/game/${g.id}/shortcut`, { body: {} });
     toast(t("h.act.shortcutMade", {name: g.title}));
@@ -180,6 +180,8 @@ function openCtx(e, g) {
     : r.stars ? `<div class="stars">${[5, 4, 3, 2, 1].map((n) => `<span class="st" data-n="${n}" title="${n}/5">★</span>`).join("")}</div>`
     : `<div class="ci${r.hl ? " hl" : ""}" data-i="${i}">${esc(r.l)}</div>`).join("");
   document.body.appendChild(m);
+  const wofRow = m.querySelector(`[data-i="${rows.findIndex((r) => r.wof)}"]`);
+  if (wofRow) wofGate(wofRow, "game", g.id);
   if (typeof toolsCtxRow === "function") toolsCtxRow(g, m, rows).catch(() => {});
   m.style.left = Math.max(6, Math.min(e.clientX, innerWidth - m.offsetWidth - 8)) + "px";
   m.style.top = Math.max(6, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + "px";
@@ -195,7 +197,7 @@ function openCtx(e, g) {
       return;
     }
     const it = ev.target.closest(".ci");
-    if (!it) return;
+    if (!it || it.ariaDisabled === "true") return;
     closeCtx();
     try { await rows[+it.dataset.i].f(); } catch (err) { toastError(err); }
   };

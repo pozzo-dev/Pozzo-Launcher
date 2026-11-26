@@ -1,14 +1,14 @@
 [plugin]
-name = "Riepilogo annuale"
-version = "1.0"
+name = "Il tuo anno"
+version = "2.0"
 author = "Pozzo Launcher"
-icon = "📊"
+icon = "✦"
 screenshot = "screenshot.png"
-description = "Genera un riassunto grafico del tuo anno di gioco (ore totali, titoli più giocati, console preferita, mese record) pronto da salvare e condividere."
-long_description = "Il tuo 'Wrapped' videoludico personale. Al termine dell'anno (o in qualsiasi momento per gli anni passati), l'estensione elabora tutte le sessioni registrate ed elabora un'infografica elegante ad alta risoluzione con le tue statistiche chiave: tempo totale speso a giocare, podio dei giochi preferiti, console più utilizzata e giorno con la sessione più lunga."
-how_it_works = "1. Installa l'estensione e seleziona «Riepilogo annuale» dalla barra laterale.\n2. Seleziona l'anno di riferimento dal menu a discesa (es. 2026, 2025...).\n3. Visualizza la schermata con grafici, classifiche e copertine dei tuoi titoli più amati.\n4. Premi «Salva immagine» per scaricare una card grafica PNG perfetta da condividere sui social o con gli amici."
-features = ["Calcolo accurato di ore complessive, titoli completati e piattaforme dominanti", "Unificazione automatica delle diverse versioni dello stesso gioco", "Esportazione grafica in alta risoluzione pronta per la condivisione", "Funziona al 100% in locale senza inviare alcun dato a server esterni"]
+description = "Il tuo anno di gioco raccontato come una storia a schermo intero: ore, gioco dell'anno, classifica, abitudini e record, con un'immagine da condividere."
+long_description = "Una storia animata a schede, come i riepiloghi di fine anno delle app di musica: quante ore hai giocato, il tuo gioco dell'anno con la sua copertina, i cinque più giocati, la console e il mese preferiti, la sessione più lunga e i giochi finiti. Alla fine puoi salvare un'immagine da condividere. I numeri completi restano nella pagina Statistiche dell'app."
+how_it_works = "1. Installa l'estensione e apri «Il tuo anno» nella barra laterale.\n2. Scegli l'anno in alto.\n3. Premi «Guarda il tuo anno»: le schede scorrono da sole; frecce o clic a destra e a sinistra per andare avanti e indietro, Esc per uscire.\n4. Nell'ultima scheda salvi l'immagine o apri le Statistiche."
+features = ["Storia a schermo intero con schede animate", "Gioco dell'anno e classifica con le copertine", "Console, mese e giorno preferiti, sessione più lunga", "Immagine da condividere con i colori del tuo tema"]
 api = 1
-min_app = "0.7.1"
+min_app = "0.20.2"
 permissions = ["libreria:lettura"]
 load = "lazy"

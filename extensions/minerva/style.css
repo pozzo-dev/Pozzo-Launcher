@@ -1,0 +1,15 @@
+/* Store Minerva: una scheda per console con icona, giochi letti e «Leggi» */
+.mv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); max-width: 1200px; }
+.mv-card { display: grid; grid-template-columns: 40px 1fr auto; gap: var(--space-3); align-items: center;
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
+.mv-card.new { border-style: dashed; }
+.mv-ico { width: 40px; height: 40px; object-fit: contain; }
+.mv-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mv-info b, .mv-info span, .mv-info small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mv-info small { font-size: var(--type-xs); }
+.mv-status { display: flex; flex-direction: column; gap: var(--space-1); max-width: 520px; margin-bottom: var(--space-4); }
+.mv-bar { height: 6px; border-radius: var(--radius-pill); background: var(--bg-3); overflow: hidden; }
+.mv-bar i { display: block; height: 100%; width: var(--w); background: var(--accent); transition: width .4s var(--motion-ease); }
+.mv-log { margin-top: var(--space-5); max-width: 1200px; }
+.mv-log summary { cursor: pointer; color: var(--muted); }
+.mv-log pre { max-height: 30vh; overflow: auto; white-space: pre-wrap; font-size: var(--type-xs); color: var(--muted); }

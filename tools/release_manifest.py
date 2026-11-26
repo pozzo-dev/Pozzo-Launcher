@@ -125,9 +125,19 @@ def create(release: Path, version: str, payloads: bool = True) -> Path:
     return result
 
 
+def create_installers(release: Path, version: str) -> Path:
+    """Elenco (poi firmato) degli installer con lo SHA-256. File a parte: i client vecchi rifiutano campi in piu' nel manifest."""
+    files = [{"name": f.name, "sha256": hashlib.sha256(f.read_bytes()).hexdigest(), "size": f.stat().st_size}
+             for f in sorted([*release.glob("*-setup.exe"), *release.glob("*.deb")])]
+    result = release / f"PozzoLauncher-{version}-installers.json"
+    result.write_text(json.dumps({"version": version, "file": files}, separators=(",", ":")) + "\n", encoding="utf-8")
+    return result
+
+
 if __name__ == "__main__":
     import sys
 
     # --solo-manifest: niente asset per file (release.yml), il manifest firmato verifica il pacchetto completo
     args = [a for a in sys.argv[1:] if a != "--solo-manifest"]
+    print(create_installers(Path(args[1]), args[0].removeprefix("v")))  # per primo: non dipende dai pacchetti portatili
     print(create(Path(args[1]), args[0].removeprefix("v"), payloads="--solo-manifest" not in sys.argv))

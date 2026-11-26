@@ -32,6 +32,7 @@ PORT = 8766
 COOKIE = "gs_phone"
 CODE_TTL = 600
 MAX_FAILS = 10
+GUEST_TTL = 12 * 3600  # accesso dell'ospite a distanza: mezza giornata, se torna domani serve un invito nuovo
 
 # percorsi raggiungibili dal telefono (dopo l'abbinamento)
 ALLOWED = [
@@ -241,13 +242,19 @@ class PhoneHub:
     def devices(self) -> list[dict]:
         return [{k: v for k, v in d.items() if k != "token"} for d in self.conf["devices"]]
 
+    @staticmethod
+    def _expired(d: dict) -> bool:
+        """Accesso a tempo (ospite della libreria o a distanza) scaduto."""
+        exp = d.get("created", 0) + GUEST_TTL if d.get("kind") == "guest" else d.get("exp")
+        return bool(exp and time.time() > exp)
+
     def device_for(self, token: str | None) -> dict | None:
         if not token:
             return None
         h = _sha(token)
         for d in self.conf["devices"]:
             if secrets.compare_digest(d.get("token", ""), h):
-                if d.get("exp") and time.time() > d["exp"]:  # accesso a tempo (ospite della libreria): scaduto
+                if self._expired(d):  # anche se il cookie c'e' ancora
                     return None
                 if time.time() - d.get("last", 0) > 300:  # ultimo accesso, aggiornato al massimo ogni 5 minuti
                     self._touch(d["id"])
@@ -744,8 +751,7 @@ def register(app, hub: PhoneHub, static_dir: Path):
         except ValueError as e:
             raise HTTPException(403, str(e))
         r = JSONResponse({"ok": True})
-        # vale mezza giornata: l'ospite e' di passaggio, se torna domani serve un invito nuovo
-        r.set_cookie(COOKIE, token, max_age=12 * 3600, httponly=True, secure=request.url.scheme == "https",
+        r.set_cookie(COOKIE, token, max_age=GUEST_TTL, httponly=True, secure=request.url.scheme == "https",
                      samesite="strict", path="/")
         return r
 
@@ -822,11 +828,15 @@ def register(app, hub: PhoneHub, static_dir: Path):
         loop, queue = asyncio.get_running_loop(), asyncio.Queue()
         hub.slots[n]["rumble"] = lambda large, small: loop.call_soon_threadsafe(queue.put_nowait, (large, small))
         recv, rumble = asyncio.ensure_future(ws.receive_text()), asyncio.ensure_future(queue.get())
-        seen_rev = -1
+        seen_rev, check = -1, 0.0
         try:
             while True:
                 n = hub.slot_of(cid)
-                if n is None or hub.slots[n].get("kick"):
+                over = False
+                if time.time() >= check:  # una volta al secondo, non a ogni comando del pad
+                    check = time.time() + 1
+                    over = any(d["id"] == dev and hub._expired(d) for d in hub.conf["devices"])
+                if n is None or over or hub.slots[n].get("kick"):
                     await ws.close(code=4001)
                     break
                 if seen_rev != hub.rev:  # sala giocatori: chi e' chi, con il colore

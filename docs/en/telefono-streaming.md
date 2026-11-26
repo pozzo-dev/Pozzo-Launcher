@@ -272,7 +272,7 @@ A friend can join your game session from their home: their phone becomes a **pla
    your **public address**: a Cloudflare Tunnel (`cloudflared tunnel --url https://localhost:8766`), ngrok, or Tailscale Funnel.
    Leaving this blank restricts invitations to your local home network.
 2. Click **Create friend invite** and send them the **link** and **6-digit code**. The invitation is valid for 10 minutes,
-   single-use, and for one guest only; allowing them back in later requires generating a new invite.
+   single-use, and for one guest only; the guest's access expires after 12 hours, allowing them back in later requires generating a new invite.
 3. Your friend opens the link, enters the code and their name, and immediately sees the active controller: their phone is
    registered as **Player 2** (or the next available player slot).
 4. **Video**: your friend installs [Moonlight](https://moonlight-stream.org), adds your PC address (remote access requires

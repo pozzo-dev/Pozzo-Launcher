@@ -103,13 +103,6 @@ class Index:
                 if r.get("crc"):
                     self.meta_crc[r["crc"].upper()].update(vals)
 
-    def identify_by_name(self, game: Game) -> tuple[str, dict] | None:
-        """Solo corrispondenza ESATTA del nome file con il DAT: affidabile e senza leggere il file."""
-        for stem in (game.stem, Path(game.inner_name).stem if game.inner_name else ""):
-            if stem and stem.lower() in self.by_name:
-                return self.by_name[stem.lower()], self.rom_info.get(stem.lower(), {})
-        return None
-
     def _hash_match(self, game: Game) -> tuple[str, str] | None:
         size = game.inner_size or game.size
         for kind, value in (("sha1", game.sha1), ("md5", game.md5), ("crc", game.crc),

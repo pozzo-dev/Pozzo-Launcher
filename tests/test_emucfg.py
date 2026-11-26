@@ -183,18 +183,6 @@ def test_atomic_write_leaves_no_temp_and_keeps_old_on_failure():
     print("ok  scrittura atomica")
 
 
-def test_retroarch_override_path_is_confined():
-    path = emucfg.retroarch_override_path(Path("cfg"), "snes9x", "Super Mario World")
-    assert path == Path("cfg") / "snes9x" / "Super Mario World.cfg"
-    for bad in ("..", "../outside", "core/name"):
-        try:
-            emucfg.retroarch_override_path("cfg", bad, "Game")
-            raise AssertionError(f"Nome non valido accettato: {bad}")
-        except ValueError:
-            pass
-    print("ok  percorso per-gioco confinato")
-
-
 if __name__ == "__main__":
     test_shipped_catalogs_are_valid()
     test_precedence_game_over_console_over_leave()
@@ -204,5 +192,4 @@ if __name__ == "__main__":
     test_unsupported_and_undeterminable_target()
     test_invalid_catalog_raises()
     test_atomic_write_leaves_no_temp_and_keeps_old_on_failure()
-    test_retroarch_override_path_is_confined()
     print("TUTTI I TEST OK")

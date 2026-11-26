@@ -1,5 +1,4 @@
 // Notizie videogiochi: timeline stile social, filtro «i miei giochi», fonti configurabili.
-// In arrivo: la pagina «Calendario uscite» (estensione calendario-uscite) resta separata, qui nessuna integrazione.
 import { KINDS, relDate, safeUrl, validUrl, buildSets, matcher, upcoming } from "./logica.js";
 
 const LS = "notizie.prefs";
@@ -7,6 +6,7 @@ const load = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } 
 const save = (p) => { try { localStorage.setItem(LS, JSON.stringify(p)); } catch { /* storage non disponibile */ } };
 
 export default function (gs, ctx) {
+  const { t, lang } = ctx;
   const prefs = load();   // {mine, casa, kind}
   let match = () => true;
   const refreshMine = () => { try { match = matcher(buildSets(gs.library())); } catch { match = () => true; } };
@@ -21,70 +21,82 @@ export default function (gs, ctx) {
   const api = { fetchFeed, mine: () => match, esc: gs.esc };
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const kindName = (k) => t(`kind.${KINDS.includes(k) ? k : "notizia"}`);
+  // le case sono nomi propri; solo i gruppi generici del backend (Generale, Italiano, Retro, Personali) si traducono
+  const house = (c) => { const k = `house.${c}`, v = t(k); return v === k ? c : v; };
 
   function card(it) {
     const c = el("article", "nz-card");
     const head = el("div", "nz-head");
-    head.append(el("span", "nz-casa", it.casa || it.source),
-      el("span", `nz-kind nz-k-${KINDS[it.kind] ? it.kind : "notizia"}`, KINDS[it.kind] || "Notizia"),
-      el("span", "nz-date muted", relDate(it.published)));
+    head.append(el("span", "nz-casa", it.casa ? house(it.casa) : it.source),
+      el("span", `nz-kind nz-k-${KINDS.includes(it.kind) ? it.kind : "notizia"}`, kindName(it.kind)),
+      el("span", "nz-date muted", relDate(it.published, Date.now(), lang)));
     const url = safeUrl(it.link);
-    const t = el("h3", "nz-title");
+    const h = el("h3", "nz-title");
     if (url) {
       const a = el("a", "", it.title); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
       a.onclick = (e) => { e.preventDefault(); gs.api("/api/open", { body: { url } }).catch(() => window.open(url, "_blank", "noopener")); };
-      t.append(a);
-    } else t.textContent = it.title;
-    c.append(head, t);
+      h.append(a);
+    } else h.textContent = it.title;
+    c.append(head, h);
     if (it.summary) c.append(el("p", "nz-sum", it.summary));
     const img = safeUrl(it.image);
     if (img) { const i = el("img", "nz-img"); i.loading = "lazy"; i.alt = ""; i.referrerPolicy = "no-referrer"; i.src = img; i.onerror = () => i.remove(); c.append(i); }
     return c;
   }
 
-  gs.addSidebarItem({ id: "notizie", label: "Notizie", icon: "📰", view: "notizie" });
+  gs.addSidebarItem({ id: "notizie", label: t("nav"), icon: "≡", view: "notizie" });
+  gs.addTutorial({
+    id: ctx.id, view: "notizie",
+    steps: [
+      { title: t("tut.1.t"), text: t("tut.1.x") },
+      { title: t("tut.2.t"), text: t("tut.2.x"), sel: ".nz-mine" },
+      { title: t("tut.3.t"), text: t("tut.3.x"), sel: ".nz-chips" },
+      { title: t("tut.4.t"), text: t("tut.4.x") },
+    ],
+  });
 
   gs.registerView("notizie", {
-    title: "Notizie",
+    title: t("nav"),
     async render(root) {
       const st = { casa: prefs.casa || "", kind: prefs.kind || "", q: "", mine: !!prefs.mine, items: [], sources: [], busy: false, end: false };
-      root.innerHTML = "";
-      root.classList.add("nz");
+      const body = gs.ui.page(root, { title: t("nav"), subtitle: t("subtitle"), tutorial: ctx.id });
+      body.classList.add("nz");
       const bar = el("div", "nz-bar"), chips = el("div", "nz-chips"), kinds = el("div", "nz-chips");
-      const search = el("input", "nz-search"); search.type = "search"; search.placeholder = "Cerca nelle notizie…"; search.setAttribute("aria-label", "Cerca");
+      const search = el("input", "field nz-search"); search.type = "search"; search.placeholder = t("search"); search.setAttribute("aria-label", t("search"));
       const mineLbl = el("label", "chk nz-mine"), mine = el("input"); mine.type = "checkbox"; mine.checked = st.mine;
-      const mineCount = el("span", "muted"); mineLbl.append(mine, " Solo i miei giochi e console ", mineCount);
+      const mineCount = el("span", "muted"); mineLbl.append(mine, ` ${t("mine")} `, mineCount);
       bar.append(search, mineLbl);
-      const soon = el("section", "nz-soon"), list = el("div", "nz-list"), errs = el("details", "nz-errs"), more = el("button", "btn nz-more", "Carica altri");
-      root.append(bar, chips, kinds, soon, list, more, errs);
+      const soon = el("section", "nz-soon"), list = el("div", "nz-list"), errs = el("details", "nz-errs"), more = el("button", "btn nz-more", t("more"));
+      body.append(bar, chips, kinds, soon, list, more, errs);
       more.hidden = true; errs.hidden = true;
 
       const chipRow = (row, opts, key) => {
         row.replaceChildren(...opts.map(([v, lab]) => {
-          const b = el("button", "nz-chip" + (st[key] === v ? " on" : ""), lab); b.type = "button";
+          const b = el("button", "chip" + (st[key] === v ? " on" : ""), lab); b.type = "button";
           b.onclick = () => { st[key] = v; prefs[key] = v; save(prefs); chipRow(row, opts, key); reload(); };
           return b;
         }));
       };
-      const drawKinds = () => chipRow(kinds, [["", "Tutto"], ...Object.entries(KINDS)], "kind");
+      const drawKinds = () => chipRow(kinds, [["", t("all")], ...KINDS.map((k) => [k, kindName(k)])], "kind");
       const drawCase = () => {
         const cs = [...new Set(st.sources.map((s) => s.casa).filter(Boolean))].sort();
-        chipRow(chips, [["", "Tutte le case"], ...cs.map((c) => [c, c])], "casa");
+        chipRow(chips, [["", t("allHouses")], ...cs.map((c) => [c, house(c)])], "casa");
       };
 
       function draw() {
         const vis = st.mine ? st.items.filter(match) : st.items;
-        mineCount.textContent = st.mine ? `(${vis.length} su ${st.items.length})` : "";
+        mineCount.textContent = st.mine ? t("mineCount", { n: vis.length, tot: st.items.length }) : "";
         const up = upcoming(vis).slice(0, 5);
         soon.replaceChildren();
-        if (up.length) { soon.append(el("h2", "nz-h", "Annunci e prossime uscite")); const g = el("div", "nz-list"); up.forEach((i) => g.append(card(i))); soon.append(g); }
+        if (up.length) { soon.append(el("h2", "nz-h", t("soon"))); const g = el("div", "nz-list"); up.forEach((i) => g.append(card(i))); soon.append(g); }
         list.replaceChildren(...vis.map(card));
-        if (!vis.length && !st.busy) list.append(el("p", "muted", st.mine ? "Nessuna notizia sui tuoi giochi o console tra quelle caricate." : "Nessuna notizia trovata."));
+        if (!vis.length && !st.busy) list.append(gs.ui.empty({ icon: "≡", title: t(st.mine ? "emptyMine.t" : "empty.t"), text: t(st.mine ? "emptyMine.x" : "empty.x") }));
         more.hidden = st.end || !st.items.length;
         const bad = st.sources.filter((s) => s.ok === false);
         errs.hidden = !bad.length;
-        errs.replaceChildren(el("summary", "", `${bad.length} font${bad.length === 1 ? "e non raggiungibile" : "i non raggiungibili"}`),
-          ...bad.map((s) => el("div", "muted", `${s.nome}: ${s.error || "errore"}`)));
+        errs.replaceChildren(el("summary", "", t("badSources", { n: bad.length })),
+          ...bad.map((s) => el("div", "muted", `${s.nome}: ${s.error || t("error")}`)));
       }
 
       let tok = 0;
@@ -101,7 +113,7 @@ export default function (gs, ctx) {
           st.items = st.items.concat(got);
           st.end = got.length < 50;
           if (d.sources?.length) { const first = !st.sources.length; st.sources = d.sources; if (first) drawCase(); }
-        } catch (e) { if (my === tok) list.replaceChildren(el("p", "muted", `Notizie non disponibili: ${e.message}`)); }
+        } catch (e) { if (my === tok) list.replaceChildren(el("p", "muted", t("unavailable", { msg: e.message }))); }
         finally { if (my === tok) { window.GSSkeleton?.hide?.(list); st.busy = false; more.disabled = false; draw(); } }
       }
       const reload = () => fetchMore(true);
@@ -116,7 +128,7 @@ export default function (gs, ctx) {
   });
 
   gs.addSettingsTab({
-    id: "notizie", label: "Notizie",
+    id: "notizie", label: t("nav"),
     async render(root) {
       root.innerHTML = "";
       let srcs;
@@ -129,39 +141,39 @@ export default function (gs, ctx) {
       const custom = srcs.filter((s) => s.custom).map(({ casa, nome, url }) => ({ casa, nome, url }));
       const msg = el("p", "muted");
       const persist = async () => {
-        try { await gs.api("/plugin-api/notizie/sources", { body: { disabled_sources: [...disabled], custom_sources: custom } }); msg.textContent = "Salvato."; return true; }
-        catch (e) { msg.textContent = `Errore: ${e.message}`; return false; }
+        try { await gs.api("/plugin-api/notizie/sources", { body: { disabled_sources: [...disabled], custom_sources: custom } }); msg.textContent = t("saved"); return true; }
+        catch (e) { msg.textContent = t("errorMsg", { msg: e.message }); return false; }
       };
-      root.append(el("h3", "", "Fonti delle notizie"));
+      root.append(el("h3", "", t("sources")));
       const byCasa = new Map();
       srcs.forEach((s) => byCasa.set(s.casa, [...(byCasa.get(s.casa) || []), s]));
       for (const [casa, ss] of byCasa) {
-        const g = el("fieldset", "nz-grp"); g.append(el("legend", "", casa));
+        const g = el("fieldset", "nz-grp"); g.append(el("legend", "", house(casa)));
         for (const s of ss) {
           const l = el("label", "chk"), cb = el("input"); cb.type = "checkbox"; cb.checked = s.enabled;
           cb.onchange = () => { if (cb.checked) disabled.delete(s.id); else disabled.add(s.id); persist(); };
-          const sx = stato.get(s.id), info = sx ? (sx.ok ? "ok" : `errore: ${sx.error || "?"}`) : "";
-          l.append(cb, ` ${s.nome} `, el("span", "muted", info));
+          const sx = stato.get(s.id), info = sx ? (sx.ok ? t("ok") : t("errorMsg", { msg: sx.error || "?" })) : "";
+          l.append(cb, ` ${s.nome} `, el("span", `muted${sx && !sx.ok ? " nz-bad" : ""}`, info));
           g.append(l);
         }
         root.append(g);
       }
       const f = el("form", "nz-add");
-      const mk = (ph) => { const i = el("input"); i.placeholder = ph; i.required = true; return i; };
-      const c = mk("Casa"), n = mk("Nome"), u = mk("https://…/feed.xml"), b = el("button", "btn", "Aggiungi fonte"); b.type = "submit";
+      const mk = (ph) => { const i = el("input", "field"); i.placeholder = ph; i.required = true; i.setAttribute("aria-label", ph); return i; };
+      const c = mk(t("add.house")), n = mk(t("add.name")), u = mk("https://…/feed.xml"), b = el("button", "btn", t("add.btn")); b.type = "submit";
       f.append(c, n, u, b);
       f.onsubmit = async (e) => {
         e.preventDefault();
-        if (!validUrl(u.value.trim())) { msg.textContent = "L’URL deve iniziare con http:// o https://"; return; }
+        if (!validUrl(u.value.trim())) { msg.textContent = t("add.badUrl"); return; }
         custom.push({ casa: c.value.trim(), nome: n.value.trim(), url: u.value.trim() });
-        if (await persist()) { f.reset(); msg.textContent = "Fonte aggiunta. Riapri le impostazioni per vederla nell’elenco."; } else custom.pop();
+        if (await persist()) { f.reset(); msg.textContent = t("add.done"); } else custom.pop();
       };
-      root.append(el("h4", "", "Aggiungi fonte"), f, msg);
+      root.append(el("h4", "", t("add.title")), f, msg);
     },
   });
 
   // moduli opzionali scritti a parte: se mancano si prosegue
   for (const m of ["./segui.js", "./rassegna.js"]) {
-    import(m).then((x) => x.default?.(gs, ctx, api)).catch(() => {});
+    import(m).then((x) => x.default?.(gs, ctx, api)).catch((e) => console.warn(`notizie ${m}:`, e));
   }
 }

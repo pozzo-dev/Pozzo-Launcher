@@ -31,7 +31,6 @@ const REGOLE = {
   steamgriddb: () => ({ reason: "Copertine e artwork ad alta risoluzione per i tuoi giochi" }),
   diario: () => ({ reason: "Appunti, trucchi e cronologia delle sessioni per ogni gioco" }),
   obiettivi: () => ({ reason: "Sfide personali con distintivi da sbloccare giocando" }),
-  statistiche: (c) => (sconosciuto(c.games) || c.games > 0 ? { reason: "Grafici del tempo di gioco per console e store" } : null),
   pulizia: (c) => (sconosciuto(c.games) || c.games > 200 ? { reason: `Hai ${c.games} giochi: trova duplicati e titoli dimenticati` } : null),
   minerva: (c) => (sconosciuto(c.consoles) ? { reason: "Archivi pronti per le console, con store preimpostati" }
     : c.consoles.length ? { reason: `Hai giochi ${c.consoles[0].toUpperCase()}: importa gli archivi per quella console` } : null),
@@ -40,9 +39,6 @@ const REGOLE = {
   "pc-adatto": (c) => (sconosciuto(c.consoles) ? { reason: "Scopri se il tuo PC regge i giochi e con quali impostazioni" }
     : c.consoles.length ? { reason: `Hai giochi ${c.consoles[0].toUpperCase()}: scopri se il tuo PC li emula bene` } : null),
   notizie: () => ({ reason: "Le notizie di case e siti, con quelle dei tuoi giochi in evidenza" }),
-  sconti: (c) => (sconosciuto(c.wishlist) ? { reason: "Sconti, bundle e giochi gratis del momento" }
-    : c.wishlist > 0 ? { reason: `Hai ${c.wishlist} giochi in lista desideri: guarda quali sono in sconto` } : null),
-  recensioni: () => ({ reason: "Punteggi Metacritic, OpenCritic e Steam nel dettaglio di ogni gioco" }),
 };
 
 // Suggerimenti «Per te» tra le estensioni non installate, nell'ordine ricevuto. ctx: {consoles, games, wishlist}.
@@ -519,6 +515,7 @@ export default function (gs) {
                 ${x.state === "available" ? `<button class="btn primary" data-act="installa" data-id="${gs.esc(x.id)}" data-src="${gs.esc(x.source)}">${BTN.available}</button>` : ""}
                 ${x.state === "incompatible" ? `<button class="btn" disabled>${BTN.incompatible}</button>` : ""}
                 ${(x.state === "installed" || x.state === "update") && !x.dev ? `<button class="btn" data-act="rimuovi" data-id="${gs.esc(x.id)}">${BTN.installed}</button>` : ""}
+                ${x.enabled && gs.tutorials?.has(x.id) ? `<button class="btn" data-tutorial="${gs.esc(x.id)}" type="button">${gs.esc(t("b.ext.tutorialBtn"))}</button>` : ""}
                 <button class="btn es-btn-details" data-detail-id="${gs.esc(x.id)}" type="button">ℹ️ Dettagli</button>
               </div>
             </div>
@@ -550,6 +547,9 @@ export default function (gs) {
 
       // Gestione click sulla lista (Card, Dettagli, Azioni)
       list.onclick = async (e) => {
+        // 0. Tutorial dell'estensione installata (registrato con gs.addTutorial)
+        const tutBtn = e.target.closest("[data-tutorial]");
+        if (tutBtn) { e.stopPropagation(); gs.tutorials.show(tutBtn.dataset.tutorial); return; }
         // 1. Azione installa / rimuovi
         const actBtn = e.target.closest("[data-act]");
         if (actBtn) {

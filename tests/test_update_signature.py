@@ -137,8 +137,58 @@ def test_download_senza_digest_o_diverso(tmp_path):
         assert (tmp_path / "c").read_bytes() == b"contenuto"
 
 
+def test_installer_verificato_con_l_elenco_firmato(tmp_path):
+    """setup e .deb: lo sha256 viene dall'elenco firmato, non dalla release (che si puo' cambiare senza la chiave)."""
+    import hashlib
+    import json
+    import release_manifest
+    release = tmp_path / "release"
+    release.mkdir()
+    name = f"PozzoLauncher-{VERSION}{updates.SUFFIX['setup']}"
+    (release / name).write_bytes(b"installer vero")
+    lst = release_manifest.create_installers(release, VERSION)
+    assert lst.name == f"PozzoLauncher-{VERSION}-installers.json"
+    pub = sign_manifest.keygen(tmp_path / "k.pem")
+    sign_manifest.sign(lst, str(tmp_path / "k.pem"))
+
+    def run(version=VERSION, names=(name, lst.name, lst.name + ".sig")):
+        detached = []
+
+        def download(url, dest, *, digest=None, **kw):
+            data = (release / url.rsplit("/", 1)[-1]).read_bytes()
+            if digest and digest != "sha256:" + hashlib.sha256(data).hexdigest():
+                raise RuntimeError("File scaricato danneggiato")
+            Path(dest).write_bytes(data)
+        with _patched(PUBKEY=pub, install_kind=lambda: "setup", _download=download, _detach=detached.append,
+                      check=lambda cache, force=False: {**_release(*names), "latest": "v" + version},
+                      _update_work_dir=lambda: tmp_path / "cache"):
+            updates.install(None, lambda: None)
+        return detached, updates.STATE["phase"]
+
+    assert len(run()[0]) == 1, updates.STATE  # tutto a posto: l'installer parte
+    detached, phase = run(names=(name, lst.name))  # elenco senza firma
+    assert not detached and "SignatureError" in phase, phase
+    detached, phase = run(names=(name,))  # elenco assente
+    assert not detached and "SignatureError" in phase, phase
+    (release / name).write_bytes(b"installer sostituito")  # release cambiata senza la chiave
+    detached, phase = run()
+    assert not detached and "danneggiato" in phase, phase
+    # un elenco firmato ma vecchio, rinominato come quello nuovo, non vale
+    new = "9.9.9"
+    for old, dst in ((lst, f"PozzoLauncher-{new}-installers.json"), (Path(str(lst) + ".sig"), f"PozzoLauncher-{new}-installers.json.sig"),
+                     (release / name, f"PozzoLauncher-{new}{updates.SUFFIX['setup']}")):
+        (release / dst).write_bytes(old.read_bytes())
+    detached, phase = run(new, (f"PozzoLauncher-{new}{updates.SUFFIX['setup']}", f"PozzoLauncher-{new}-installers.json",
+                                f"PozzoLauncher-{new}-installers.json.sig"))
+    assert not detached and "SignatureError" in phase, phase
+    (release / "PozzoLauncher-x_amd64.deb").write_bytes(b"deb")
+    assert {x["name"] for x in json.loads(release_manifest.create_installers(release, VERSION).read_text())["file"]} >= {name, "PozzoLauncher-x_amd64.deb"}
+
+
 with tempfile.TemporaryDirectory() as d:
     test_pubkey_e_release_senza_manifest_zip(Path(d))
     test_pubkey_e_installer_senza_manifest(Path(d))
     test_download_senza_digest_o_diverso(Path(d))
+with tempfile.TemporaryDirectory() as d:
+    test_installer_verificato_con_l_elenco_firmato(Path(d))
 print("ok")

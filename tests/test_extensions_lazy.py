@@ -122,7 +122,7 @@ def test_lazy_with_declared_events_starts_on_first_event_without_losing_it(tmp_p
 
 def test_real_extensions_startup_budget_and_not_imported(tmp_path, monkeypatch):
     ext = ROOT / "extensions"
-    for pid in ("limite-tempo", "statistiche", "diario", "steamgriddb"):
+    for pid in ("limite-tempo", "riepilogo-annuale", "diario", "steamgriddb"):
         import shutil
         shutil.copytree(ext / pid, tmp_path / "plugins" / pid, ignore=shutil.ignore_patterns("__pycache__"))
     cfg = SimpleNamespace(config_path=tmp_path / "config.toml", app={})
@@ -130,9 +130,9 @@ def test_real_extensions_startup_budget_and_not_imported(tmp_path, monkeypatch):
     app, bus = FastAPI(), X.Events()
     X.load_backends(app, cfg, bus, lambda m: None)
     by = {p["id"]: p for p in X.list_plugins(cfg)}
-    assert [i for i, p in by.items() if p["load"] == "lazy"] == ["diario", "limite-tempo", "statistiche"]
+    assert [i for i, p in by.items() if p["load"] == "lazy"] == ["diario", "limite-tempo", "riepilogo-annuale"]
     assert by["steamgriddb"]["load"] == "eager"  # gs.add_source serve prima dello scraping
     assert set(X.FIRST_USE_MS) == set()  # nessun backend lazy importato all'avvio
-    assert all(X.LOAD_MS[i] < 50 for i in ("diario", "limite-tempo", "statistiche")), X.LOAD_MS  # budget: solo il montaggio
+    assert all(X.LOAD_MS[i] < 50 for i in ("diario", "limite-tempo", "riepilogo-annuale")), X.LOAD_MS  # budget: solo il montaggio
     assert X.LOAD_TOTAL_MS < 5000
-    assert len(bus.handlers["game_started"]) == 1 and len(bus.handlers["game_stopped"]) == 2  # stub iscritti all'avvio
+    assert len(bus.handlers["game_started"]) == 1 and len(bus.handlers["game_stopped"]) == 1  # stub iscritti all'avvio

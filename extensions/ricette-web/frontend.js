@@ -18,9 +18,12 @@ export const formatDuration = (sec) => {
 export default function (gs, ctx) {
   const pluginId = ctx?.id || "ricette-web";
   const apiBase = `/plugin-api/${pluginId}`;
+  const t = ctx.t;
   const esc = (s) => (gs?.esc ? gs.esc(s) : String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c])));
+
+  const kindLabel = (k) => { const v = t(`kind.${k}`); return v === `kind.${k}` ? k : v; };
 
   const openUrl = async (url) => {
     const clean = safeUrl(url);
@@ -28,17 +31,25 @@ export default function (gs, ctx) {
     try {
       await gs.api("/api/open", { body: { url: clean } });
     } catch (e) {
-      if (typeof gs?.toast === "function") gs.toast(`Impossibile aprire il link: ${e.message}`, true);
+      if (typeof gs?.toast === "function") gs.toast(t("open.fail", { err: e.message }), true);
     }
   };
 
-  gs.addSidebarItem({ id: "ricette-web", label: "Ricette web", icon: "🌐", view: "ricette-web" });
+  gs.addSidebarItem({ id: "ricette-web", label: t("nav"), icon: "🌐", view: "ricette-web" });
+  gs.addTutorial({
+    id: pluginId, view: "ricette-web",
+    steps: [
+      { title: t("tut.1.t"), text: t("tut.1.x"), sel: ".rw-sources-bar" },
+      { title: t("tut.2.t"), text: t("tut.2.x"), sel: ".rw-search-box" },
+      { title: t("tut.3.t"), text: t("tut.3.x"), sel: ".rw-catalog" },
+    ],
+  });
 
   gs.registerView("ricette-web", {
-    title: "Ricette web",
-    async render(root) {
-      if (!root) return;
-      root.innerHTML = "";
+    title: t("nav"),
+    async render(el) {
+      if (!el) return;
+      const root = gs.ui.page(el, { title: t("nav"), subtitle: t("subtitle"), tutorial: pluginId });
       root.classList.add("rw-view");
 
       let recipes = [];
@@ -85,13 +96,13 @@ export default function (gs, ctx) {
         const metaParts = [];
         if (it.year) metaParts.push(esc(it.year));
         if (it.duration) metaParts.push(esc(formatDuration(it.duration)));
-        if (it.kind && it.kind !== 'film') metaParts.push(esc(it.kind));
+        if (it.kind && it.kind !== 'film') metaParts.push(esc(kindLabel(it.kind)));
         const icon = it.kind === 'brano' ? '🎵' : '🎬';
         return `
           <article class="rw-card ${it.seen ? 'rw-seen' : ''}" data-item-id="${esc(it.id)}" tabindex="0" role="button">
             <div class="rw-poster">
               ${poster ? `<img class="rw-poster-img" src="${esc(poster)}" alt="" loading="lazy" decoding="async">` : `<div class="rw-poster-placeholder">${icon}</div>`}
-              ${it.seen ? `<span class="rw-seen-badge">✓ Visto</span>` : ''}
+              ${it.seen ? `<span class="rw-seen-badge">${esc(t("seen"))}</span>` : ''}
             </div>
             <div class="rw-card-body">
               <h4 class="rw-title" title="${esc(it.title)}">${esc(it.title)}</h4>
@@ -114,10 +125,8 @@ export default function (gs, ctx) {
         const more = content.querySelector(".rw-more");
         if (!more) return;
         more.textContent = busy
-          ? "Caricamento in corso…"
-          : (items.length ? "" : (recipes.length
-            ? "Nessun elemento trovato per la ricerca o sorgente selezionata."
-            : "Nessuna ricetta disponibile o backend non raggiungibile. Verifica che il plugin ricette-web sia attivo."));
+          ? t("loading")
+          : (items.length ? "" : t(recipes.length ? "empty.search" : "empty.none"));
         if (observer) { // riarma: se il sentinel è ancora visibile deve riscattare
           observer.disconnect();
           if (!done && !busy) observer.observe(more);
@@ -180,17 +189,17 @@ export default function (gs, ctx) {
         const el = toolbar.querySelector(".rw-cat-status");
         if (!el) return;
         const refreshing = !!st?.refreshing;
-        let t;
+        let msg;
         if (refreshing) {
           const pr = st.progress;
-          t = "Aggiornamento in corso…" + (pr != null && pr !== "" ? ` (${typeof pr === "number" && pr <= 1 ? Math.round(pr * 100) + "%" : pr})` : "");
+          msg = t("st.refreshing") + (pr != null && pr !== "" ? ` (${typeof pr === "number" && pr <= 1 ? Math.round(pr * 100) + "%" : pr})` : "");
         } else if (st?.updated_at) {
-          t = `Aggiornato il ${new Date(Number(st.updated_at) * 1000).toLocaleString()}`;
+          msg = t("st.updated", { data: new Date(Number(st.updated_at) * 1000).toLocaleString(ctx.lang) });
         } else {
-          t = "Catalogo non ancora aggiornato";
+          msg = t("st.never");
         }
-        if (st?.last_error) t += ` · Errore: ${st.last_error}`;
-        el.textContent = t;
+        if (st?.last_error) msg += " · " + t("st.error", { err: st.last_error });
+        el.textContent = msg;
         el.classList.toggle("rw-error", !!st?.last_error);
         const b = toolbar.querySelector(".rw-refresh");
         if (b) b.disabled = refreshing;
@@ -218,7 +227,7 @@ export default function (gs, ctx) {
           wasRefreshing = true;
           showStatus(st);
         } catch (e) {
-          if (typeof gs?.toast === "function") gs.toast(`Aggiornamento non riuscito: ${e.message}`, true);
+          if (typeof gs?.toast === "function") gs.toast(t("refresh.fail", { err: e.message }), true);
           return;
         }
         pollStatus();
@@ -240,7 +249,7 @@ export default function (gs, ctx) {
           selectedItemDetail = res && typeof res === "object" ? res : null;
         } catch (e) {
           selectedItemDetail = null;
-          if (typeof gs?.toast === "function") gs.toast(`Dettaglio non disponibile: ${e.message}`, true);
+          if (typeof gs?.toast === "function") gs.toast(t("detail.fail", { err: e.message }), true);
         } finally {
           loading = false;
           renderContent();
@@ -254,11 +263,11 @@ export default function (gs, ctx) {
           if (target?.url) {
             await openUrl(target.url);
           } else {
-            throw new Error("URL di riproduzione mancante");
+            throw new Error(t("play.nourl"));
           }
         } catch (e) {
           if (typeof gs?.toast === "function") {
-            gs.toast(`Impossibile riprodurre: ${e.message}`, true);
+            gs.toast(t("play.fail", { err: e.message }), true);
           }
         }
       }
@@ -266,15 +275,15 @@ export default function (gs, ctx) {
       // Barra strumenti: costruita una volta (la ricerca non perde il focus)
       toolbar.innerHTML = `
         <div class="rw-tabs" role="tablist">
-          <button type="button" role="tab" class="rw-tab" data-tab="items">🎬 Contenuti</button>
-          <button type="button" role="tab" class="rw-tab" data-tab="recipe_preview">📋 Anteprima ricetta</button>
+          <button type="button" role="tab" class="rw-tab" data-tab="items">🎬 ${esc(t("tab.items"))}</button>
+          <button type="button" role="tab" class="rw-tab" data-tab="recipe_preview">📋 ${esc(t("tab.recipe"))}</button>
         </div>
         <div class="rw-search-box">
-          <input type="search" class="rw-search" placeholder="Cerca nelle ricette…" aria-label="Cerca nelle ricette">
+          <input type="search" class="rw-search" placeholder="${esc(t("search"))}" aria-label="${esc(t("search"))}">
         </div>
         <div class="rw-catalog">
           <span class="rw-cat-status muted"></span>
-          <button type="button" class="rw-btn rw-sm rw-refresh" data-refresh>⟳ Aggiorna catalogo</button>
+          <button type="button" class="rw-btn rw-sm rw-refresh" data-refresh>⟳ ${esc(t("refresh"))}</button>
         </div>`;
       function renderToolbar() {
         toolbar.querySelectorAll(".rw-tab").forEach((b) => b.classList.toggle("rw-active", b.dataset.tab === activeTab));
@@ -288,13 +297,13 @@ export default function (gs, ctx) {
         }
         const activeRec = recipes.find((r) => r.id === activeRecipeId);
         const siteBtn = activeRec?.start_url
-          ? `<button type="button" class="rw-btn rw-sm rw-site-btn" data-open-url="${esc(safeUrl(activeRec.start_url))}" title="Apri sito originale">↗ Sito</button>`
+          ? `<button type="button" class="rw-btn rw-sm rw-site-btn" data-open-url="${esc(safeUrl(activeRec.start_url))}" title="${esc(t("site.title"))}">↗ ${esc(t("site"))}</button>`
           : "";
 
         sourcesBar.innerHTML = `
-          <div class="rw-sources-label">Sorgenti:</div>
+          <div class="rw-sources-label">${esc(t("sources"))}</div>
           <div class="rw-chips">
-            <button type="button" class="rw-chip ${!activeRecipeId ? 'rw-active' : ''}" data-recipe="">Tutte</button>
+            <button type="button" class="rw-chip ${!activeRecipeId ? 'rw-active' : ''}" data-recipe="">${esc(t("all"))}</button>
             ${recipes.map((r) => `
               <button type="button" class="rw-chip ${r.id === activeRecipeId ? 'rw-active' : ''}" data-recipe="${esc(r.id)}">
                 ${esc(r.name)}
@@ -308,13 +317,13 @@ export default function (gs, ctx) {
       // Disegna dettaglio con episodi
       function renderDetail() {
         if (loading && !selectedItemDetail) {
-          return `<div class="rw-loading"><p class="muted">Caricamento dettagli…</p></div>`;
+          return `<div class="rw-loading"><p class="muted">${esc(t("detail.loading"))}</p></div>`;
         }
         if (!selectedItemDetail) {
           return `
             <div class="rw-empty">
-              <button type="button" class="rw-btn rw-back-btn" data-back-to-list>← Torna alla lista</button>
-              <p class="muted" style="margin-top: 16px;">Elemento non trovato o non disponibile.</p>
+              <button type="button" class="rw-btn rw-back-btn" data-back-to-list>← ${esc(t("back"))}</button>
+              <p class="muted rw-gap">${esc(t("notfound"))}</p>
             </div>
           `;
         }
@@ -325,14 +334,14 @@ export default function (gs, ctx) {
         const metaParts = [];
         if (det.year) metaParts.push(esc(det.year));
         if (det.duration) metaParts.push(esc(formatDuration(det.duration)));
-        if (det.kind) metaParts.push(`<span class="rw-badge">${esc(det.kind)}</span>`);
+        if (det.kind) metaParts.push(`<span class="rw-badge">${esc(kindLabel(det.kind))}</span>`);
 
         const episodes = Array.isArray(det.episodes) ? det.episodes : [];
 
         return `
           <div class="rw-detail">
             <div>
-              <button type="button" class="rw-btn rw-back-btn" data-back-to-list>← Torna all'elenco</button>
+              <button type="button" class="rw-btn rw-back-btn" data-back-to-list>← ${esc(t("back"))}</button>
             </div>
             <div class="rw-detail-header">
               <div class="rw-detail-poster">
@@ -344,20 +353,20 @@ export default function (gs, ctx) {
                 <div class="rw-meta">${metaParts.join(" · ")}</div>
                 ${det.overview ? `<p class="rw-detail-overview">${esc(det.overview)}</p>` : ''}
                 <div class="rw-detail-actions">
-                  <button type="button" class="rw-btn rw-primary" data-play-id="${esc(det.id)}">▶ Riproduci</button>
-                  ${det.url ? `<button type="button" class="rw-btn" data-open-url="${esc(safeUrl(det.url))}">↗ Pagina originale</button>` : ''}
+                  <button type="button" class="rw-btn rw-primary" data-play-id="${esc(det.id)}">▶ ${esc(t("play"))}</button>
+                  ${det.url ? `<button type="button" class="rw-btn" data-open-url="${esc(safeUrl(det.url))}">↗ ${esc(t("original"))}</button>` : ''}
                 </div>
               </div>
             </div>
 
             ${episodes.length ? `
               <div class="rw-episodes-section">
-                <h3 class="rw-episodes-title">Episodi (${episodes.length})</h3>
+                <h3 class="rw-episodes-title">${esc(t("episodes", { n: episodes.length }))}</h3>
                 <div class="rw-episode-list">
                   ${episodes.map((ep, idx) => {
                     const epMeta = [];
                     if (ep.duration) epMeta.push(esc(formatDuration(ep.duration)));
-                    const epNum = ep.episode != null ? `Ep. ${esc(ep.episode)}` : `#${idx + 1}`;
+                    const epNum = ep.episode != null ? esc(t("ep", { n: ep.episode })) : `#${idx + 1}`;
                     const seasonPrefix = ep.season != null ? `S${esc(ep.season)} ` : '';
 
                     return `
@@ -367,7 +376,7 @@ export default function (gs, ctx) {
                           <h4 class="rw-episode-title" title="${esc(ep.title)}">${esc(ep.title)}</h4>
                           ${epMeta.length ? `<div class="rw-meta">${epMeta.join(" · ")}</div>` : ''}
                         </div>
-                        <button type="button" class="rw-btn rw-sm rw-primary" data-play-id="${esc(ep.id)}">▶ Riproduci</button>
+                        <button type="button" class="rw-btn rw-sm rw-primary" data-play-id="${esc(ep.id)}">▶ ${esc(t("play"))}</button>
                       </div>
                     `;
                   }).join("")}
@@ -383,22 +392,22 @@ export default function (gs, ctx) {
         if (!recipes.length) {
           return `
             <div class="rw-empty">
-              <p class="muted">Nessuna ricetta caricata o backend assente.</p>
+              <p class="muted">${esc(t("recipes.none"))}</p>
             </div>
           `;
         }
 
         const targetRecipe = recipes.find((r) => r.id === activeRecipeId) || recipes[0];
         if (!targetRecipe) {
-          return `<div class="rw-empty"><p class="muted">Ricetta non selezionata.</p></div>`;
+          return `<div class="rw-empty"><p class="muted">${esc(t("recipe.none"))}</p></div>`;
         }
 
         // Righe per la tabella dei campi estratti
         const rows = [
-          { sec: "Generale", field: "name", val: targetRecipe.name },
-          { sec: "Generale", field: "host", val: targetRecipe.host },
-          { sec: "Generale", field: "type", val: targetRecipe.type },
-          { sec: "Generale", field: "start_url", val: targetRecipe.start_url, isUrl: true },
+          { sec: t("sec.general"), field: "name", val: targetRecipe.name },
+          { sec: t("sec.general"), field: "host", val: targetRecipe.host },
+          { sec: t("sec.general"), field: "type", val: targetRecipe.type },
+          { sec: t("sec.general"), field: "start_url", val: targetRecipe.start_url, isUrl: true },
         ];
 
         if (targetRecipe.list) {
@@ -426,24 +435,24 @@ export default function (gs, ctx) {
           <div class="rw-preview">
             <div class="rw-preview-header">
               <div class="rw-preview-title-row">
-                <h3 class="rw-preview-title">Ricetta: ${esc(targetRecipe.name)}</h3>
+                <h3 class="rw-preview-title">${esc(t("recipe.title", { nome: targetRecipe.name }))}</h3>
                 <span class="rw-badge">${esc(String(targetRecipe.type || "").toUpperCase())}</span>
               </div>
               <div class="rw-meta">
-                <span>Host: <strong>${esc(targetRecipe.host)}</strong></span>
+                <span>${esc(t("host"))} <strong>${esc(targetRecipe.host)}</strong></span>
                 <span>·</span>
-                <span>URL iniziale: <a href="#" class="rw-link" data-open-url="${esc(safeUrl(targetRecipe.start_url))}">${esc(targetRecipe.start_url)}</a></span>
+                <span>${esc(t("starturl"))} <a href="#" class="rw-link" data-open-url="${esc(safeUrl(targetRecipe.start_url))}">${esc(targetRecipe.start_url)}</a></span>
               </div>
             </div>
 
-            <h4 class="rw-section-subtitle">Regole di estrazione configurate</h4>
+            <h4 class="rw-section-subtitle">${esc(t("rules"))}</h4>
             <div class="rw-table-container">
               <table class="rw-table">
                 <thead>
                   <tr>
-                    <th>Sezione</th>
-                    <th>Campo</th>
-                    <th>Regola / Selettore estratto</th>
+                    <th>${esc(t("th.section"))}</th>
+                    <th>${esc(t("th.field"))}</th>
+                    <th>${esc(t("th.rule"))}</th>
                   </tr>
                 </thead>
                 <tbody>

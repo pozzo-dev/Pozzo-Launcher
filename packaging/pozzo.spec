@@ -5,6 +5,7 @@
 #
 # Uso:  pyinstaller packaging/pozzo.spec --noconfirm      (dalla cartella del progetto)
 
+import ast
 import sys
 from pathlib import Path
 
@@ -32,6 +33,12 @@ if sys.platform == "win32":  # gioco d'esempio (pozzo/sample.py): il motore e' s
 datas += collect_data_files("fake_useragent")  # usata da howlongtobeatpy
 hidden = (collect_submodules("uvicorn") + collect_submodules("pozzo") + collect_submodules("rich._unicode_data")
           + collect_submodules("qrcode") + ["h2", "hpack", "hyperframe", "multipart", "PIL.WebPImagePlugin"])
+# le estensioni si installano dopo: PyInstaller non vede i loro import e lascerebbe fuori moduli della libreria standard
+# che il core non usa (es. urllib.robotparser)
+for f in (ROOT / "extensions").glob("*/*.py"):
+    for n in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+        names = [a.name for a in n.names] if isinstance(n, ast.Import) else [n.module or ""] if isinstance(n, ast.ImportFrom) else []
+        hidden += [m for m in names if m.split(".")[0] in sys.stdlib_module_names and m not in hidden]
 excludes = ["tkinter", "matplotlib", "numpy", "pytest", "playwright", "IPython"]
 
 icon_ico = str(ROOT / "packaging" / "icon.ico")

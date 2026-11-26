@@ -196,22 +196,22 @@ def register(gs):
         h, keep, action = body.get("hash"), body.get("keep"), body.get("action")
         only = body.get("paths")
         if not isinstance(h, str) or not isinstance(keep, str) or action not in ("hardlink", "delete"):
-            raise HTTPException(400, "richiesta non valida: servono hash, keep e action (hardlink|delete)")
+            raise HTTPException(400, gs.t("err.request"))
         if only is not None and not (isinstance(only, list) and all(isinstance(x, str) for x in only)):
-            raise HTTPException(400, "paths deve essere una lista di percorsi")
+            raise HTTPException(400, gs.t("err.paths"))
         with _LOCK:
             cfg = gs.cfg
             roots = _roots(cfg)
             group = next((g for g in _scan(cfg) if g[0] == h), None)
             if group is None:
-                raise HTTPException(404, "gruppo non trovato: la libreria e' cambiata, ricarica la lista")
+                raise HTTPException(404, gs.t("err.group"))
             _, size, items = group
             keep_real = _inside(keep, roots)
             member = {os.path.normcase(os.path.realpath(p)): p for p, _, _ in items}
             if keep_real is None or keep_real not in member:
-                raise HTTPException(400, "keep non e' un file del gruppo dentro le cartelle della libreria")
+                raise HTTPException(400, gs.t("err.keep"))
             if not os.path.isfile(keep_real) or _digest(keep_real) != h:
-                raise HTTPException(409, "il file da tenere non corrisponde piu' all'hash: ricarica la lista")
+                raise HTTPException(409, gs.t("err.changed"))
             kst = os.stat(keep_real)
             targets = [p for p, _, _ in items if os.path.normcase(os.path.realpath(p)) != keep_real]
             if only is not None:

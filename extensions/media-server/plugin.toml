@@ -1,11 +1,11 @@
 [plugin]
 name = "Media server"
-version = "1.0"
+version = "1.1"
 author = "Pozzo Launcher"
 icon = "📡"
 description = "Le librerie del tuo Jellyfin o Plex dentro Pozzo Launcher: stessa griglia, stessa ricerca, «continua a guardare» e «visto» sincronizzati col server."
-long_description = "Collega un server Jellyfin (indirizzo, utente e password oppure chiave API) o un server Plex (indirizzo e token dell'account) e sfoglia film, serie e musica direttamente da Pozzo. Il server resta la fonte di verità: la posizione di riproduzione e lo stato «visto» vengono letti dal server e aggiornati su di lui. Lo stream è diretto, senza transcodifica: i formati che la finestra non legge si aprono nel lettore esterno. Indirizzo e token restano soltanto su questo PC, in locale; la password serve solo al primo accesso e non viene salvata."
-how_it_works = "1. Installa l'estensione e riavvia Pozzo Launcher.\n2. Apri «Media server» dalla barra laterale e inserisci l'indirizzo del tuo server.\n3. Jellyfin: accedi con utente e password (oppure incolla una chiave API dalle impostazioni del server). Plex: incolla il token del tuo account.\n4. Premi «Prova» per verificare il collegamento, poi sfoglia film, serie e musica.\n5. Riprendi da dove eri rimasto: la posizione arriva dal server e viene aggiornata su di lui."
+long_description = "Collega un server Jellyfin (indirizzo, utente e password oppure chiave API) o un server Plex (indirizzo e token dell'account) e sfoglia film, serie e musica nella pagina Media, insieme ai contenuti locali. Il server resta la fonte di verità: posizione di riproduzione e stato «visto» vengono letti e aggiornati su di lui. Lo stream è diretto, senza transcodifica: i formati che la finestra non legge si aprono nel lettore esterno. Indirizzo e token restano solo su questo PC; la password serve solo al primo accesso e non viene salvata. Richiede l'estensione Media locale, che fornisce la pagina Media."
+how_it_works = "1. Installa questa estensione e Media locale.\n2. Apri «Media» nella barra laterale › ⚙ Impostazioni Media › «Server Jellyfin / Plex».\n3. Jellyfin: indirizzo con utente e password (o una chiave API). Plex: indirizzo e token del tuo account.\n4. Premi «Test connessione», poi «Salva configurazione».\n5. Scegli «Server Jellyfin / Plex» nel filtro delle sorgenti: posizione e «visto» arrivano dal server."
 features = [
   "Jellyfin con utente e password o chiave API",
   "Plex con il token del tuo account, salvato solo in locale",
@@ -15,5 +15,5 @@ features = [
   "Immagini servite da Pozzo, senza esporre il token al frontend"
 ]
 api = 2
-min_app = "0.15.0"
+min_app = "0.20.2"
 permissions = ["rete:*", "avvio", "impostazioni"]

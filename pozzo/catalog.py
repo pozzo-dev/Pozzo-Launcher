@@ -279,12 +279,6 @@ def _link_item(a, base_url: str, group: str | None, seen: set[str]) -> CatalogIt
     return {"name": name, "size": None, "url": url, "magnet": None, "group": group}
 
 
-def parse_type_d_page(page: str, base_url: str, exts: set[str] | None = None,
-                      config: dict | None = None) -> list[CatalogItem]:
-    """Voci dell'eventuale pagina successiva (per type_d non c'e': serve per uniformita')."""
-    return parse_type_d_index(page, base_url, exts, config)[0]
-
-
 # --------------------------------------------------------------------------- type_b: elenco A-Z
 def parse_type_b(page: str, base_url: str, exts: set[str] | None = None,
                  config: dict | None = None) -> list[CatalogItem]:

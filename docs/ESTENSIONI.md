@@ -292,7 +292,105 @@ export default function (gs, ctx) {
 | `gs.esc(testo)` | Rende sicuro un testo da inserire nell'HTML |
 | `gs.mode` | `"desktop"` o `"bigpicture"` |
 
-`ctx.settings` contiene le impostazioni salvate dal backend del plugin.
+`ctx.settings` contiene le impostazioni salvate dal backend del plugin. `ctx.t` e `ctx.lang` servono per i testi tradotti (vedi sotto).
+
+Altre funzioni dell'interfaccia:
+
+| Funzione | Cosa fa |
+|---|---|
+| `gs.addShelf({id, title, why?, games(lib)})` | Scaffale nella home a scaffali. `games` riceve la libreria e restituisce i giochi da mostrare (anche con una Promise); se è vuoto lo scaffale non compare |
+| `gs.ui.registerWidget({id, title, defaultSpan, render})` | Riquadro della home **Dashboard** |
+| `gs.addTutorial({...})` | Tutorial dell'estensione (vedi sotto) |
+| `gs.hints.register({id, target, text})` | Suggerimento breve accanto a un elemento, mostrato una volta |
+| `gs.redraw()`, `gs.refresh()` | Ridisegna la vista corrente; ricarica la libreria |
+
+`addDetailSection` accetta anche `when(game)`: la sezione compare solo quando restituisce `true`.
+
+#### Testi e traduzioni
+
+L'app è in 6 lingue (italiano, inglese, tedesco, spagnolo, francese, portoghese brasiliano) e le estensioni devono
+seguire quella scelta dall'utente. Niente testi scritti nel codice: vanno in un file **`locales.json`** accanto a
+`plugin.toml`. È un file solo perché lo store installa soltanto i file in cima alla cartella.
+
+```json
+{
+  "it": { "pagina": "Anniversari", "anni": "{n} anni", "plugin.name": "Anniversari retro" },
+  "en": { "pagina": "Anniversaries", "anni": "{n} years", "plugin.name": "Retro anniversaries" },
+  "de": { "…": "…" }
+}
+```
+
+```js
+export default function (gs, ctx) {
+  const { t, lang } = ctx;
+  gs.addSidebarItem({ id: "anniversari", label: t("pagina"), icon: "◷", view: "anniversari" });
+  const quando = new Date().toLocaleDateString(lang, { day: "numeric", month: "long" });  // mai "it" fisso
+  gs.toast(t("anni", { n: 30 }));
+}
+```
+
+- Se manca un testo nella lingua scelta si usa l'inglese, poi l'italiano, poi la chiave stessa.
+- I `{segnaposto}` si scrivono come nei cataloghi dell'app.
+- Le chiavi `plugin.name`, `plugin.description`, `plugin.long_description`, `plugin.how_it_works` e `plugin.features`
+  (una riga per voce) traducono la scheda nello store. Se mancano, lo store usa i testi di `plugin.toml`.
+- Lato server `gs.t("chiave", n=3)` fa lo stesso: usa la lingua della richiesta oppure, nei lavori periodici e negli
+  eventi, quella dell'ultima richiesta dell'interfaccia. `lang="en"` la forza.
+- `python scripts/i18n_check.py` controlla che ogni chiave dell'italiano ci sia in tutte le lingue, con gli stessi segnaposto.
+
+#### Tutorial
+
+Un'estensione può spiegarsi da sola con un tutorial di pochi passi. Il tutorial è facoltativo: se non lo registri,
+l'estensione funziona lo stesso.
+
+```js
+gs.addTutorial({
+  id: ctx.id,                 // uno per estensione: lo store lo trova con l'id dell'estensione
+  view: "anniversari",        // parte da solo la prima volta che si apre questa pagina…
+  section: "anniversari-sec", // …oppure questa sezione del dettaglio gioco (facoltativo)
+  steps: [
+    { title: t("tut.1.t"), text: t("tut.1.x") },                         // senza sel: scheda al centro
+    { title: t("tut.2.t"), text: t("tut.2.x"), sel: ".ann-lane" },       // indica un elemento della pagina
+    { title: t("tut.3.t"), text: t("tut.3.x"), sel: [".badge.ext", "#grid"] }, // il primo selettore che trova
+  ],
+});
+```
+
+- Parte **da solo una volta sola**: la prima volta che l'utente apre la pagina (`view`) o la sezione (`section`).
+  Aspetta se è già in corso il tour dell'app o se è aperta una finestra.
+- Si rivede quando si vuole: dal pulsante **«?»** nell'intestazione creata da `gs.ui.page` e dal pulsante
+  **Tutorial** nella scheda dell'estensione installata nello store. Lo store apre prima la pagina dell'estensione.
+- **Impostazioni › Generale › «Rivedi tutti i suggerimenti»** azzera anche i tutorial delle estensioni.
+- I passi il cui elemento non c'è vengono saltati. Usa selettori di elementi che esistono anche con la pagina vuota.
+- Tienilo corto: 3–5 passi, una frase ciascuno, cosa fa e dove cliccare. I testi vanno in `locales.json`.
+
+#### Componenti dell'interfaccia (`gs.ui`)
+
+Per avere lo stesso aspetto del resto dell'app, usa questi mattoni invece di scrivere stili a mano:
+
+| Funzione | Cosa fa |
+|---|---|
+| `gs.ui.page(el, {title, subtitle, actions, tutorial})` | Intestazione della pagina con titolo (solo in Big Picture: nella vista normale c'è già nella barra in alto), sottotitolo, pulsanti (`actions`, HTML) e il «?» del tutorial (`tutorial`: id). Restituisce il contenitore del corpo. Le copertine di `gameCard` dentro la pagina aprono il gioco |
+| `gs.ui.gameCard(game)` | Copertina con titolo e console, come negli scaffali della home (HTML). Mettine più di una in un `<div class="shelf-lane">` |
+| `gs.ui.cover(id, w)` | Indirizzo della copertina di un gioco, larga `w` pixel |
+| `gs.ui.empty({icon, title, text, action})` | Stato vuoto (Element): dice cosa manca e cosa fare, con un pulsante facoltativo `{label, run}` |
+
+Classi già pronte: `btn`, `btn primary`, `icon-btn`, `chip`, `badge`, `muted`, `row`, `field`, `shelf-lane`,
+`shelf-section`. Per colori, spazi e angoli usa i token del tema (`var(--accent)`, `var(--panel)`, `var(--line)`,
+`var(--space-3)`, `var(--radius)`, …) così l'estensione segue temi chiari, scuri e personalizzati. Niente `style="…"`
+nell'HTML: le regole vanno in `style.css`, con un prefisso proprio per le classi (es. `ann-`).
+
+#### Linee guida
+
+Prima di pubblicare un'estensione controlla che:
+
+1. **abbia uno scopo che si dice in una frase**, e che non rifaccia qualcosa che l'app fa già (statistiche, lista dei
+   desideri, voti, quiz «A cosa vuoi giocare?», note del gioco);
+2. **mostri qualcosa, non solo link**: copertine, date, numeri, azioni. Un elenco di collegamenti a siti esterni non è un'estensione;
+3. **abbia uno stato vuoto utile**: se non c'è nulla da mostrare, dice perché e cosa fare (`gs.ui.empty`);
+4. **funzioni senza chiavi**, oppure spieghi in una riga dove prenderle, con il collegamento giusto;
+5. **sia tradotta** (`locales.json`, `ctx.t`, date con `ctx.lang`) e **senza stili in linea**;
+6. **abbia un tutorial** di 3–5 passi se non si capisce al primo sguardo.
+
 
 ### Server (backend.py)
 
@@ -322,6 +420,7 @@ def register(gs):
 | `gs.cfg` | Configurazione (sola lettura) |
 | `gs.settings`, `gs.save_settings(dict)` | Impostazioni del plugin |
 | `gs.log(msg)` | Scrive nel log |
+| `gs.t(chiave, lang=None, **valori)` | Testo tradotto da `locales.json` (vedi «Testi e traduzioni») |
 
 #### Lavori periodici (`gs.job`)
 
@@ -349,10 +448,14 @@ Di default il backend si importa e `register()` gira all'avvio dell'app (`load =
 
 ### Esempio completo
 
-Il plugin **Statistiche** (`extensions/statistiche/`) usa tutte le parti:
-- un backend con un endpoint e un evento;
-- un frontend con una pagina, una voce nella barra laterale e un'azione nel dettaglio;
-- un foglio di stile.
+Il plugin **Limite di tempo** (`extensions/limite-tempo/`) usa tutte le parti:
+- un backend con endpoint, eventi (gioco avviato e chiuso) e testi tradotti con `gs.t` per le notifiche;
+- un frontend con una pagina fatta con `gs.ui.page`, un tutorial di tre passi e i testi in `ctx.t`;
+- un `locales.json` nelle 6 lingue, scheda dello store compresa;
+- un foglio di stile che usa solo i token del tema.
+
+Per una sezione nel dettaglio del gioco guarda **Diario** (`extensions/diario/`); per uno scaffale nella home
+**Anniversari retro** (`extensions/anniversari/`).
 
 ### Store delle estensioni
 
@@ -395,12 +498,12 @@ Per provare uno store diverso al posto di quello ufficiale, anche da disco prima
 
 ### Pubblicare un'estensione
 
-Ogni estensione vive nel **proprio repository** (per esempio `pozzo-ext-stasera`): in cima ci sono
+Ogni estensione vive nel **proprio repository** (per esempio `pozzo-ext-diario`): in cima ci sono
 `plugin.toml`, i file dell'estensione (niente sottocartelle) e `index.json`. Lo store ufficiale è un altro repository
 con un solo `index.json`, che elenca i repository e la versione approvata di ciascuno:
 
 ```json
-{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-stasera", "ref": "v1.0"}]}
+{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-diario", "ref": "v1.0"}]}
 ```
 
 L'app legge l'`index.json` di ogni repository a quel tag. Una voce può anche indicare `"url"` al posto di
@@ -430,28 +533,22 @@ non parte (WinError 448). La release contiene solo lo store.
 
 | Plugin | Cosa fa |
 |---|---|
-| **Statistiche** | tempo di gioco per console e store, giochi più giocati, completezza dei metadati |
-| **Link → Store** | legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto) |
-| **Store Minerva + Switch** | importa in un clic le cartelle di minerva-archive.org elencate su r-roms.github.io **e** aggiunge gli store preimpostati: Switch (NXBrew `game-index`, Ziperto NSP, Ziperto XCI), Switch 2 (NXBrew `switch-2-games`), PS4 e PS5 (superpsx) |
-| **Cosa gioco stasera?** | propone un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, con più probabilità per quelli che non giochi da più tempo; «Un altro» e «Avvia» |
-| **Anniversari retro** | badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi e pagina «Oggi nel…» (servono le date di uscita complete) |
-| **Pulizia libreria** | duplicati, giochi mai avviati o fermi da anni, dati incompleti; azioni di massa (nascondi, abbandonato, backlog), badge «DUP» e **🧹 Rimuovi doppioni manuali** (voci aggiunte a mano con lo stesso eseguibile e gli stessi argomenti: si tiene la più vecchia) |
-| **Diario di gioco** | nel dettaglio di ogni gioco, voci datate e cronologia delle sessioni (si affianca alla nota personale già presente) |
-| **Limite di tempo** | notifica quando superi X ore al giorno o a settimana (del profilo attivo); è un avviso, non chiude il gioco |
-| **Obiettivi personali** | obiettivi a periodo (giochi finiti, ore, giorni di gioco), serie di giorni consecutivi e distintivi |
-| **Riepilogo annuale** | il tuo anno in giochi (ore, più giocati, console, mese) con un'immagine da salvare |
-| **SteamGridDB** | fonte di copertine verticali, sfondi e logo mancanti; chiave gratuita in Impostazioni › SteamGridDB. Alimenta anche **🖼 Immagini del gioco…** del menu del tasto destro (candidati da scegliere per il singolo gioco) |
-| **Calendario uscite** | uscite future dei giochi in lista desideri e dei prossimi titoli dei tuoi generi, da RAWG (usa la chiave di Impostazioni › Fonti) |
-| **Notizie videogiochi** | feed RSS/Atom dai produttori (PlayStation, Xbox, Nintendo, Steam, Capcom…) e dai siti di settore, filtro «Solo i miei giochi e console», classificazione per tipologia (annuncio, patch, DLC, uscita), rassegna settimanale del lunedì e azione «Segui» nel dettaglio |
-| **Il mio PC ce la fa?** | rileva CPU, GPU e RAM del computer e fornisce un verdetto immediato sul gioco (Gira bene, Con impostazioni, Troppo pesante), confrontando i requisiti Steam e indicando le impostazioni consigliate per gli emulatori |
-| **Recensioni e punteggi** | voti della critica e della community aggregati nella scheda di ogni gioco: Metacritic, OpenCritic (con tier e percentuale di raccomandazione) e recensioni degli utenti Steam |
-| **Sconti e bundle** | saldi in tempo reale sui giochi della lista dei desideri (con avviso «Minimo storico»), bundle attivi su IsThereAnyDeal marcati «Per te» se contengono titoli seguiti o posseduti, e giochi attualmente gratis da riscattare |
+| **Link → Store** | procedura in tre passi: incolli l'indirizzo di una pagina che raccoglie altri siti, scegli i link a gruppi e la console di ogni gruppo (proposta dal titolo) o lo store PC; con «Leggi subito» gli elenchi si scaricano appena aggiunti |
+| **Store Minerva + Switch** | «Importa store» aggiunge allo Store online gli archivi di minerva-archive.org (elencati da r-roms) e gli store preimpostati Switch, Switch 2, PS4 e PS5; poi una scheda per console con icona, giochi letti e «Leggi» |
+| **Anniversari retro** | badge «N ANNI» sui festeggiati di oggi, scaffale «Compiono gli anni» nella home e pagina con oggi e i prossimi 30 giorni, giorno per giorno (servono le date di uscita complete) |
+| **Pulizia libreria** | riquadri con quanto c'è da sistemare (doppioni, mai avviati, fermi da anni, dati mancanti, file identici su disco), copertine da selezionare con azioni di gruppo, badge «DUP» e rimozione dei doppioni aggiunti a mano |
+| **Diario di gioco** | nella scheda di ogni gioco una linea del tempo per giorno con partite, note datate, schermate e copie dei salvataggi (si affianca alla nota personale del gioco) |
+| **Limite di tempo** | pagina «Tempo di gioco»: tempo di oggi su un anello, settimana in un grafico con la linea del limite, avviso 10 minuti prima e, a scelta, chiusura del gioco a tempo scaduto |
+| **Obiettivi personali** | sfide proposte dalla libreria da accettare con un clic (finisci un gioco iniziato, prova una console mai usata), obiettivi con anello di avanzamento, serie di giorni e distintivi |
+| **Riepilogo annuale** | «Il tuo anno»: il tuo anno di gioco come storia a schermo intero (ore, gioco dell'anno, classifica, abitudini, record) e un'immagine da condividere; i numeri completi restano in Statistiche |
+| **SteamGridDB** | fonte di copertine verticali, sfondi e logo mancanti; chiave gratuita in Impostazioni › Estensioni › SteamGridDB. Alimenta anche **Immagini del gioco…** del menu del tasto destro |
+| **Calendario uscite** | calendario mese per mese con le copertine dei giochi in uscita: prima la lista dei desideri, poi i tuoi generi (o tutti); aggiunta ai desideri con un clic. Usa la chiave RAWG di Impostazioni › Libreria e fonti |
+| **Notizie videogiochi** | timeline di notizie da case e siti, filtro «Solo i miei giochi e console», tipi (annuncio, patch, DLC, uscita), rassegna del lunedì, giochi seguiti con patch e DLC nella scheda e in uno scaffale della home |
+| **Il mio PC ce la fa?** | nella scheda del gioco un semaforo e tre indicatori (processore, scheda video, memoria) con minimo e consigliato, dai requisiti Steam o dell'emulatore, e le impostazioni consigliate |
 | **Media locale** | film, serie e musica dalle cartelle del tuo computer sfogliati come una libreria multimediale: riconoscimento dei nomi, poster locali (poster.jpg, folder.jpg), ripresa della riproduzione e supporto per lettore integrato o esterno |
 | **Ricette web** | cataloghi di film e podcast da siti e feed web leciti (es. Internet Archive e podcast NASA) estratti tramite ricette TOML dichiarative senza codice eseguito; cache con ETag, rispetto di robots.txt, dettaglio, episodi e riproduzione |
-| **Twitch e YouTube** | nel dettaglio di ogni gioco, le dirette Twitch in corso e i video YouTube (trailer e guide); chiavi personali in Impostazioni › Streaming |
-| **Eventi e fiere** | calendario di Gamescom, Summer Game Fest, Nintendo Direct e delle altre fiere videoludiche, con promemoria a 7 giorni e a 1 giorno dall'inizio |
+| **Twitch e YouTube** | nella scheda del gioco video YouTube da guardare lì e dirette Twitch in corso; senza chiavi spiega come attivarlo e offre la ricerca nel browser |
 | **Media server** | le librerie del tuo Jellyfin o Plex dentro Pozzo Launcher: stessa griglia, stessa ricerca, «continua a guardare» e «visto» sincronizzati col server |
-| **Speedrun** | record del mondo e link a speedrun.com per i giochi della tua libreria, direttamente nel dettaglio del gioco |
 
 **Store Minerva + Switch** tiene i preset in `PRESETS` (`backend.py`): per aggiungerne altri basta una riga
 (`{"console": ["https://…"]}`). Poiché gli elenchi della stessa console possono avere formati diversi

@@ -238,6 +238,55 @@ def test_saves_file_too_big_is_skipped(tmp_path, monkeypatch):
     assert not (b / "big.sav").exists()
     assert any("troppo grande" in w for w in r["saves"]["warnings"]), r["saves"]["warnings"]
 
+
+def test_saves_una_copia_sola_per_gioco(tmp_path):
+    """Tanti file cambiati insieme: una copia completa del gioco, non una per file (toglierebbero quelle vere)."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    a, b = saves_dir(tmp_path, "A"), saves_dir(tmp_path, "B")
+    for d in (a, b):
+        for i in range(8):
+            (d / f"f{i}.sav").write_bytes(b"prima")
+    cfg_a, sa = pc(tmp_path, "A", shared, {KEY: a})
+    cfg_b, sb = pc(tmp_path, "B", shared, {KEY: b})
+    cfg_b.app["save_keep"] = 3
+    sa.run(), sb.run()
+    for i in range(8):
+        (a / f"f{i}.sav").write_bytes(b"nuovo")
+    sa.run()
+    SV.backup(cfg_b, KEY, "G", [b], reason="prima-della-partita")
+    (b / "extra.sav").write_bytes(b"x")  # contenuto diverso dall'ultima copia: se ne fa una nuova
+    r = sb.run()
+    assert len(r["saves"]["updated"]) == 8, r["saves"]
+    items = SV.list_backups(cfg_b, KEY)
+    assert sorted(x["reason"] for x in items) == ["prima-della-partita", "sync"], items
+    files = [len(x["files"]) for x in SV._mapping(SV._game_dir(cfg_b, KEY))["backups"]]
+    assert sorted(files) == [8, 9], files
+
+
+def test_saves_conflitti_una_copia_sola(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    a, b = saves_dir(tmp_path, "A"), saves_dir(tmp_path, "B")
+    for d in (a, b):
+        for i in range(4):
+            (d / f"f{i}.sav").write_bytes(b"prima")
+    cfg_a, sa = pc(tmp_path, "A", shared, {KEY: a})
+    cfg_b, sb = pc(tmp_path, "B", shared, {KEY: b})
+    sa.run(), sb.run()
+    for i in range(4):
+        (a / f"f{i}.sav").write_bytes(b"di A")
+        (b / f"f{i}.sav").write_bytes(b"di B")
+    sa.run()
+    r = sb.run()
+    assert len(r["saves"]["conflicts"]) == 4, r["saves"]
+    back = SV._mapping(SV._game_dir(cfg_b, KEY))["backups"]
+    assert len(back) == 1 and len(back[0]["files"]) == 4, back
+    assert all((b / f"f{i}.sav").read_bytes() == b"di B" for i in range(4))
+    sb.run()
+    assert len(SV._mapping(SV._game_dir(cfg_b, KEY))["backups"]) == 1, "gia' archiviati"
+
+
 def test_saves_conflict_does_not_overwrite_on_the_next_round(tmp_path):
     """Il conflitto non si "risolve" da solo al giro dopo: nessuno dei due file viene sovrascritto."""
     shared = tmp_path / "shared"

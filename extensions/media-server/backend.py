@@ -25,7 +25,9 @@ lo stream diretto e lo si passa al player (integrato o esterno).
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -39,6 +41,15 @@ MIME = {"mp4": "video/mp4", "m4v": "video/mp4", "webm": "video/webm", "ogv": "vi
         "m4a": "audio/mp4", "ogg": "audio/ogg", "opus": "audio/ogg", "wav": "audio/wav"}
 KINDS = ("film", "episodio", "brano")
 MAX_IMAGE = 8 * 1024 * 1024
+_T = None  # gs.t dopo register(): testi nella lingua dell'interfaccia
+
+
+def tr(key: str, **p) -> str:
+    """Testo da locales.json; prima di register() (adapter usati da soli, test) in italiano."""
+    if _T:
+        return _T(key, **p)
+    it = json.loads((Path(__file__).parent / "locales.json").read_text("utf-8")).get("it", {})
+    return it.get(key, key).format(**p)
 
 
 class Http:
@@ -52,7 +63,7 @@ class Http:
             return self._client.request(method, url, **kw)
         except httpx.HTTPError as e:  # server spento, DNS, timeout: 502 invece di un 500 con lo stack
             # solo il tipo di errore: l'URL (per Plex e Jellyfin) contiene il token e non deve finire nei messaggi
-            raise HTTPException(502, f"server non raggiungibile ({type(e).__name__})")
+            raise HTTPException(502, tr("err.down", errore=type(e).__name__))
 
     def close(self):
         self._client.close()
@@ -61,15 +72,15 @@ class Http:
 def _json(resp, what: str) -> dict:
     status = getattr(resp, "status_code", 200)
     if status == 404:
-        raise HTTPException(404, f"{what}: contenuto non trovato")
+        raise HTTPException(404, tr("err.notFoundIn", what=what))
     if status in (401, 403):
-        raise HTTPException(401, f"{what}: credenziali rifiutate dal server (token scaduto?)")
+        raise HTTPException(401, tr("err.auth", what=what))
     if status >= 400:
-        raise HTTPException(502, f"{what}: il server ha risposto {status}")
+        raise HTTPException(502, tr("err.status", what=what, status=status))
     try:
         data = resp.json()
     except ValueError:
-        raise HTTPException(502, f"{what}: risposta non leggibile")
+        raise HTTPException(502, tr("err.unreadable", what=what))
     return data if isinstance(data, dict) else {}
 
 
@@ -145,14 +156,14 @@ class Jellyfin:
     def detail(self, item_id: str) -> dict:
         out = self.item(self._raw(item_id))
         if out is None:
-            raise HTTPException(404, "contenuto non trovato")
+            raise HTTPException(404, tr("err.notFound"))
         return out
 
     def play_target(self, item_id: str) -> dict:
         raw = self._raw(item_id)
         out = self.item(raw)
         if out is None:
-            raise HTTPException(404, "contenuto non trovato")
+            raise HTTPException(404, tr("err.notFound"))
         container = str(raw.get("Container") or "").lower()
         path = f"/Audio/{quote(item_id)}/stream" if out["kind"] == "brano" else f"/Videos/{quote(item_id)}/stream"
         params = {"static": "true", "api_key": self.token}
@@ -168,7 +179,7 @@ class Jellyfin:
         self._post("/Sessions/Playing/Progress", body)
         if seen:
             if not self.user_id:
-                raise HTTPException(400, "per segnare «visto» su Jellyfin serve l'accesso con utente e password")
+                raise HTTPException(400, tr("err.seenLogin"))
             self._post(f"/Users/{self.user_id}/PlayedItems/{quote(item_id)}")
             self._post("/Sessions/Playing/Stopped", body)
         elif ticks == 0 and self.user_id:
@@ -186,7 +197,7 @@ def jellyfin_login(base: str, username: str, password: str, http) -> dict:
                              headers=head), "Jellyfin")
     token = data.get("AccessToken")
     if not token:
-        raise HTTPException(400, "Jellyfin non ha restituito un token: utente o password errati")
+        raise HTTPException(400, tr("err.noToken"))
     return {"token": str(token), "user_id": str((data.get("User") or {}).get("Id") or "")}
 
 
@@ -266,24 +277,24 @@ class Plex:
         data = self._get(f"/library/metadata/{quote(item_id)}")
         found = (data.get("MediaContainer") or {}).get("Metadata") or []
         if not found:
-            raise HTTPException(404, "contenuto non trovato")
+            raise HTTPException(404, tr("err.notFound"))
         return found[0]
 
     def detail(self, item_id: str) -> dict:
         out = self.item(self._raw(item_id))
         if out is None:
-            raise HTTPException(404, "contenuto non trovato")
+            raise HTTPException(404, tr("err.notFound"))
         return out
 
     def play_target(self, item_id: str) -> dict:
         raw = self._raw(item_id)
         out = self.item(raw)
         if out is None:
-            raise HTTPException(404, "contenuto non trovato")
+            raise HTTPException(404, tr("err.notFound"))
         part = ((raw.get("Media") or [{}])[0].get("Part") or [{}])[0]
         key = part.get("key")
         if not key:
-            raise HTTPException(502, "Plex non ha indicato un file da riprodurre")
+            raise HTTPException(502, tr("err.noFile"))
         container = str(part.get("container") or "").lower()
         url = f"{self.base}{key}?{urlencode({'X-Plex-Token': self.token})}"
         return {"url": url, "resume_pos": out.get("resume_pos", 0.0),
@@ -304,7 +315,7 @@ class Plex:
 def _base_url(raw) -> str:
     url = str(raw or "").strip().rstrip("/")
     if not re.match(r"^https?://[^\s/]+", url) or len(url) > 300:
-        raise HTTPException(400, "serve un indirizzo http:// o https:// del server")
+        raise HTTPException(400, tr("err.url"))
     return url
 
 
@@ -315,6 +326,8 @@ def _bare(conf: dict) -> dict:
 
 
 def register(gs):
+    global _T
+    _T = getattr(gs, "t", None)
     http = Http()
 
     def configured() -> dict[str, dict]:
@@ -326,17 +339,17 @@ def register(gs):
         if source:
             conf = servers.get(source)
             if not conf or not conf.get("base_url"):
-                raise HTTPException(400, f"server «{source}» non configurato")
+                raise HTTPException(400, tr("err.notConfigured", source=source))
         else:
             source, conf = next(((k, v) for k, v in servers.items() if v.get("base_url")), ("", None))
             if not conf:
-                raise HTTPException(400, "nessun server configurato: imposta indirizzo e credenziali")
+                raise HTTPException(400, tr("err.noServer"))
         if source == "jellyfin":
             return Jellyfin(conf["base_url"], http, conf.get("token") or "", conf.get("user_id") or "")
         return Plex(conf["base_url"], http, conf.get("token") or "")
 
-    gs.add_player({"id": "integrato", "label": "Lettore integrato", "mode": "integrato"})
-    gs.add_player({"id": "esterno", "label": "Lettore esterno (mpv, VLC o sistema)", "mode": "esterno"})
+    gs.add_player({"id": "integrato", "label": tr("player.builtin"), "mode": "integrato"})
+    gs.add_player({"id": "esterno", "label": tr("player.external"), "mode": "esterno"})
 
     @gs.route("list")
     def media_list(kind: str = "", query: str = "", q: str = "", source: str = "", limit: int = 200):
@@ -356,7 +369,7 @@ def register(gs):
         data = body if isinstance(body, dict) else {}
         item_id = str(data.get("id") or id or "").strip()
         if not item_id:
-            raise HTTPException(400, "id mancante")
+            raise HTTPException(400, tr("err.noId"))
         return adapter(str(data.get("source") or source or "")).set_progress(
             item_id, _num(data.get("pos", pos)), bool(data.get("seen", seen)))
 
@@ -365,14 +378,14 @@ def register(gs):
         server = adapter(source)
         path = str(src or "")
         if not path.startswith("/") or path.startswith("//") or ".." in path or len(path) > 500:
-            raise HTTPException(400, "immagine non valida")
+            raise HTTPException(400, tr("err.badImage"))
         params = {"X-Plex-Token": server.token} if server.id == "plex" else {"api_key": server.token}
         resp = http.request("GET", server.base + path, params=params, headers={"Accept": "image/*"})
         if getattr(resp, "status_code", 200) >= 400:
-            raise HTTPException(502, f"il server ha risposto {resp.status_code} per l'immagine")
+            raise HTTPException(502, tr("err.imageStatus", status=resp.status_code))
         body = resp.content or b""
         if len(body) > MAX_IMAGE:
-            raise HTTPException(502, "immagine troppo grande")
+            raise HTTPException(502, tr("err.imageBig"))
         return Response(content=body, media_type=resp.headers.get("content-type") or "image/jpeg",
                         headers={"Cache-Control": "max-age=3600"})
 
@@ -386,7 +399,7 @@ def register(gs):
     def media_config_save(body: dict = Body(...)):
         source = str(body.get("source") or "").strip()
         if source not in ("jellyfin", "plex"):
-            raise HTTPException(400, "source deve essere «jellyfin» o «plex»")
+            raise HTTPException(400, tr("err.source"))
         base = _base_url(body.get("base_url"))
         conf = {"base_url": base}
         if source == "jellyfin":
@@ -397,11 +410,11 @@ def register(gs):
             elif key:
                 conf["token"] = key
             else:
-                raise HTTPException(400, "servono utente e password, oppure una chiave API di Jellyfin")
+                raise HTTPException(400, tr("err.jfCreds"))
         else:
             token = str(body.get("token") or body.get("api_key") or "").strip()
             if not token:
-                raise HTTPException(400, "serve il token del tuo account Plex (resta solo su questo PC)")
+                raise HTTPException(400, tr("err.plexToken"))
             conf["token"] = token
         servers = {**configured(), source: conf}
         gs.save_settings({"servers": servers})

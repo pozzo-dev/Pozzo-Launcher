@@ -25,8 +25,12 @@ def test_console_verdict():
     assert pa.verdict_console("nes", HW(1, 1, 4))["verdict"] == "ok"
     assert pa.verdict_console("ps3", HW(2, 2, 8))["verdict"] == "insufficiente"
     r = pa.verdict_console("ps3", HW(3, 3, 8))
-    assert r["verdict"] == "impostazioni" and r["suggestions"]
-    assert pa.verdict_console("ps3", HW(5, 5, 32))["verdict"] == "ok"
+    assert r["verdict"] == "impostazioni" and r["tips"] == ["vulkan", "res720", "spu", "nopost"]
+    assert [(m["part"], m["status"]) for m in r["meters"]] == [("cpu", "rec"), ("gpu", "rec"), ("ram", "rec")]
+    ok = pa.verdict_console("ps3", HW(5, 5, 32))
+    assert ok["verdict"] == "ok" and ok["tips"] == [] and {m["status"] for m in ok["meters"]} == {"ok"}
+    assert pa.verdict_console("ps3", HW(2, 5, 32))["meters"][0] == {"part": "cpu", "have": 2, "min": 3, "rec": 4, "status": "min"}
+    assert pa.verdict_console("ps3", HW(5, 5, 15.9))["verdict"] == "ok"   # 16 GB installati, 15,9 visti dal sistema
 
 
 def test_steam_parse():
@@ -37,6 +41,9 @@ def test_steam_parse():
     assert pa.verdict_steam({"min": html, "rec": ""}, HW(1, 3, 16))["verdict"] == "insufficiente"
     assert pa.verdict_steam({"min": html, "rec": ""}, HW(4, 4, 16))["verdict"] == "ok"
     assert pa.verdict_steam({"min": "boh", "rec": ""}, HW(4, 4, 16))["verdict"] == "sconosciuto"
+    assert pa.verdict_steam({"min": "boh", "rec": ""}, HW(4, 4, 16))["note"] == "unparsed"
+    low = pa.verdict_steam({"min": "", "rec": html}, HW(1, 3, 16))   # sotto i consigliati, nessun minimo: si abbassa la grafica
+    assert low["verdict"] == "impostazioni" and low["tips"] == ["lowgfx", "noshadows"] and low["meters"][0]["status"] == "rec"
 
 
 def test_detect_linux_mac(monkeypatch=None):

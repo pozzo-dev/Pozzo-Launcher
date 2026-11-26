@@ -1,6 +1,34 @@
-.lt-grid { display: grid; grid-template-columns: max-content 1fr; gap: 12px 24px; align-items: center; margin: 14px 0; max-width: 640px; }
-.lt-grid label { display: flex; flex-direction: column; gap: 4px; }
-.lt-grid input[type=number] { width: 140px; }
-.lt-track { height: 8px; border-radius: 4px; background: var(--bg-3); overflow: hidden; margin-bottom: 4px; }
-.lt-fill { height: 100%; background: var(--accent); }
-.lt-fill.over { background: #e5484d; }
+/* Limite di tempo: anello di oggi, barre della settimana con la linea del limite, regole */
+.lt-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); max-width: 1100px; margin-bottom: var(--space-4); }
+.lt-card { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-2); }
+.lt-card h3 { margin: 0 0 var(--space-3); }
+.lt-today { display: flex; align-items: center; gap: var(--space-5); }
+.lt-today h2 { margin: 0 0 var(--space-2); font-size: var(--type-xl, 1.4rem); }
+.lt-today p { margin: var(--space-1) 0 0; }
+.lt-ring { position: relative; width: 130px; height: 130px; flex: none; }
+.lt-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.lt-ring circle { fill: none; stroke-width: 10; }
+.lt-ring .bg { stroke: var(--bg-3); }
+.lt-ring .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .8s var(--motion-ease); }
+.lt-today.over .lt-ring .fg { stroke: var(--bad); }
+.lt-today.over h2 { color: var(--bad); }
+.lt-ring span { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.lt-ring b { font-size: var(--type-lg); }
+.lt-ring small { color: var(--muted); }
+.lt-bars { position: relative; display: flex; gap: var(--space-2); align-items: flex-end; height: 150px; }
+.lt-bars div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: var(--space-1); }
+.lt-bars i { width: 100%; height: var(--h); min-height: 3px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg-3); }
+.lt-bars div.now i { background: var(--accent); }
+.lt-bars div.over i { background: var(--bad); }
+.lt-bars span { font-size: var(--type-xs); color: var(--muted); text-transform: capitalize; }
+.lt-bars div.now span { color: var(--text); font-weight: 700; }
+.lt-limit { position: absolute; left: 0; right: 0; bottom: calc(var(--h) * (150 - 20) / 150 + 20px); border-top: 2px dashed var(--warn); pointer-events: none; }
+.lt-limit em { position: absolute; right: 0; top: -18px; font-size: var(--type-xs); font-style: normal; color: var(--warn); }
+.lt-rules { max-width: 1100px; display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
+.lt-hours { gap: var(--space-4); }
+.lt-hours label { display: flex; flex-direction: column; gap: var(--space-1); }
+.lt-hours input { width: 160px; }
+.lt-end { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.lt-end legend { margin-bottom: var(--space-1); font-weight: 600; }
+@media (max-width: 860px) { .lt-top { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .lt-ring .fg { transition: none; } }

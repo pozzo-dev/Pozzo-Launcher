@@ -10,7 +10,9 @@ Il token Twitch (client_credentials) si riusa finche' non scade.
 """
 
 import html
+import json
 import time
+from pathlib import Path
 
 import httpx
 from fastapi import Body, HTTPException
@@ -22,6 +24,15 @@ TTL = 600
 TIMEOUT = 10
 _token: dict = {}  # {"creds": (id, segreto), "token": str, "exp": secondi}
 _cache: dict = {}  # chiave -> (momento, dati)
+_T = None          # gs.t dopo register(): testi nella lingua dell'interfaccia
+
+
+def tr(key: str, **p) -> str:
+    """Testo da locales.json; prima di register() (funzioni usate da sole, test) in italiano."""
+    if _T:
+        return _T(key, **p)
+    it = json.loads((Path(__file__).parent / "locales.json").read_text("utf-8")).get("it", {})
+    return it.get(key, key).format(**p)
 
 
 def _client():
@@ -33,11 +44,11 @@ def _send(method: str, url: str, nome: str, **kw) -> dict:
         with _client() as c:
             r = c.request(method, url, **kw)
     except httpx.HTTPError as e:
-        raise HTTPException(502, f"{nome}: rete non disponibile ({type(e).__name__})")
+        raise HTTPException(502, tr("err.net", servizio=nome, errore=type(e).__name__))
     if r.status_code in (400, 401, 403):
-        raise HTTPException(502, f"{nome}: chiave o credenziali non valide, oppure quota esaurita")
+        raise HTTPException(502, tr("err.key", servizio=nome))
     if r.status_code >= 400:
-        raise HTTPException(502, f"{nome}: errore {r.status_code}")
+        raise HTTPException(502, tr("err.http", servizio=nome, codice=r.status_code))
     return r.json()
 
 
@@ -90,7 +101,7 @@ def parse_videos(j: dict) -> list[dict]:
 
 def youtube_videos(titolo: str, key: str) -> list[dict]:
     visti, out = set(), []
-    for q in (f"{titolo} trailer", f"{titolo} guida"):
+    for q in (f"{titolo} {tr('q.trailer')}", f"{titolo} {tr('q.guide')}"):  # parole di ricerca nella lingua dell'utente
         params = {"part": "snippet", "type": "video", "q": q, "maxResults": 6, "key": key}
         for v in parse_videos(_send("GET", YT_SEARCH, "YouTube", params=params)):
             if v["videoId"] not in visti:
@@ -100,6 +111,9 @@ def youtube_videos(titolo: str, key: str) -> list[dict]:
 
 
 def register(gs):
+    global _T
+    _T = gs.t
+
     def chiavi() -> tuple[str, str, str]:
         s = gs.settings
         return (str(s.get("twitch_client_id") or "").strip(), str(s.get("twitch_client_secret") or "").strip(),
@@ -114,15 +128,14 @@ def register(gs):
     def live(titolo: str):
         cid, segreto, _ = chiavi()
         if not (cid and segreto):
-            raise HTTPException(400, "Dirette Twitch: inserisci Client ID e Client Secret in Impostazioni › Streaming "
-                                     "(app gratuita su dev.twitch.tv).")
+            raise HTTPException(400, gs.t("err.noTwitch"))
         return {"streams": cached(("live", titolo.lower(), cid, segreto), lambda: twitch_live(titolo, cid, segreto))}
 
     @gs.route("videos/{titolo:path}")
     def videos(titolo: str):
         yt = chiavi()[2]
         if not yt:
-            raise HTTPException(400, "Video YouTube: inserisci la chiave YouTube Data API in Impostazioni › Streaming.")
+            raise HTTPException(400, gs.t("err.noYoutube"))
         return {"videos": cached(("videos", titolo.lower(), yt), lambda: youtube_videos(titolo, yt))}
 
     @gs.route("impostazioni", methods=("POST",))

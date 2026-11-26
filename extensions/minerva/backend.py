@@ -29,7 +29,7 @@ def store_key(url: str) -> str:
     return host + p.path.rstrip("/") + ("?" + p.query if p.query else "")
 
 
-def merge_catalogs(cats: dict, found: dict[str, list[str]], read, say=lambda m: None,
+def merge_catalogs(cats: dict, found: dict[str, list[str]], read, say=lambda key, **p: None,
                    types: dict[str, str] | None = None):
     """Aggiunge a `cats` (settings.json › «catalogs») solo gli store non ancora presenti per la console.
 
@@ -70,8 +70,7 @@ def merge_catalogs(cats: dict, found: dict[str, list[str]], read, say=lambda m: 
             # piu' elenchi della stessa console possono avere formati diversi: il "type"
             # fissato per la console ne romperebbe alcuni, quindi si lascia il riconoscimento
             if len(merged) > 1 and cur.get("type"):
-                say(f"{pid}: tolto il tipo fisso «{cur['type']}» "
-                    f"(con piu' elenchi ogni pagina viene riconosciuta da sola)")
+                say("log.type", console=pid, tipo=cur["type"])
                 cur = {k: v for k, v in cur.items() if k != "type"}
             cats[pid] = {**cur, "urls": merged}
         elif fixed and len(merged) == 1:
@@ -176,9 +175,9 @@ def register(gs):
 
         from pozzo import catalog
         from pozzo.cache import Cache
-        say = lambda m: job["log"].append(str(m))  # noqa: E731
+        say = lambda key, **p: job["log"].append(gs.t(key, **p))  # noqa: E731  testi nella lingua dell'interfaccia
         try:
-            say("Lettura di r-roms.github.io…")
+            say("log.reading")
             with httpx.Client(follow_redirects=True, timeout=30) as h:
                 found = collect(lambda u: h.get(u).raise_for_status().text)
             # store preimpostati (Switch, Switch 2, PS4, PS5), aggiunti a quelli trovati
@@ -191,7 +190,7 @@ def register(gs):
                         cur.append(u)
                         have.add(store_key(u))
             job["found"] = {k: len(v) for k, v in found.items()}
-            say(f"{sum(map(len, found.values()))} store per {len(found)} console (Minerva + Switch, Switch 2, PS4, PS5)")
+            say("log.found", n=sum(map(len, found.values())), console=len(found))
             cats = C.read_settings(cfg).get("catalogs", {})
             c = Cache(cfg.cache)
             try:
@@ -206,14 +205,12 @@ def register(gs):
             job["added"] = {k: len(v) for k, v in added.items()}
             job["todo"] = todo
             if added:
-                say(f"Store aggiunti: {sum(map(len, added.values()))} · mai letti: {sum(map(len, todo.values()))}")
-                say("Gli elenchi dei giochi non vengono scaricati: usa «Leggi» sulla console che ti interessa.")
+                say("log.added", n=sum(map(len, added.values())), unread=sum(map(len, todo.values())))
             else:
-                say("Nessuno store nuovo: erano già tutti presenti"
-                    + (f" ({sum(map(len, todo.values()))} mai letti, si leggono con «Leggi»)" if todo else ""))
+                say("log.none", unread=sum(map(len, todo.values())))
             job["status"] = "done"
         except Exception as e:
-            say(f"Errore: {type(e).__name__}: {e}")
+            say("log.error", errore=f"{type(e).__name__}: {e}")
             job["status"] = "error"
 
     @gs.route("importa", methods=("POST",))

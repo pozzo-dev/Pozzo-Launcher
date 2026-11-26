@@ -65,6 +65,11 @@ def _graft(new, cur):
                 new[k] = _graft(new[k], v)
             elif _secret(k, v):
                 new[k] = v
+    elif isinstance(new, list) and isinstance(cur, list):  # telefoni e PC per id, webhook per url
+        known = {i: c for c in cur if isinstance(c, dict) and (i := c.get("id") or c.get("url"))}
+        for n in new:
+            if isinstance(n, dict) and (c := known.get(n.get("id") or n.get("url"))):
+                _graft(n, c)
     return new
 
 
@@ -96,7 +101,8 @@ def _themes(cfg) -> list[Path]:
     return [f for f in sorted(d.iterdir())[:200] if f.is_file() and f.stat().st_size <= THEME_MAX]
 
 
-def create(cfg, reason: str = "manuale", secrets: bool | None = None) -> Path:
+def create(cfg, reason: str = "manuale", secrets: bool | None = None, protect: str = "") -> Path:
+    """protect: copia che la rotazione non deve togliere (quella che si sta per ripristinare)."""
     d = folder(cfg)
     if secrets is None:
         secrets = options(cfg)["secrets"]
@@ -135,7 +141,7 @@ def create(cfg, reason: str = "manuale", secrets: bool | None = None) -> Path:
             z.writestr("manifest.json", json.dumps({"format": 2, "app": __version__, "created": time.time(), "reason": reason,
                                                     "secrets": bool(secrets), "files": z.namelist()}, indent=1))
     out.with_suffix(".part").replace(out)
-    for old in list_backups(cfg)[options(cfg)["keep"]:]:
+    for old in [b for b in list_backups(cfg) if b["name"] != protect][options(cfg)["keep"]:]:
         (d / old["name"]).unlink(missing_ok=True)
     return out
 
@@ -264,7 +270,7 @@ def restore(cfg, name: str, user=None, profiles: dict | None = None) -> dict:
     p = folder(cfg) / Path(name).name  # solo nomi della cartella delle copie, niente percorsi arbitrari
     if not p.is_file() or not zipfile.is_zipfile(p):
         raise FileNotFoundError(f"Copia non trovata: {name}")
-    before = create(cfg, "prima-del-ripristino")
+    before = create(cfg, "prima-del-ripristino", protect=p.name)
     restored = []
     cmds = 0  # profili/impostazioni ripristinati che eseguono comandi: l'utente va avvisato
     with tempfile.TemporaryDirectory() as t, zipfile.ZipFile(p) as z:

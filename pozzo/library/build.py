@@ -39,7 +39,7 @@ from ..sources.base import Context
 from .ratings import combine
 
 SCHEMA = """
-CREATE TABLE games(id INTEGER PRIMARY KEY, key TEXT UNIQUE, platform TEXT, title TEXT, sort_title TEXT,
+CREATE TABLE games(id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE, platform TEXT, title TEXT, sort_title TEXT,
                    year INT, release_date TEXT, developer TEXT, publisher TEXT, genres TEXT, players TEXT,
                    rating REAL, description TEXT, region TEXT, found INT, files TEXT, media TEXT,
                    video_url TEXT, canonical TEXT, crc TEXT, origin TEXT, grp TEXT, is_primary INT,
@@ -800,6 +800,44 @@ INSERT_GAME = ("INSERT INTO games(key, platform, title, sort_title, year, releas
                + ",".join("?" * 37) + ")")
 
 
+def _has_sequence(db) -> bool:
+    return bool(db.execute("SELECT 1 FROM sqlite_master WHERE name='sqlite_sequence'").fetchone())
+
+
+def _ids(db) -> tuple[dict[str, int], int]:
+    """(numero di ogni gioco per chiave, numero piu' alto mai usato) di una library.db, anche di versioni precedenti."""
+    ids = dict(db.execute("SELECT key, id FROM games"))
+    seq = db.execute("SELECT seq FROM sqlite_sequence WHERE name='games'").fetchone() if _has_sequence(db) else None
+    return ids, max(*ids.values(), seq[0] if seq else 0, 0)
+
+
+def _old_ids(dest: Path) -> tuple[dict[str, int], int]:
+    if not dest.exists():
+        return {}, 0
+    db = sqlite3.connect(dest)
+    try:
+        return _ids(db)
+    except sqlite3.DatabaseError:  # libreria illeggibile: si ricostruisce da zero
+        return {}, 0
+    finally:
+        db.close()
+
+
+def _insert_games(db, rows: list[tuple], ids: dict[str, int], top: int) -> None:
+    """Un gioco gia' noto (stessa chiave) conserva il suo numero, uno nuovo ne prende uno mai usato: una pagina aperta
+    prima della ricostruzione non deve aprire, avviare o modificare un altro gioco."""
+    out = []
+    for r in rows:
+        i = ids.get(r[0])
+        if i is None:
+            i = top = top + 1
+        out.append((i, *r))
+    db.executemany(INSERT_GAME.replace("games(key", "games(id, key", 1).replace("VALUES(", "VALUES(?,", 1), out)
+    if _has_sequence(db):  # anche con zero righe (disco delle ROM scollegato): i numeri usati non tornano disponibili
+        db.execute("DELETE FROM sqlite_sequence WHERE name='games'")
+        db.execute("INSERT INTO sqlite_sequence VALUES('games', ?)", (top,))
+
+
 def _pc_row(e: dict) -> tuple:
     rc = e["ratings"]
     return (e["key"], "windows", e["title"], e["sort"], e["year"], e["release_date"], e["developer"],
@@ -855,13 +893,14 @@ def update_manual(cfg) -> bool:
         for col in re.search(r"games\((.*?)\) VALUES", INSERT_GAME).group(1).split(","):
             if col.strip() not in have:
                 db.execute(f"ALTER TABLE games ADD COLUMN {col.strip()}")
+        ids = _ids(db)  # prima di toglierli: i giochi a mano che restano conservano il numero
         db.execute("DELETE FROM collection_games WHERE key IN (SELECT key FROM games WHERE store='manual')")
         db.execute("DELETE FROM games WHERE store='manual'")
         db.execute("CREATE TABLE IF NOT EXISTS game_owners(key TEXT, owner TEXT, PRIMARY KEY(key, owner))")
         db.execute("DELETE FROM game_owners WHERE key LIKE 'windows/manual:%'")
         db.executemany("INSERT OR IGNORE INTO game_owners VALUES(?,?)",
                        [(e["key"], o) for e in pc if e["store"] == "manual" for o in e["owners"]])
-        db.executemany(INSERT_GAME, [_pc_row(e) for e in pc if e["store"] == "manual"])
+        _insert_games(db, [_pc_row(e) for e in pc if e["store"] == "manual"], *ids)
         # il gioco appena installato (repack) non deve comparire due volte: la sua voce «da scaricare» si toglie
         titles = {normalize(e["title"]) for e in pc if e["store"] == "manual" and e["installed"]}
         gone = [k for k, t in db.execute("SELECT key, title FROM games WHERE store='online'") if normalize(t) in titles]
@@ -935,7 +974,7 @@ def build(cfg, log=print, progress=None) -> dict:
                          e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
                          json.dumps(rc.get("ratings", [])), e["size"],
                          json.dumps(e.get("sources") or [], ensure_ascii=False), e["content"], None, None))
-        db.executemany(INSERT_GAME, rows)
+        _insert_games(db, rows, *_old_ids(dest))
         db.executemany("UPDATE games SET verify=?, match_by=? WHERE key=?",
                        [(g.verify_status or None, g.match_by or None, key) for key, g in merged.items()
                         if g.verify_status or g.match_by])

@@ -110,10 +110,6 @@ class DSUServer:
             s.gyro = tuple(float(v) for v in gyro)
         self._send_data(slot)
 
-    def free_slot(self) -> int | None:
-        with self.lock:
-            return next((s.n for s in self.slots if not s.connected), None)
-
     # ------------------------------------------------------------ protocollo
     def _data_payload(self, s: Slot) -> bytes:
         s.counter = (s.counter + 1) & 0xFFFFFFFF

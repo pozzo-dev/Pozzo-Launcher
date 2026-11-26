@@ -100,6 +100,39 @@ def test_folder_sync_and_profiles():
             u.db.close()
 
 
+def test_profilo_rinominato_e_cartella_dei_salvataggi():
+    """Un profilo rinominato tiene il suo id sull'altro PC, e la cartella dei salvataggi non e' un profilo."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        root = Path(t)
+        shared = root / "OneDrive"
+        shared.mkdir()
+        pcs = [pc(root, n, shared) for n in ("A", "B")]
+        for (cfg, _, s), n in zip(pcs, "AB"):
+            sav = root / n / "z.sav"
+            sav.write_text("uguale")
+            s.saves_of = lambda key, title, sav=sav: [sav]
+            sync.save_conf(cfg, {**sync.conf(cfg), "saves": True, "saves_games": ["nds/z"]})
+        (cfg_a, ua, sa), (cfg_b, ub, sb) = pcs
+        sync.add_profile(cfg_a, "Mario")
+        sync.rename_profile(cfg_a, "mario", "Luigi")
+        ua("mario").set_flag("snes/X", "favorite", 1)
+        for s in (sa, sb, sa, sb):  # dal secondo giro la cartella «saves» esiste gia'
+            r = s.run()
+            assert r["folder"].get("ok") and r["saves"].get("ok"), r
+        for cfg in (cfg_a, cfg_b):
+            assert [(p["id"], p["name"]) for p in sync.profiles(cfg)] == [("default", "Principale"), ("mario", "Luigi")]
+        assert ub("mario").games()["snes/X"]["favorite"] == 1
+        # un profilo chiamato «Saves» non finisce nella cartella dei salvataggi
+        assert sync.add_profile(cfg_a, "Saves")["id"] == "saves-2"
+        # id che arrivano da un altro PC: mai un percorso
+        bad = {"format": sync.FORMAT, "profile": {"name": "x"}}
+        assert sb.receive({"../fuori": bad, "a/b": bad, "": bad}) == {}
+        assert len(sync.profiles(cfg_b)) == 2 and not list(root.rglob("fuori*"))
+        for u in (ua("default"), ua("mario"), ub("default"), ub("mario")):
+            u.db.close()
+        print("ok  profilo rinominato con lo stesso id sull'altro PC, cartella dei salvataggi ignorata, id controllati")
+
+
 def test_server_profiles_and_lan_gate():
     """Profili dall'app (dati separati nella libreria) e cancello del server di rete per i PC abbinati."""
     from fastapi.testclient import TestClient
@@ -306,6 +339,7 @@ def test_profile_metadata_not_synced():
 
 if __name__ == "__main__":
     test_folder_sync_and_profiles()
+    test_profilo_rinominato_e_cartella_dei_salvataggi()
     test_server_profiles_and_lan_gate()
     test_profile_lifecycle()
     test_profile_metadata_not_synced()

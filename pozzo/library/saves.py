@@ -484,7 +484,8 @@ def _store(cfg, key: str, title: str, files: dict[str, tuple[Path | None, bytes 
     idx.setdefault("backups", {})[name] = {"reason": reason, "dirs": dirs, "stat": stats}
     _write_index(cfg, key, idx)
     keep = int((getattr(cfg, "app", None) or {}).get("save_keep") or KEEP)
-    for old in [b for b in list_backups(cfg, key) if not b["pinned"] and b["name"] != protect][keep:]:
+    # solo le copie fatte per questo gioco: nella stessa cartella ci possono essere quelle di un omonimo o di Ludusavi
+    for old in [b for b in list_backups(cfg, key) if b["name"] in idx["backups"] and not b["pinned"] and b["name"] != protect][keep:]:
         try:
             delete(cfg, key, old["name"])
         except OSError:  # file aperto: si toglie la prossima volta
@@ -663,8 +664,10 @@ def _members(d: Path, b: dict, drives: dict, allowed: list[str], skipped: list[s
 
 
 def _extra(dirs: list[str], inside: set[str]) -> list[Path]:
-    """File presenti adesso nelle cartelle copiate intere ma non nella copia (creati dopo)."""
-    return [f for x in dirs for f in Path(x).rglob("*") if f.is_file() and os.path.normcase(str(f.resolve())) not in inside]
+    """File presenti adesso nelle cartelle copiate intere ma non nella copia (creati dopo). Mai i tipi che il
+    ripristino non scrive (_risky): tolti, non li rimetterebbe nemmeno la copia di sicurezza."""
+    return [f for x in dirs for f in Path(x).rglob("*")
+            if f.is_file() and not _risky(f) and os.path.normcase(str(f.resolve())) not in inside]
 
 
 def diff(cfg, key: str, name: str, roots: list[Path] | None = None) -> dict:

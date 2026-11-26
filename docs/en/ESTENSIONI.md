@@ -293,7 +293,104 @@ export default function (gs, ctx) {
 | `gs.esc(text)` | Escapes untrusted text safely for HTML insertion |
 | `gs.mode` | `"desktop"` or `"bigpicture"` |
 
-`ctx.settings` contains configuration saved by the plugin backend.
+`ctx.settings` contains configuration saved by the plugin backend. `ctx.t` and `ctx.lang` are for translated text (see below).
+
+More interface functions:
+
+| Function | What it does |
+|---|---|
+| `gs.addShelf({id, title, why?, games(lib)})` | A shelf on the Shelves home. `games` receives the library and returns the games to show (a Promise works too); an empty shelf is not shown |
+| `gs.ui.registerWidget({id, title, defaultSpan, render})` | A card on the **Dashboard** home |
+| `gs.addTutorial({...})` | The extension's tutorial (see below) |
+| `gs.hints.register({id, target, text})` | A short tip next to an element, shown once |
+| `gs.redraw()`, `gs.refresh()` | Redraws the current view; reloads the library |
+
+`addDetailSection` also accepts `when(game)`: the section only appears when it returns `true`.
+
+#### Text and translations
+
+The app comes in 6 languages (Italian, English, German, Spanish, French, Brazilian Portuguese) and extensions must
+follow the one the user picked. Don't write text in the code: put it in a **`locales.json`** file next to
+`plugin.toml`. It is a single file because the store only installs the files at the top of the folder.
+
+```json
+{
+  "it": { "page": "Anniversari", "years": "{n} anni", "plugin.name": "Anniversari retro" },
+  "en": { "page": "Anniversaries", "years": "{n} years", "plugin.name": "Retro anniversaries" },
+  "de": { "…": "…" }
+}
+```
+
+```js
+export default function (gs, ctx) {
+  const { t, lang } = ctx;
+  gs.addSidebarItem({ id: "anniversari", label: t("page"), icon: "◷", view: "anniversari" });
+  const when = new Date().toLocaleDateString(lang, { day: "numeric", month: "long" });  // never a fixed "it"
+  gs.toast(t("years", { n: 30 }));
+}
+```
+
+- When a text is missing in the chosen language, English is used, then Italian, then the key itself.
+- `{placeholders}` work as in the app's catalogs.
+- The keys `plugin.name`, `plugin.description`, `plugin.long_description`, `plugin.how_it_works` and `plugin.features`
+  (one line per item) translate the store card. Without them the store shows the text in `plugin.toml`.
+- On the server, `gs.t("key", n=3)` does the same: it uses the request's language or, in periodic jobs and events,
+  the language of the interface's last request. `lang="en"` forces one.
+- `python scripts/i18n_check.py` checks that every Italian key exists in every language, with the same placeholders.
+
+#### Tutorial
+
+An extension can explain itself with a short tutorial. It is optional: without one, the extension works the same.
+
+```js
+gs.addTutorial({
+  id: ctx.id,                 // one per extension: the store finds it by the extension id
+  view: "anniversari",        // starts by itself the first time this page opens…
+  section: "anniversari-sec", // …or this section of the game detail (optional)
+  steps: [
+    { title: t("tut.1.t"), text: t("tut.1.x") },                         // no sel: card in the middle
+    { title: t("tut.2.t"), text: t("tut.2.x"), sel: ".ann-lane" },       // points at an element of the page
+    { title: t("tut.3.t"), text: t("tut.3.x"), sel: [".badge.ext", "#grid"] }, // the first selector found
+  ],
+});
+```
+
+- It starts **by itself only once**: the first time the user opens the page (`view`) or the section (`section`).
+  It waits if the app tour is running or a dialog is open.
+- It can be replayed at any time: from the **"?"** button in the header made by `gs.ui.page`, and from the
+  **Tutorial** button on the installed extension's store card. The store opens the extension's page first.
+- **Settings › General › "Show all tips again"** also resets extension tutorials.
+- Steps whose element is missing are skipped. Use selectors of elements that exist even when the page is empty.
+- Keep it short: 3–5 steps, one sentence each, what it does and where to click. The text goes in `locales.json`.
+
+#### Interface components (`gs.ui`)
+
+To look like the rest of the app, use these building blocks instead of hand-written styles:
+
+| Function | What it does |
+|---|---|
+| `gs.ui.page(el, {title, subtitle, actions, tutorial})` | Page header with title (Big Picture only: the normal view already shows it in the top bar), subtitle, buttons (`actions`, HTML) and the tutorial's "?" (`tutorial`: id). Returns the body container. `gameCard` covers inside the page open the game |
+| `gs.ui.gameCard(game)` | Cover with title and console, as on the home shelves (HTML). Put several in a `<div class="shelf-lane">` |
+| `gs.ui.cover(id, w)` | URL of a game's cover, `w` pixels wide |
+| `gs.ui.empty({icon, title, text, action})` | Empty state (Element): says what is missing and what to do, with an optional `{label, run}` button |
+
+Ready-made classes: `btn`, `btn primary`, `icon-btn`, `chip`, `badge`, `muted`, `row`, `field`, `shelf-lane`,
+`shelf-section`. For colours, spacing and corners use the theme tokens (`var(--accent)`, `var(--panel)`, `var(--line)`,
+`var(--space-3)`, `var(--radius)`, …) so the extension follows light, dark and custom themes. No `style="…"` in the
+HTML: rules go in `style.css`, with a class prefix of your own (e.g. `ann-`).
+
+#### Guidelines
+
+Before publishing an extension, check that it:
+
+1. **has a purpose you can say in one sentence**, and doesn't redo something the app already does (statistics,
+   wishlist, ratings, the "What do you want to play?" quiz, game notes);
+2. **shows something, not just links**: covers, dates, numbers, actions. A list of links to external sites is not an extension;
+3. **has a useful empty state**: when there is nothing to show, it says why and what to do (`gs.ui.empty`);
+4. **works without keys**, or says in one line where to get them, with the right link;
+5. **is translated** (`locales.json`, `ctx.t`, dates with `ctx.lang`) and **has no inline styles**;
+6. **has a tutorial** of 3–5 steps if it isn't clear at first sight.
+
 
 ### Server (backend.py)
 
@@ -323,6 +420,7 @@ def register(gs):
 | `gs.cfg` | Application configuration (read-only) |
 | `gs.settings`, `gs.save_settings(dict)` | Plugin configuration store |
 | `gs.log(msg)` | Logs a message to launcher logs |
+| `gs.t(key, lang=None, **values)` | Translated text from `locales.json` (see "Text and translations") |
 
 #### Periodic Background Jobs (`gs.job`)
 
@@ -350,10 +448,14 @@ By default, plugin backends are imported and `register()` executes synchronously
 
 ### Full Example
 
-The **Statistics** plugin (`extensions/statistiche/`) demonstrates all facets:
-- a backend with an endpoint and event hook;
-- a frontend with a custom view, a sidebar entry, and an action button in game details;
-- a custom stylesheet.
+The **Time Limit** plugin (`extensions/limite-tempo/`) demonstrates all facets:
+- a backend with endpoints, event hooks (game started and stopped) and text translated with `gs.t` for notifications;
+- a frontend with a page built with `gs.ui.page`, a three-step tutorial and text from `ctx.t`;
+- a `locales.json` in the 6 languages, store card included;
+- a stylesheet that only uses the theme tokens.
+
+For a section in the game detail see **Game journal** (`extensions/diario/`); for a home shelf see
+**Retro anniversaries** (`extensions/anniversari/`).
 
 ### Extensions Store
 
@@ -386,10 +488,10 @@ To test an alternative store index in place of the official store (including loc
 
 ### Publishing an Extension
 
-Each extension resides in its **own repository** (for example, `pozzo-ext-stasera`): the root directory contains `plugin.toml`, extension source files (no subfolders), and `index.json`. The official store is hosted in a repository containing an `index.json` that references participating repositories and their approved release tags:
+Each extension resides in its **own repository** (for example, `pozzo-ext-diario`): the root directory contains `plugin.toml`, extension source files (no subfolders), and `index.json`. The official store is hosted in a repository containing an `index.json` that references participating repositories and their approved release tags:
 
 ```json
-{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-stasera", "ref": "v1.0"}]}
+{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-diario", "ref": "v1.0"}]}
 ```
 
 The app fetches each repository's `index.json` corresponding to that specific tag. An index entry can also specify `"url"` instead of `"repo"`/`"ref"` for repositories hosted outside GitHub.
@@ -411,28 +513,22 @@ To test an extension locally in your launcher, `python tools/extensions.py insta
 
 | Plugin | What It Does |
 |---|---|
-| **Statistics** | Play time per console and store, most played titles, metadata completeness tracker |
-| **Link → Store** | Scrapes index pages collecting external links, groups URLs by header tags (h2/h3), and adds each as a console store or direct PC download/repack store |
-| **Store Minerva + Switch** | One-click import for minerva-archive.org directories listed on r-roms.github.io **and** adds preset stores: Switch (NXBrew `game-index`, Ziperto NSP, Ziperto XCI), Switch 2 (NXBrew `switch-2-games`), PS4 and PS5 (superpsx) |
-| **What Should I Play Tonight?** | Recommends a backlog game tailored to your available time (using HowLongToBeat durations), preferred genre, and console, prioritizing titles you haven't played in a while; includes "Roll another" and "Play" |
-| **Retro Anniversaries** | Adds a "30 YEARS" badge to covers of games released on today's date in history and introduces an "On This Day in..." page (requires complete release date metadata) |
-| **Library Cleanup** | Detects duplicates, unplayed titles, neglected games, and incomplete metadata; provides bulk management (hide, abandoned, backlog), "DUP" badges, and **🧹 Remove manual duplicates** (items added manually sharing identical executables and arguments, retaining the oldest entry) |
-| **Gaming Journal** | Adds dated session logs and playthrough notes directly inside each game's detail view (alongside existing personal notes) |
-| **Time Limit** | Triggers notifications when exceeding X daily or weekly gaming hours (for the active user profile); provides advisory alerts without terminating games |
-| **Personal Goals** | Periodic challenges (completed games, hours played, days active), daily gameplay streaks, and achievement badges |
-| **Year in Review** | Summarizes your gaming year (hours, top played titles, consoles, monthly breakdown) with an exportable shareable graphic |
-| **SteamGridDB** | Fetches vertical grid covers, hero backgrounds, and missing logos; requires a free API key under Settings › SteamGridDB. Also powers the **🖼 Game artwork…** context menu option (pick custom artwork per game) |
-| **Release Calendar** | Upcoming releases for wishlisted titles and anticipated games across your favorite genres, powered by RAWG (uses key configured in Settings › Sources) |
-| **Gaming News** | Aggregated RSS/Atom feeds from major publishers (PlayStation, Xbox, Nintendo, Steam, Capcom…) and gaming outlets, featuring a "My games & consoles only" filter, tag classification (announcement, patch, DLC, release), Monday weekly recap, and a "Follow" button in game details |
-| **Can My PC Run It?** | Analyzes system CPU, GPU, and RAM to deliver an instant compatibility verdict (Runs great, Tweaks needed, Too demanding), comparing against Steam hardware requirements and recommending emulator configurations |
-| **Reviews and Scores** | Aggregates critic and community review scores in each game's detail view: Metacritic, OpenCritic (with recommendation tier and percentage), and Steam user reviews |
-| **Deals and Bundles** | Real-time price tracking for wishlisted games (with "Historical Low" badges), active IsThereAnyDeal bundles tagged "For you" when including tracked or owned games, and currently claimable free games |
+| **Link → Store** | Three-step wizard: paste the address of a page that collects other sites, pick the links in groups and each group's console (suggested from the title) or the PC store; “Read now” downloads the lists as soon as they're added |
+| **Store Minerva + Switch** | “Import stores” adds the minerva-archive.org archives (listed by r-roms) and preset Switch, Switch 2, PS4 and PS5 stores to the Online store; then one card per console with icon, games read and “Read” |
+| **Retro Anniversaries** | “N YEARS” badge on today's birthdays, a “Birthdays” shelf on the home and a page with today and the next 30 days, day by day (requires complete release dates) |
+| **Library Cleanup** | Cards showing what needs tidying (duplicates, never started, idle for years, missing data, identical files on disk), selectable covers with group actions, “DUP” badges and removal of manually added duplicates |
+| **Gaming Journal** | On each game's page, a day-by-day timeline of sessions, dated notes, screenshots and save backups (alongside the game's personal note) |
+| **Time Limit** | “Play time” page: today's time on a ring, the week in a chart with the limit line, a warning 10 minutes before and, optionally, closing the game when time is up |
+| **Personal Goals** | Challenges suggested by your library, accepted in one click (finish a started game, try a console you never used), goals with progress rings, day streaks and badges |
+| **Year in Review** | “Your year”: your gaming year as a full-screen story (hours, game of the year, top games, habits, records) and a shareable image; the full numbers stay in Statistics |
+| **SteamGridDB** | Source of missing vertical covers, backgrounds and logos; free key in Settings › Extensions › SteamGridDB. Also powers the **Game images…** context menu |
+| **Release Calendar** | Month-by-month calendar with the covers of upcoming games: wishlist first, then your genres (or all); add to wishlist in one click. Uses the RAWG key in Settings › Library and sources |
+| **Gaming News** | News timeline from publishers and sites, “Only my games and consoles” filter, types (announcement, patch, DLC, release), Monday digest, followed games with patches and DLC on their page and on a home shelf |
+| **Can My PC Run It?** | On the game page, a traffic light and three meters (processor, graphics card, memory) against minimum and recommended, from Steam or emulator requirements, plus recommended settings |
 | **Local Media** | Movies, TV series, and music from local PC folders browsable as a dedicated media library: title recognition, local artwork support (poster.jpg, folder.jpg), playback resume, and support for internal or external media players |
 | **Web Recipes** | Movies and podcast catalogs from legitimate public web directories and feeds (e.g., Internet Archive and NASA podcasts) extracted via declarative TOML recipes without executable code; features ETag caching, robots.txt compliance, metadata details, episodes, and direct playback |
-| **Twitch and YouTube** | in each game's details, live Twitch streams and YouTube videos (trailers and guides); personal keys in Settings › Streaming |
-| **Events and Shows** | calendar of Gamescom, Summer Game Fest, Nintendo Direct, and other gaming showcases, with reminders 7 days and 1 day before they start |
+| **Twitch and YouTube** | On the game page, YouTube videos to watch right there and live Twitch streams; without keys it explains how to turn it on and offers browser search |
 | **Media Server** | your Jellyfin or Plex libraries inside Pozzo Launcher: same grid, same search, with "Continue Watching" and "Watched" synced with the server |
-| **Speedruns** | world records and links to speedrun.com for games in your library, directly in each game's detail view |
 
 **Store Minerva + Switch** stores its presets in `PRESETS` (`backend.py`): adding additional repositories requires only a single line
 (`{"console": ["https://…"]}`). Because listings for a console may use different layout formats

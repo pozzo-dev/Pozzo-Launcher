@@ -29,7 +29,11 @@ async function main() {
     createExtraMediaWidgetDefs,
     registerMediaWidget,
     renderMediaContextMenuHtml,
+    setT,
   } = await import(pathToFileURL(frontendPath).href);
+  // testi in italiano da locales.json, come li passa l'app con ctx.t
+  const IT = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../extensions/media-locale/locales.json"), "utf8")).it;
+  setT((k, p) => String(IT[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p && n in p ? p[n] : m)), "it");
 
   const playerPath = path.resolve(__dirname, "../extensions/media-locale/player.js");
   const { removeFromContinueCache } = await import(pathToFileURL(playerPath).href);
@@ -490,13 +494,13 @@ async function main() {
 
   // 1. Stato vuoto
   const emptyHtml = renderMediaWidgetHtml(null);
-  assert(emptyHtml.includes("Nessun video in corso di riproduzione"), "Stato vuoto deve contenere testo esatto");
+  assert(emptyHtml.includes("Nessun video in corso"), "Stato vuoto deve contenere testo esatto");
   assert(emptyHtml.includes("Apri Media locale"), "Stato vuoto deve avere pulsante Apri Media locale");
   assert(emptyHtml.includes("gs-media-open-btn"), "Pulsante stato vuoto deve avere classe gs-media-open-btn");
   assert(!/#([0-9a-fA-F]{3,8})\b/.test(emptyHtml), "Zero colori esadecimali hardcoded nello stato vuoto");
 
   const seenHtml = renderMediaWidgetHtml({ id: 1, title: "Finito", seen: true, resume_pos: 100, duration: 100 });
-  assert(seenHtml.includes("Nessun video in corso di riproduzione"), "Video già visto deve mostrare stato vuoto");
+  assert(seenHtml.includes("Nessun video in corso"), "Video già visto deve mostrare stato vuoto");
 
   // 2. Video in corso di riproduzione
   const inProgressItem = {
@@ -550,7 +554,7 @@ async function main() {
   const def = createMediaWidgetDef();
   assert.strictEqual(def.id, "media:continue", "Widget id deve essere media:continue");
   assert.strictEqual(def.title, "Continua a guardare (Media)", "Widget title deve essere Continua a guardare (Media)");
-  assert.strictEqual(def.description, "Ultimo film o serie tv in riproduzione", "Widget description corretta");
+  assert.strictEqual(def.description, "Ultimo film o serie in riproduzione", "Widget description corretta");
   assert.strictEqual(def.category, "extensions", "Widget category deve essere extensions");
   assert.strictEqual(def.defaultSpan, 2, "Widget defaultSpan deve essere 2");
   assert.strictEqual(typeof def.render, "function", "Widget def.render deve essere una funzione");
@@ -560,7 +564,7 @@ async function main() {
   await def.render(mockContainer, {
     gs: { api: async () => ({ items: [] }), esc: (s) => String(s || "") },
   });
-  assert(mockContainer.innerHTML.includes("Nessun video in corso di riproduzione"), "Render con libreria vuota mostra empty state");
+  assert(mockContainer.innerHTML.includes("Nessun video in corso"), "Render con libreria vuota mostra empty state");
 
   // 7. Test registerMediaWidget helper
   let registeredDef = null;

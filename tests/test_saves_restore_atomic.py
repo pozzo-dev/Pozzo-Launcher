@@ -62,7 +62,38 @@ def test_restore_ok_rolls_back_and_removes_extra():
         assert r["removed"] == 1 and r["written"] == 1, r
 
 
+def test_restore_non_toglie_i_file_che_non_sa_rimettere():
+    """I tipi eseguibili non si ripristinano mai: quindi non si cancellano nemmeno."""
+    with tempfile.TemporaryDirectory() as t:
+        cfg, sd, _ = setup(Path(t))
+        (sd / "plugin.js").write_bytes(b"mod")
+        out = SV.backup(cfg, KEY, "Game1", [sd], "manuale")
+        (sd / "slot1.sav").write_bytes(b"nuovo")
+        assert SV.diff(cfg, KEY, out.name)["extra"] == []
+        r = SV.restore(cfg, KEY, out.name)
+        assert (sd / "slot1.sav").read_bytes() == b"vecchio" and (sd / "plugin.js").read_bytes() == b"mod", r
+        assert r["removed"] == 0
+
+
+def test_la_rotazione_toglie_solo_le_copie_del_gioco():
+    """Due giochi con lo stesso nome (es. versioni regionali) condividono la cartella delle copie, non il limite."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        cfg = config.Config(cache=Path(t) / "cache", output=Path(t) / "out")
+        cfg.app["save_keep"] = 3
+        usa, eur = Path(t) / "usa", Path(t) / "eur"
+        usa.mkdir(), eur.mkdir()
+        (usa / "T.sav").write_text("usa")
+        SV._store(cfg, "nes/usa", "Tetris", {SV._mkey(usa / "T.sav"): (usa / "T.sav", None)}, "manuale", [], when=1_000_000)
+        for i in range(5):
+            (eur / "T.sav").write_text(f"eur{i}")
+            SV._store(cfg, "nes/eur", "Tetris", {SV._mkey(eur / "T.sav"): (eur / "T.sav", None)}, "manuale", [],
+                      when=2_000_000 + i * 60)
+        names = [k for b in SV._mapping(SV._game_dir(cfg, "nes/usa"))["backups"] for k in b["files"]]
+        assert sum("/usa/" in n for n in names) == 1 and sum("/eur/" in n for n in names) == 3, names
+
+
 if __name__ == "__main__":
+    test_restore_non_toglie_i_file_che_non_sa_rimettere()
     test_restore_corrupt_backup_leaves_disk_untouched()
     test_restore_ok_rolls_back_and_removes_extra()
     print("OK")

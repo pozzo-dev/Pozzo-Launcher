@@ -7,7 +7,6 @@ Configurazione nel profilo del gioco: auto["pad"] = {map: {da: a}, deadzone: 0-3
 
 from __future__ import annotations
 
-import atexit
 import json
 import logging
 import math
@@ -17,6 +16,8 @@ import sys
 import threading
 import time
 from pathlib import Path
+
+from .. import onexit
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ class HidHide:
 
     def hide(self, devices: list[str], app: str):
         """Registra l'app (Pozzo continua a leggere il pad), nasconde i dispositivi, attiva il cloak."""
-        atexit.register(self.restore)  # prima di toccare qualcosa: anche un'uscita brusca ripristina
+        onexit.register(self.restore)  # prima di toccare qualcosa: anche un'uscita brusca ripristina
         try:
             self.cloak_was = (self.run(["--cloak-state"]) or "").strip().lower() == "true"
             self.run(["--app-reg", app])

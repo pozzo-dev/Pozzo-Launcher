@@ -26,6 +26,10 @@ class FakeGS:
         self.settings = {}
         self.log = print
 
+    def t(self, key, **params):  # come PluginAPI.t, dal locales.json dell'estensione
+        from pozzo.app.extensions import ext_strings
+        return ext_strings(ROOT / "extensions" / "pulizia", "it").get(key, key).format(**params)
+
     def route(self, path, methods=("GET",)):
         def deco(fn):
             self.routes[path] = fn

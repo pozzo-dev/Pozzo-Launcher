@@ -203,7 +203,7 @@ The active collection and motion preferences are stored in `profiles/<id>.json` 
 The UI is handled in `pozzo/app/static/js/profiles-exp.js`: included in `index.html` after `motion-settings.js`; mounting targets `#experience-list` in `settings/aspetto.html`.
 
 ## Update Manifest Signing
-The release manifest (`PozzoLauncher-<version>-manifest.json`) can be signed with Ed25519; the signature is the `<manifest>.sig` asset (base64 over the exact file bytes). `pozzo/updates.py` verifies it against the `PUBKEY` constant before reading the manifest: if `PUBKEY` is empty, verification is skipped (logged as a warning); if set, a manifest without a valid signature is rejected and the update does not start (without falling back to the full package). The manifest and signature do not cover the `setup` installer or the `.deb` package, which remain protected by the asset's SHA-256 checksum.
+The release manifest (`PozzoLauncher-<version>-manifest.json`) can be signed with Ed25519; the signature is the `<manifest>.sig` asset (base64 over the exact file bytes). `pozzo/updates.py` verifies it against the `PUBKEY` constant before reading the manifest: if `PUBKEY` is empty, verification is skipped (logged as a warning); if set, a manifest without a valid signature is rejected and the update does not start (without falling back to the full package). The `setup` installer and the `.deb` package are listed in `PozzoLauncher-<version>-installers.json` (name, SHA-256, size), signed the same way: before running them the app checks the version and the SHA-256 against that list.
 
 One-time activation, in this order:
 
@@ -211,6 +211,6 @@ One-time activation, in this order:
 2. Store the PEM contents in the `MANIFEST_SIGNING_KEY` GitHub secret and in a secure backup.
 3. Only then paste the public key into `PUBKEY` (otherwise the first release ships unsigned and no client updates).
 
-The `sign-manifest` job in `release.yml` signs and uploads the `.sig`. With an empty `PUBKEY` it skips when the secret or manifest is missing; with `PUBKEY` set it **fails** in both cases. The job runs after publishing: if it fails, the release stays published without a `.sig` (clients with signing active will not update) and must be fixed by re-running the job, or by signing manually and uploading the `.sig` to the release.
+The `sign-manifest` job in `release.yml` signs and uploads the `.sig`. It signs the manifest and `installers.json`. With an empty `PUBKEY` it skips when the secret or either file is missing; with `PUBKEY` set it **fails** in both cases. The job runs after publishing: if it fails, the release stays published without a `.sig` (clients with signing active will not update) and must be fixed by re-running the job, or by signing manually and uploading the `.sig` to the release.
 
 Lost key: `PUBKEY` is a constant compiled into the client, so you need a new release with a new `PUBKEY` signed with the new key. Installs with the old `PUBKEY` will reject (`SignatureError`) manifests signed with the new key and must be updated by hand (reinstall). Manually: `python tools/sign_manifest.py sign manifest.json --key key.pem`. Tests: `tests/test_update_signature.py`.

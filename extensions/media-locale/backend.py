@@ -52,6 +52,16 @@ from pathlib import Path
 from fastapi import Body, HTTPException, Request
 from fastapi.responses import FileResponse
 
+_T = None  # gs.t dopo register(): testi nella lingua dell'interfaccia
+
+
+def tr(key: str, **p) -> str:
+    """Testo da locales.json; prima di register() (funzioni usate da sole, test) in italiano."""
+    if _T:
+        return _T(key, **p)
+    it = json.loads((Path(__file__).parent / "locales.json").read_text("utf-8")).get("it", {})
+    return it.get(key, key).format(**p)
+
 try:
     from .metadata import enrich_item
     from . import watchlist_import as wli
@@ -643,25 +653,25 @@ def _roots(conn) -> list[Path]:
 def _check_root(raw) -> Path:
     raw = str(raw or "").strip()
     if not raw or len(raw) > 1000:
-        raise HTTPException(400, "percorso mancante o troppo lungo")
+        raise HTTPException(400, tr("e.path"))
     p = Path(raw).expanduser()
     if not p.is_absolute():
-        raise HTTPException(400, "serve un percorso assoluto")
+        raise HTTPException(400, tr("e.abs"))
     try:
         p = p.resolve(strict=True)
     except OSError:
-        raise HTTPException(400, "la cartella non esiste")
+        raise HTTPException(400, tr("e.noDir"))
     if not p.is_dir():
-        raise HTTPException(400, "il percorso non è una cartella")
+        raise HTTPException(400, tr("e.notDir"))
     if p.parent == p:  # la radice di un disco: scansionarla intera bloccherebbe l'app per ore
-        raise HTTPException(400, "scegli una cartella, non la radice del disco")
+        raise HTTPException(400, tr("e.root"))
     return p
 
 
 def _row(conn, item_id: str):
     row = conn.execute("SELECT * FROM items WHERE id=?", (str(item_id or ""),)).fetchone()
     if row is None:
-        raise HTTPException(404, "contenuto non trovato")
+        raise HTTPException(404, tr("e.notFound"))
     return row
 
 
@@ -669,7 +679,7 @@ def _media_file(conn, item_id: str, column: str) -> Path:
     """Percorso di un file dell'item, solo se sta dentro una cartella scelta dall'utente."""
     p = Path(_row(conn, item_id)[column] or "")
     if not p.is_file() or not inside(p, _roots(conn)):
-        raise HTTPException(404, "file non disponibile")
+        raise HTTPException(404, tr("e.noFile"))
     return p
 
 
@@ -711,17 +721,20 @@ def open_external(path: Path) -> None:
 
 
 def register(gs):
+    global _T
+    _T = getattr(gs, "t", None)
+    wli._T = _T
     path = db_path(gs.cfg)
     connect(path, profile_id(None, gs.cfg)).close()
 
     def pid(request) -> str:
         return profile_id(request, gs.cfg)
 
-    gs.add_library_kind({"id": "film", "label": "Film", "icon": "🎬"})
-    gs.add_library_kind({"id": "serie", "label": "Serie", "icon": "📺"})
-    gs.add_library_kind({"id": "musica", "label": "Musica", "icon": "🎵"})
-    gs.add_player({"id": "integrato", "label": "Lettore integrato", "mode": "integrato"})
-    gs.add_player({"id": "esterno", "label": "Lettore esterno (mpv, VLC o sistema)", "mode": "esterno"})
+    gs.add_library_kind({"id": "film", "label": tr("cat.film"), "icon": "🎬"})
+    gs.add_library_kind({"id": "serie", "label": tr("kind.serie"), "icon": "📺"})
+    gs.add_library_kind({"id": "musica", "label": tr("cat.music"), "icon": "🎵"})
+    gs.add_player({"id": "integrato", "label": tr("player.builtin"), "mode": "integrato"})
+    gs.add_player({"id": "esterno", "label": tr("player.external"), "mode": "esterno"})
 
     def roots_payload() -> dict:
         conn = connect(path)
@@ -835,7 +848,7 @@ def register(gs):
         try:
             open_external(file)
         except OSError as e:
-            raise HTTPException(500, f"il lettore esterno non si è aperto: {e}")
+            raise HTTPException(500, tr("e.external", err=e))
         return {"ok": True}
 
     @gs.route("roots")
@@ -943,7 +956,7 @@ def register(gs):
         if not item_key and item_id:
             item_key = f"{source}:{item_id}"
         if not item_key:
-            raise HTTPException(400, "item_key o id mancante")
+            raise HTTPException(400, tr("e.noKey"))
 
         now = time.time()
         conn = connect(path)
@@ -1062,7 +1075,7 @@ def register(gs):
     def media_watchlist_bulk(body: dict | None = Body(None), request: Request = None):
         entries = (body or {}).get("entries") if isinstance(body, dict) else None
         if not isinstance(entries, list):
-            raise HTTPException(400, "entries mancante")
+            raise HTTPException(400, tr("e.noEntries"))
         conn = connect(path)
         try:
             return wli.bulk_save(conn, entries[: wli.MAX_ENTRIES], profile=pid(request))
@@ -1074,7 +1087,7 @@ def register(gs):
         data = body if isinstance(body, dict) else {}
         key = str(data.get("item_key") or data.get("id") or data.get("item_id") or "").strip()
         if not key:
-            raise HTTPException(400, "item_key o id mancante")
+            raise HTTPException(400, tr("e.noKey"))
         conn = connect(path)
         try:
             conn.execute("DELETE FROM watchlist WHERE profile = ? AND (item_key = ? OR item_id = ?)", (pid(request), key, key))

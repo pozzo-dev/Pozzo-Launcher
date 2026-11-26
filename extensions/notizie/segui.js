@@ -1,8 +1,6 @@
-// Seguiti: segui un gioco, badge di novità sulle tessere, sezione «Novità sul gioco» e vista «Seguiti».
+// Seguiti: segui un gioco, badge di novità sulle tessere, sezione «Novità sul gioco», vista «Seguiti» e scaffale in home.
 
 const API = "/plugin-api/notizie";
-const ETICHETTA = { patch: "Patch", dlc: "DLC" };
-const CHIP = "font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--accent);white-space:nowrap";
 
 // Solo link http/https: qualunque altro schema (javascript:, data:) viene scartato.
 export function safeHref(u) {
@@ -23,18 +21,15 @@ export function nonLettiPerGioco(games) {
   return m;
 }
 
-export default function (gs) {
+export default function (gs, ctx) {
+  const { t, lang } = ctx;
   let games = [];                       // ultima risposta di follows/news
   let unread = new Map();               // id -> non letti, per le tessere
   const followed = (id) => games.some((g) => String(g.id) === String(id));
-  const el = (tag, props = {}, ...kids) => {
+  const el = (tag, cls, ...kids) => {
     const n = document.createElement(tag);
-    for (const [k, v] of Object.entries(props)) {
-      if (k === "text") n.textContent = v;
-      else if (typeof v === "function") n.addEventListener(k.replace(/^on/, ""), v);
-      else n.setAttribute(k, v);
-    }
-    n.append(...kids.filter((k) => k != null).map((k) => (typeof k === "string" ? document.createTextNode(k) : k)));
+    if (cls) n.className = cls;
+    n.append(...kids.filter((k) => k != null));
     return n;
   };
   const fade = (node) => {
@@ -42,7 +37,7 @@ export default function (gs) {
       node.animate?.([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: "ease-out" });
     return node;
   };
-  const data = (s) => { const d = new Date(s); return isNaN(d) ? "" : d.toLocaleDateString("it", { day: "numeric", month: "short", year: "numeric" }); };
+  const data = (s) => { const d = new Date(s); return isNaN(d) ? "" : d.toLocaleDateString(lang, { day: "numeric", month: "short", year: "numeric" }); };
 
   // Ricarica i seguiti e aggiorna badge e voce della barra laterale (anche se la richiesta fallisce).
   // Ritorna i giochi, o null se la richiesta fallisce.
@@ -51,66 +46,78 @@ export default function (gs) {
     try { games = (await gs.api(`${API}/follows/news`)).games || []; } catch { ok = false; }
     unread = nonLettiPerGioco(games);
     const n = contaNonLetti(games);
-    gs.addSidebarItem({ id: "seguiti", label: "Seguiti" + (n ? ` · ${n}` : ""), icon: "🔔", view: "seguiti" });
+    gs.addSidebarItem({ id: "seguiti", label: t("follow.nav") + (n ? ` · ${n}` : ""), icon: "◉", view: "seguiti" });
     return ok ? games : null;
   }
 
   // Elenco di notizie: etichetta Patch/DLC, titolo con link esterno, data.
-  const lista = (items) => el("ul", { style: "list-style:none;padding:0;margin:4px 0" }, ...items.map((it) => {
+  const lista = (items) => el("ul", "nz-mini", ...items.map((it) => {
     const href = safeHref(it.link);
-    const titolo = href ? el("a", { href, target: "_blank", rel: "noopener noreferrer" }, it.title || "(senza titolo)") : it.title || "(senza titolo)";
-    return el("li", { style: "display:flex;gap:8px;align-items:baseline;padding:4px 0;flex-wrap:wrap" },
-      ETICHETTA[it.kind] ? el("span", { style: CHIP, text: ETICHETTA[it.kind] }) : null,
-      el("span", {}, titolo),
-      it.unread ? el("b", { style: "color:var(--accent)", text: "nuovo" }) : null,
-      el("span", { class: "muted small", text: data(it.published) }));
+    const titolo = href ? Object.assign(el("a", "", it.title || t("untitled")), { href, target: "_blank", rel: "noopener noreferrer" }) : it.title || t("untitled");
+    return el("li", "", ["patch", "dlc"].includes(it.kind) ? el("span", "chip nz-tag", t(`kind.${it.kind}`)) : null,
+      el("span", "", titolo), it.unread ? el("b", "nz-new", t("follow.new")) : null, el("span", "muted small", data(it.published)));
   }));
 
   async function toggle(g, on) {
     try {
-      // il dettaglio gioco non ha steam_appid: si ricava da key/pagina Steam (come fa recensioni), cosi' arrivano le news Steam
+      // il dettaglio gioco non ha steam_appid: si ricava da key/pagina Steam, cosi' arrivano le news Steam
       const appid = g.steam_appid || (/(?:steam:|steampowered\.com\/app\/)(\d+)/.exec(`${g.key || ""} ${g.page || ""}`) || [])[1];
       if (on) await gs.api(`${API}/follow`, { body: { id: g.id, title: g.title, steam_appid: appid } });
       else await gs.api(`${API}/unfollow`, { body: { id: g.id } });
     } catch (e) { return gs.toast(e.message, true); }
     await refresh();
-    gs.toast(on ? `Ora segui ${g.title}` : `Non segui più ${g.title}`);
+    gs.toast(t(on ? "follow.on" : "follow.off", { titolo: g.title }));
     if (String(gs.currentGame()?.id) === String(g.id)) gs.openGame(Number(g.id)); // ridisegna il dettaglio con il pulsante giusto
   }
 
   // Due voci con «when» complementari: il pulsante cambia in base allo stato già noto.
-  gs.addGameAction({ id: "segui", label: "Segui", icon: "🔔", when: (g) => !followed(g.id), run: (g) => toggle(g, true) });
-  gs.addGameAction({ id: "smetti-di-seguire", label: "Smetti di seguire", icon: "🔕", when: (g) => followed(g.id), run: (g) => toggle(g, false) });
+  gs.addGameAction({ id: "segui", label: t("follow.btn"), icon: "◉", when: (g) => !followed(g.id), run: (g) => toggle(g, true) });
+  gs.addGameAction({ id: "smetti-di-seguire", label: t("follow.stop"), icon: "○", when: (g) => followed(g.id), run: (g) => toggle(g, false) });
 
-  gs.addTileBadge({ id: "segui-novita", render: (g) => (unread.get(String(g.id)) ? `📰 ${unread.get(String(g.id))}` : null) });
+  gs.addTileBadge({ id: "segui-novita", render: (g) => (unread.get(String(g.id)) ? t("follow.badge", { n: unread.get(String(g.id)) }) : null) });
+
+  // scaffale in home: i giochi seguiti con novita' non lette
+  gs.addShelf({
+    id: "notizie-seguiti", title: t("follow.shelf"), why: t("follow.shelfWhy"),
+    async games(lib) {
+      await refresh();
+      const byId = new Map((lib?.games || []).map((g) => [String(g.id), g]));
+      return games.filter((g) => +g.unread > 0).map((g) => byId.get(String(g.id))).filter(Boolean);
+    },
+  });
 
   gs.addDetailSection({
     id: "novita-gioco",
-    title: "Novità sul gioco",
+    title: t("follow.section"),
     async render(g) {
       const all = await refresh();
-      if (all === null) return el("p", { class: "muted small", text: "Novità non disponibili al momento." });
+      if (all === null) return el("p", "muted small", t("follow.unavailable"));
       const f = all.find((x) => String(x.id) === String(g.id));
-      if (!f) return el("p", { class: "muted small", text: "Segui il gioco per ricevere patch e DLC." });
-      if (!f.items.length) return el("p", { class: "muted small", text: "Nessuna novità per ora." });
+      if (!f) return el("p", "muted small", t("follow.hint"));
+      if (!f.items.length) return el("p", "muted small", t("follow.none"));
       if (f.unread > 0) gs.api(`${API}/follows/seen`, { body: { id: g.id } }).then(refresh).catch(() => {}); // aperta = letta
       return fade(lista(f.items));
     },
   });
 
   gs.registerView("seguiti", {
-    title: "Seguiti",
+    title: t("follow.nav"),
     async render(root) {
-      root.replaceChildren(el("p", { class: "muted", text: "Carico…" }));
+      const body = gs.ui.page(root, { title: t("follow.nav"), subtitle: t("follow.subtitle") });
+      body.append(el("p", "muted", t("follow.loading")));
       const all = await refresh();
-      if (all === null) return root.replaceChildren(el("p", { class: "status-bad", text: "Impossibile caricare i giochi seguiti." }));
-      if (!all.length) return root.replaceChildren(el("p", { class: "muted", text: "Non segui ancora nessun gioco. Apri il dettaglio di un gioco e premi «Segui» per ricevere qui le sue patch e i suoi DLC." }));
-      root.replaceChildren(...all.map((g) => fade(el("section", { style: "margin-bottom:16px" },
-        el("div", { style: "display:flex;gap:10px;align-items:center" },
-          el("h3", { style: "margin:0", text: g.title }),
-          g.unread ? el("span", { class: "badge ext", text: `${g.unread} nuove` }) : null,
-          el("button", { class: "btn", type: "button", text: "Apri", onclick: () => gs.openGame(Number(g.id)) })),
-        g.items.length ? lista(g.items.slice(0, 5)) : el("p", { class: "muted small", text: "Nessuna novità per ora." })))));
+      if (all === null) return body.replaceChildren(gs.ui.empty({ icon: "◉", title: t("follow.unavailable") }));
+      if (!all.length) return body.replaceChildren(gs.ui.empty({ icon: "◉", title: t("follow.empty.t"), text: t("follow.empty.x") }));
+      const byId = new Map((gs.library()?.games || []).map((g) => [String(g.id), g]));
+      body.replaceChildren(...all.map((g) => {
+        const open = el("button", "btn", t("follow.open")); open.type = "button"; open.onclick = () => gs.openGame(Number(g.id));
+        const lib = byId.get(String(g.id));
+        const cover = lib ? Object.assign(el("img", "nz-cover"), { src: gs.ui.cover(lib.id, 160), alt: "", loading: "lazy" }) : null;
+        if (cover) cover.dataset.onerr = "remove";
+        return fade(el("section", "nz-follow", cover, el("div", "nz-follow-body",
+          el("div", "nz-follow-head", el("h3", "", g.title), g.unread ? el("span", "badge ext", t("follow.unread", { n: g.unread })) : null, open),
+          g.items.length ? lista(g.items.slice(0, 5)) : el("p", "muted small", t("follow.none")))));
+      }));
     },
   });
 

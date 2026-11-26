@@ -129,6 +129,19 @@ async function loadResume(pv) {
   else recent.querySelector("h2").textContent = "Giocati di recente";
 }
 
+/* scaffali delle estensioni (GS.addShelf): si riempiono quando arrivano, vuoti restano nascosti */
+function loadExtShelves(pv) {
+  for (const s of GS.ui.shelves) {
+    Promise.resolve().then(() => s.games(GS.library())).then((items) => {
+      const box = [...pv.querySelectorAll("[data-ext-shelf]")].find((x) => x.dataset.extShelf === s.id);
+      if (!box || S.view.type !== "home" || !Array.isArray(items) || !items.length) return;
+      box.innerHTML = `<h2>${esc(s.title)}${s.why ? `<small>${esc(s.why)}</small>` : ""}</h2>`
+        + `<div class="shelf-lane">${items.slice(0, 16).map(shelfGame).join("")}</div>`;
+      box.hidden = false;
+    }).catch((e) => console.warn(`Scaffale ${s.id}:`, e));
+  }
+}
+
 function renderShelvesHome(pv) {
   if (!pv || S.view.type !== "home") return;
   const games = S.games.filter((g) => g.id === g.grp.primary && !g.grp.hidden);
@@ -165,6 +178,7 @@ function renderShelvesHome(pv) {
       <button class="btn" type="button" data-home-view="all">${t("h.home.openLib")}</button></section>` : ""}
     ${sections.map((r) => `<section class="shelf-section"${r.recent ? " data-recent-shelf" : ""}><h2>${esc(r.title)}${r.why ? `<small>${esc(r.why)}</small>` : ""}</h2>
       <div class="shelf-lane">${r.items.map(shelfGame).join("")}</div></section>`).join("")}
+    ${GS.ui.shelves.map((s) => `<section class="shelf-section" data-ext-shelf="${esc(s.id)}" hidden></section>`).join("")}
     ${collectionRows.length ? `<section class="shelf-section"><h2>${t("h.app.navCollections")}</h2><div class="shelf-lane">
       ${collectionRows.flatMap((r) => r.items).slice(0, 12).map((x) => `<button class="shelf-collection" type="button" data-shelf-collection="${esc(x.coll.slug)}">
         <b>${esc(x.coll.name)}</b><span>${esc(x.why || t("h.srf.games", {n: x.games.length}))}</span></button>`).join("")}
@@ -180,6 +194,7 @@ function renderShelvesHome(pv) {
     if (e.target.closest("[data-home-scan]")) $("#scan-btn").click();
   };
   loadResume(pv);
+  loadExtShelves(pv);
   if (hero) {
     const id = hero.id, target = pv.querySelector(".shelves-hero");
     api(`/api/game/${id}`).then((d) => {

@@ -16,7 +16,7 @@ function setup({ api = true, motion = "normal", throwing = false } = {}) {
     ...(api ? { startViewTransition(cb) {
       if (throwing) throw new Error("x");
       const done = Promise.resolve().then(cb);
-      return { updateCallbackDone: done, finished: done.then(() => finished) };
+      return { ready: done, updateCallbackDone: done, finished: done.then(() => finished) };
     } } : {}),
   };
   const names = () => [a, b].filter((e) => e.style.viewTransitionName === "cover").length;
@@ -46,5 +46,19 @@ function setup({ api = true, motion = "normal", throwing = false } = {}) {
   t = setup();
   await coverTransition(null, () => t.log.push("upd"), () => t.b);
   assert.deepStrictEqual(t.log, ["upd"], "tessera assente: nessuna transizione");
+  // transizione saltata dal browser (un'altra parte, finestra nascosta): tr.ready si rifiuta, ma non e' un errore da mostrare
+  t = setup();
+  const start = document.startViewTransition;
+  let skip;
+  document.startViewTransition = (cb) => ({ ...start(cb), ready: new Promise((_, no) => { skip = no; }) });
+  const unhandled = [];
+  const seen = (e) => unhandled.push(e.message);
+  process.on("unhandledRejection", seen);
+  await coverTransition(t.a, () => t.log.push("upd"), () => t.b);
+  skip(new Error("Transition was skipped"));
+  t.fin(); await new Promise((r) => setTimeout(r, 5));
+  assert.deepStrictEqual(t.log, ["upd"]);
+  process.off("unhandledRejection", seen); // altrimenti nasconde un assert fallito
+  assert.deepStrictEqual(unhandled, [], "transizione saltata: nessun errore non gestito");
   console.log("ok");
 })();

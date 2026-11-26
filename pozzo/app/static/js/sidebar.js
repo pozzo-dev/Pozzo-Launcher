@@ -69,14 +69,18 @@ function openPlatCtx(e, id) {
   const m = document.createElement("div");
   m.id = "ctxmenu";
   m.innerHTML = `<div class="ci">${favPlat(id) ? "★ " + t("h.fav.removePlat") : "☆ " + t("h.fav.addPlat")}</div>`
-    + `<div class="ci" data-scan>⟳ ${t("h.scan.newGames")}</div>`;
+    + `<div class="ci" data-scan>⟳ ${t("h.scan.newGames")}</div>`
+    + (/Win/.test(navigator.platform) && S.games.some((g) => g.platform === id && !g.store) ? `<div class="ci" data-wof>🗜 ${t("w.wof.title")}</div>` : "");
   document.body.appendChild(m);
   m.style.left = Math.max(6, Math.min(e.clientX, innerWidth - m.offsetWidth - 8)) + "px";
   m.style.top = Math.max(6, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + "px";
+  const wofRow = m.querySelector("[data-wof]");
+  if (wofRow) wofGate(wofRow, "platform", id);
   m.onclick = async (ev) => {
     const it = ev.target.closest(".ci");
-    if (!it) return;
+    if (!it || it.ariaDisabled === "true") return;
     closeCtx();
+    if ("wof" in it.dataset) return openWof("platform", id);
     if (!("scan" in it.dataset)) return toggleFavPlat(id);
     try { await api("/api/scan", { body: { platforms: [id], mode: "new" } }); } catch (err) { return toast(err.message, true); }
     toast(t("h.scan.started"));
@@ -479,6 +483,7 @@ function setView(v) {
     markActive();
     updateHeader();
     Promise.resolve(view ? view.render(pv, GS) : (pv.textContent = t("h.view.unavailable")))
+      .then(() => { if (view) requestAnimationFrame(() => GS.tutorials?.auto(v.id)); })  // tutorial dell'estensione, la prima volta
       .catch((e) => { pv.textContent = t("h.view.error", {msg: e.message}); });
     return;
   }

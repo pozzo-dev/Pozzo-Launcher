@@ -76,6 +76,22 @@ def test_secrets_included_and_rotation_and_auto():
         assert len(names) == 2 and p.name in names, names  # rotazione: ultime N
 
 
+def test_ripristino_non_cancella_la_copia_scelta():
+    """La copia di sicurezza fatta prima del ripristino non deve far ruotare via proprio quella da ripristinare."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        cfg = make(t)
+        user = UserData(Path(cfg.cache) / "userdata.db")
+        user.set_flag("gba/AAA", "favorite", 1)
+        config.save_settings(cfg, app={"backup_keep": 1})
+        old = backup.create(cfg, "vecchia")
+        user.set_flag("gba/AAA", "favorite", 0)
+        r = backup.restore(cfg, old.name, user=user)
+        assert user.games()["gba/AAA"]["favorite"] == 1
+        names = {b["name"] for b in backup.list_backups(cfg)}
+        assert names == {old.name, r["safety_copy"]}, names
+        user.close()
+
+
 def _copia_con_settings(cfg, raw_settings):
     # copia normale, poi si sostituisce solo settings.json
     out = backup.create(cfg, secrets=False)
@@ -86,6 +102,28 @@ def _copia_con_settings(cfg, raw_settings):
         for n, b in entries.items():
             z.writestr(n, b)
     return out
+
+
+def test_senza_credenziali_restano_anche_negli_elenchi():
+    """Telefoni, PC sincronizzati e webhook stanno in elenchi: ripristinando tengono il token attuale."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        cfg = make(t)
+        UserData(Path(cfg.cache) / "userdata.db").close()
+        app = {"phone": {"devices": [{"id": "a", "name": "Tel", "token": "T1"}, {"id": "b", "name": "Vecchio", "token": "T2"}]},
+               "sync": {"peers": [{"id": "pc", "url": "https://x", "token": "T3"}]},
+               "webhooks": [{"url": "https://h/1", "secret": "S1"}, {"url": "https://h/2", "secret": "S2"}]}
+        config.save_settings(cfg, app=app)
+        out = backup.create(cfg, secrets=False)
+        with zipfile.ZipFile(out) as z:
+            assert not any(x in z.read("settings.json") for x in (b"T1", b"T3", b"S1"))
+        now = {"phone": {"devices": [{"id": "c", "name": "Nuovo", "token": "T9"}, {"id": "a", "name": "Tel", "token": "T1b"}]},
+               "webhooks": [app["webhooks"][1], app["webhooks"][0]]}  # nel frattempo: altro ordine, «b» revocato
+        config.save_settings(cfg, app=now)
+        backup.restore(cfg, out.name)
+        s = json.loads(config.settings_path(cfg).read_text(encoding="utf-8"))["app"]
+        assert s["phone"]["devices"] == [{"id": "a", "name": "Tel", "token": "T1b"}, {"id": "b", "name": "Vecchio"}], s["phone"]
+        assert s["sync"]["peers"][0]["token"] == "T3"
+        assert [w["secret"] for w in s["webhooks"]] == ["S1", "S2"], s["webhooks"]
 
 
 def test_settings_non_valido_non_tocca_il_file():
@@ -122,6 +160,7 @@ def test_api_preview_and_confirm():
 
 
 if __name__ == "__main__":
+    test_ripristino_non_cancella_la_copia_scelta()
     test_round_trip_preview_and_secrets()
     test_secrets_included_and_rotation_and_auto()
     test_settings_non_valido_non_tocca_il_file()

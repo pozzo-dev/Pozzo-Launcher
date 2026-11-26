@@ -9,7 +9,12 @@ const playerSrc = fs.readFileSync(path.join(__dirname, "../extensions/media-loca
 const tmpPlayer = path.join(tmpDir, "player.mjs");
 fs.writeFileSync(tmpPlayer, playerSrc);
 
+// testi in italiano da locales.json, come li passa l'app con ctx.t
+const IT = JSON.parse(fs.readFileSync(path.join(__dirname, "../extensions/media-locale/locales.json"), "utf8")).it;
+const itT = (k, p) => String(IT[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p && n in p ? p[n] : m));
+
 Promise.all([import(pathToFileURL(tmp).href), import(pathToFileURL(tmpPlayer).href)]).then(async ([L, P]) => {
+  P.setPlayerT(itT, "it");
   // 1. formatDuration(sec)
   assert.strictEqual(L.formatDuration(0), "0:00");
   assert.strictEqual(L.formatDuration(5), "0:05");

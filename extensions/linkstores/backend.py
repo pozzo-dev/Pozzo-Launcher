@@ -42,23 +42,25 @@ def register(gs):
     async def scan(body: dict = Body(...)):
         url = str(body.get("url") or "").strip()
         if not url.startswith(("http://", "https://")):
-            raise HTTPException(400, "Indirizzo non valido (serve http:// o https://)")
+            raise HTTPException(400, gs.t("err.url"))
         cache = Cache(gs.cfg.cache)
         try:
             async with make_client() as client:
                 page = await catalog._get_page(gs.cfg, cache, client, "windows", url, log=lambda m: None)
         except Exception as e:
-            raise HTTPException(502, f"Pagina non raggiungibile: {type(e).__name__}: {e}")
+            raise HTTPException(502, gs.t("err.page", errore=f"{type(e).__name__}: {e}"))
         finally:
             cache.close()
         return scan_page(page, url, external_only=bool(body.get("external_only", True)))
 
     @gs.route("add", methods=["POST"])
     def add(body: dict = Body(...)):
+        url, platform = str(body.get("url") or "").strip(), str(body.get("platform") or "windows")
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(400, gs.t("err.url"))
         try:
-            result = add_store(gs.cfg, str(body.get("url") or ""), str(body.get("platform") or "windows"),
-                               str(body.get("kind") or "direct"))
-        except ValueError as e:
-            raise HTTPException(400, str(e))
+            result = add_store(gs.cfg, url, platform, str(body.get("kind") or "direct"))
+        except ValueError:  # l'indirizzo e' gia' controllato: resta la console sconosciuta
+            raise HTTPException(400, gs.t("err.console", console=platform))
         result["state"] = state()
         return result

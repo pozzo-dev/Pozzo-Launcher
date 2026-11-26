@@ -21,6 +21,9 @@ class FakeGS:
         self.routes = {}
         self.log = lambda m: None
 
+    def t(self, key, **params):  # come PluginAPI.t
+        return extensions.ext_strings(SRC, "it").get(key, key).format(**params)
+
     def route(self, path, methods=("GET",)):
         def deco(fn):
             self.routes[path.lstrip("/")] = fn

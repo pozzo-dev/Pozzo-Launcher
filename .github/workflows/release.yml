@@ -449,12 +449,15 @@ jobs:
             echo "::notice::MANIFEST_SIGNING_KEY assente: manifest non firmato"; exit 0
           fi
           mkdir sign && cd sign
-          gh release download "$TAG" --repo "${{ github.repository }}" --pattern '*-manifest.json' || true
-          M=$(compgen -G "*-manifest.json" | head -n 1)
-          if [ -z "$M" ]; then
-            if [ "$ACTIVE" = 1 ]; then echo "::error::PUBKEY impostata ma nessun manifest nella release: niente da firmare"; exit 1; fi
-            echo "::notice::nessun manifest nella release: niente da firmare"; exit 0
-          fi
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern '*-manifest.json' --pattern '*-installers.json' || true
           pip install cryptography
-          python ../tools/sign_manifest.py sign "$M"
-          gh release upload "$TAG" "$M.sig" --repo "${{ github.repository }}" --clobber
+          # il manifest vale per i pacchetti portatili, installers.json per setup e .deb: servono tutti e due
+          for P in manifest installers; do
+            M=$(compgen -G "*-$P.json" | head -n 1)
+            if [ -z "$M" ]; then
+              if [ "$ACTIVE" = 1 ]; then echo "::error::PUBKEY impostata ma nessun *-$P.json nella release: niente da firmare"; exit 1; fi
+              echo "::notice::nessun *-$P.json nella release: niente da firmare"; continue
+            fi
+            python ../tools/sign_manifest.py sign "$M"
+            gh release upload "$TAG" "$M.sig" --repo "${{ github.repository }}" --clobber
+          done

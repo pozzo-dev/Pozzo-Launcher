@@ -1,18 +1,12 @@
 [plugin]
 name = "Twitch e YouTube"
-version = "1.0.0"
+version = "2.0.0"
 author = "Pozzo Launcher"
-icon = "📺"
-description = "Dirette Twitch in corso e video YouTube (trailer e guide) nel dettaglio di ogni gioco."
-long_description = "Nella scheda di ogni gioco trovi la sezione «Dirette e video»: le dirette Twitch in corso per quel titolo e i video YouTube più utili, cioè trailer e guide. Le dirette si aprono nel browser; i video si guardano direttamente nella scheda oppure nel browser. Usa le tue chiavi gratuite: un'app Twitch per le dirette e, se vuoi i video, una chiave YouTube Data API. Senza chiavi resta comunque un collegamento diretto alla ricerca su Twitch e YouTube."
-how_it_works = "1. Installa l'estensione e riavvia Pozzo Launcher.\n2. Crea un'app gratuita su dev.twitch.tv e copia Client ID e Client Secret in Impostazioni › Streaming (facoltativo: anche una chiave «YouTube Data API v3» da Google Cloud).\n3. Apri la scheda di un gioco: la sezione «📺 Dirette e video» mostra le dirette in corso e i video.\n4. Clicca su una diretta per aprirla nel browser; clicca ▶ su un video per guardarlo nella scheda."
-features = [
-  "Dirette Twitch in corso per il gioco, con spettatori e anteprima",
-  "Video YouTube: trailer e guide, guardabili nella scheda del gioco",
-  "Collegamenti alla ricerca su Twitch e YouTube sempre disponibili",
-  "Chiavi personali, salvate solo sul tuo PC",
-  "Risultati in cache per 10 minuti"
-]
+icon = "▶"
+description = "Nella scheda di ogni gioco i video YouTube (trailer e guide, da guardare lì) e chi lo sta trasmettendo in diretta su Twitch. Con le tue chiavi gratuite."
+long_description = "Aggiunge alla scheda del gioco i video di YouTube (trailer e guide) da guardare senza uscire dall'app e le dirette Twitch in corso, con il numero di spettatori. Servono le tue chiavi gratuite, che si inseriscono in Impostazioni › Streaming › Dirette e video; finché non ci sono, la sezione spiega come ottenerle e offre comunque la ricerca su YouTube e Twitch."
+how_it_works = "1. Installa l'estensione e apri la scheda di un gioco.\n2. Nella sezione «Dirette e video» premi «Attiva» e inserisci la chiave YouTube (e, se vuoi, quelle di Twitch).\n3. Riapri la scheda: trovi le anteprime dei video e delle dirette.\n4. Premi ▶ per guardare un video lì."
+features = ["Trailer e guide YouTube da guardare nella scheda del gioco", "Dirette Twitch in corso con gli spettatori", "Senza chiavi: spiegazione e ricerca nel browser", "Chiavi tue e gratuite, nessun account nell'app"]
 api = 2
-min_app = "0.15.0"
+min_app = "0.20.2"
 permissions = ["rete:api.twitch.tv", "rete:id.twitch.tv", "rete:www.googleapis.com", "impostazioni"]

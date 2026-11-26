@@ -1,4 +1,4 @@
-"""Estensioni di extensions/: stasera, anniversari, pulizia, diario, limite-tempo, obiettivi, riepilogo-annuale,
+"""Estensioni di extensions/: anniversari, pulizia, diario, limite-tempo, obiettivi, riepilogo-annuale,
 steamgriddb, calendario-uscite. Database temporanei veri (libreria e profilo utente), il backend richiamato come fa
 l'app, la logica JavaScript provata con node (se c'e').
 
@@ -58,6 +58,11 @@ class FakeGS:
     def add_source(self, cls):
         self.sources.append(cls)
 
+    def t(self, key, lang=None, **params):  # come PluginAPI.t, dal locales.json dell'estensione
+        from pozzo.app.extensions import ext_strings
+        text = ext_strings(EXT / self.id, lang or "it").get(key, key)
+        return text.format(**params) if params else text
+
     def save_settings(self, values):  # come PluginAPI: in memoria e su settings.json
         self.settings.update(values)
         C.save_settings(self.cfg, plugins={self.id: dict(self.settings)})
@@ -104,47 +109,6 @@ def js(path: str, code: str) -> str | None:
 
 # ---------------------------------------------------------------------------------------------------- JavaScript
 
-def test_stasera_logica():
-    out = js("extensions/stasera/logica.js", """
-const g = (id, o = {}) => ({ id, title: "G" + id, genres: "Azione, RPG", platform: "n64", store: null, installed: 1, hltb: 5, ...o,
-  grp: { primary: id, hidden: 0, status: "", last: 0, ...(o.grp || {}) } });
-const L = [g(1), g(2, { hltb: 20 }), g(3, { hltb: null }), g(4, { grp: { status: "done" } }), g(5, { grp: { status: "backlog" }, platform: "snes" }),
-  g(6, { store: "online" }), g(7, { store: "steam", installed: 0 }), g(8, { grp: { hidden: 1 } }), g(9, { genres: "Puzzle" })];
-const ids = (l) => l.map((x) => x.id).sort().join(",");
-const r = {};
-r.base = ids(m.candidates(L));                                   // niente finiti, online, non installati, nascosti
-r.ore = ids(m.candidates(L, { hours: 6 }));                      // hltb <= 6, senza durata nota esclusi
-r.ignote = ids(m.candidates(L, { hours: 6, unknown: true }));
-r.genere = ids(m.candidates(L, { genre: "Puzzle" }));
-r.console = ids(m.candidates(L, { platform: "snes" }));
-r.generi = m.genresOf(L).join("|");
-// pesi: un gioco mai avviato pesa piu' di uno giocato oggi
-const now = 1e9;
-r.pesi = [m.weight({ grp: { last: now } }, now), m.weight({ grp: { last: 0 } }, now)].map((x) => Math.round(x * 10) / 10).join(",");
-// pick: deterministico con rnd; salta gli id gia' visti; null se non resta niente
-const pool = [g(1), g(2)];
-r.p0 = m.pick(pool, new Set(), () => 0).id;
-r.p1 = m.pick(pool, new Set([1]), () => 0.5).id;
-r.pn = String(m.pick(pool, new Set([1, 2])));
-// distribuzione: con gli stessi pesi il mai giocato esce di piu'
-const a = g(1, { grp: { last: now } }), b = g(2);
-let nb = 0; for (let i = 0; i < 2000; i++) if (m.pick([a, b], new Set(), Math.random, now).id === 2) nb++;
-r.biased = nb > 1500;
-console.log(JSON.stringify(r));
-""")
-    if out is None:
-        return print("--  stasera: node non trovato, logica JavaScript non provata")
-    r = json.loads(out)
-    assert r["base"] == "1,2,3,5,9", r["base"]
-    assert r["ore"] == "1,5,9", r["ore"]
-    assert r["ignote"] == "1,3,5,9", r["ignote"]
-    assert r["genere"] == "9" and r["console"] == "5", r
-    assert r["generi"].split("|")[:2] == ["Azione", "RPG"], r["generi"]
-    assert r["pesi"] == "1,25.3", r["pesi"]
-    assert (r["p0"], r["p1"], r["pn"], r["biased"]) == (1, 2, "null", True), r
-    print("ok  stasera: filtri (tempo, genere, console, stato), pesi, estrazione")
-
-
 def test_pulizia_logica():
     out = js("extensions/pulizia/logica.js", """
 const g = (id, o = {}) => ({ id, title: "G" + id, platform: "n64", store: null, found: 1, cover: 1, year: 1998, genres: "x", splay: 0, ...o,
@@ -167,8 +131,28 @@ console.log(JSON.stringify({
     assert r["dup"] == ["1,2"], r["dup"]                   # stessa console, titolo uguale a meno di maiuscole e segni; non quello su snes
     assert r["mai"] == "1,2,3,6", r["mai"]                  # niente online, nascosti, giocati, finiti
     assert r["fermi"] == "4", r["fermi"]                    # giocato da 3 anni; 5 da pochi mesi; 9 e' finito
-    assert r["inc"] == ["6:non trovato+copertina"], r["inc"]
+    assert r["inc"] == ["6:found+cover"], r["inc"]
     print("ok  pulizia: duplicati, mai avviati, fermi da anni, dati incompleti")
+
+
+def test_calendario_logica():
+    out = js("extensions/calendario-uscite/logica.js", """
+const u = [{ data: "2026-12-03", titolo: "B" }, { data: "2026-12-01", titolo: "A" }, { data: "2027-02-28", titolo: "C" },
+  { data: "2026", titolo: "rotto" }, { data: "2026-12-01", titolo: "A2" }];
+const mm = m.perMese(u, new Date(2026, 11, 3));
+console.log(JSON.stringify({ mesi: mm.map((x) => x.chiave), vuote: mm.map((x) => x.celle.filter((c) => !c).length),
+  giorni: mm.map((x) => x.celle.filter(Boolean).length), primo: mm[0].celle.find((c) => c && c.giorno === 1).uscite.map((v) => v.titolo),
+  oggi: mm[0].celle.filter((c) => c && c.oggi).map((c) => c.data), ordine: mm[0].uscite.map((v) => v.titolo),
+  sett: m.settimane("en") }));
+""")
+    if out is None:
+        return print("--  calendario: node non trovato, logica JavaScript non provata")
+    r = json.loads(out)
+    assert r["mesi"] == ["2026-12", "2027-02"], r                 # data rotta scartata, mesi in ordine
+    assert r["vuote"] == [1, 0] and r["giorni"] == [31, 28], r    # 1/12/2026 e' martedi', 1/2/2027 lunedi' (lunedi' = colonna 0)
+    assert r["primo"] == ["A", "A2"] and r["oggi"] == ["2026-12-03"] and r["ordine"] == ["A", "A2", "B"], r
+    assert r["sett"][0] == "Mon" and r["sett"][6] == "Sun", r["sett"]
+    print("ok  calendario: mesi, celle del calendario (lunedi' per primo), oggi")
 
 
 # ---------------------------------------------------------------------------------------------------- Python
@@ -188,11 +172,26 @@ def test_anniversari(t):
         assert e.status_code == 400
     else:
         raise AssertionError("giorno non valido accettato")
+    # prossimi giorni: raggruppati per data, anche a cavallo d'anno
+    p = gs.routes["prossimi"](giorni=10, da="2026-06-20")
+    assert [(d["data"], d["tra"], [g["titolo"] for g in d["giochi"]]) for d in p["giorni"]] == [
+        ("2026-06-23", 3, ["Super Mario 64"])], p
+    assert p["giorni"][0]["giochi"][0] == {"id": 2, "titolo": "Super Mario 64", "piattaforma": "n64", "anni": 30, "tondo": True}
+    p = gs.routes["prossimi"](giorni=90, da="2026-12-01")  # Hollow Knight il 24/02/2027: 10 anni
+    assert [(d["data"], d["giochi"][0]["anni"]) for d in p["giorni"]] == [("2027-02-24", 10)], p
+    assert gs.routes["prossimi"](giorni=0, da="2026-11-21")["giorni"][0]["giochi"][0]["titolo"] == "Zelda Ocarina of Time"
+    try:
+        gs.routes["prossimi"](da="ieri")
+    except HTTPException as e:
+        assert e.status_code == 400 and e.detail == "Data non valida (AAAA-MM-GG)", e.detail
+    else:
+        raise AssertionError("data non valida accettata")
     # senza libreria costruita non esplode
     shutil.rmtree(cfg.cache / "library.db", ignore_errors=True) if (cfg.cache / "library.db").is_dir() else (cfg.cache / "library.db").unlink()
     assert gs.routes["oggi"](giorno="06-23")["giochi"] == []
+    assert gs.routes["prossimi"]()["giorni"] == []
     u.close()
-    print("ok  anniversari: giochi usciti oggi, giorno non valido, libreria assente")
+    print("ok  anniversari: oggi, prossimi giorni, date non valide, libreria assente")
 
 
 def test_diario(t):
@@ -250,7 +249,11 @@ def test_limite_tempo(t):
     # una partita iniziata ieri alle 23 e ancora in corso conta per oggi solo da mezzanotte: 12 h, oltre alle 2 h gia' registrate
     oggi, _ = mod.usato(db, now, datetime(2026, 3, 10, 23, 0).timestamp())
     assert oggi == 14 * 3600, oggi
+    # ore per giorno della settimana (lunedi' = 0): martedi' 2 h + 1 h prima di mezzanotte, mercoledi' 1 h + 1 h, il resto 0
+    assert mod.per_giorno(db, now) == [0, 3 * 3600, 2 * 3600, 0, 0, 0, 0]
     db.close()
+    assert mod.rimasto({"giorno_ore": 3, "settimana_ore": 4}, 2 * 3600, 5 * 3600) == -3600   # il primo limite che scatta
+    assert mod.rimasto({"giorno_ore": 3}, 2 * 3600, 0) == 3600 and mod.rimasto({}, 1, 1) is None
     assert mod.superati({"giorno_ore": 2, "settimana_ore": 0}, 7200, 0) != []
     assert mod.superati({"giorno_ore": 2}, 7199, 0) == [] and mod.superati({}, 1e9, 1e9) == []
     assert len(mod.superati({"giorno_ore": 1, "settimana_ore": 5}, 3600, 6 * 3600)) == 2
@@ -267,7 +270,7 @@ def test_limite_tempo(t):
             assert e.status_code == 400
         else:
             raise AssertionError(f"accettato: {bad}")
-    s = gs.routes["salva"]({"giorno_ore": 0.0001, "settimana_ore": 0, "attivo": True})   # limite di ~0,4 s: subito superato
+    s = gs.routes["salva"]({"giorno_ore": 0.0001, "settimana_ore": 0, "attivo": True, "preavviso": False})  # ~0,4 s: subito superato
     assert s["attivo"] and s["giorno_ore"] == 0.0001
     sent = []
     import pozzo.notify as N
@@ -286,6 +289,28 @@ def test_limite_tempo(t):
     gs.events["game_started"][0]({"title": "Zelda"})
     time.sleep(0.3)
     assert not sent and gs.routes["stato"]()["in_corso"] is False
+    # preavviso: a meno di PREAVVISO secondi dal limite, una volta sola
+    mod.PREAVVISO = 10 ** 9
+    gs.routes["salva"]({"giorno_ore": 24, "attivo": True})
+    sent.clear()
+    gs.events["game_started"][0]({"title": "Zelda"})
+    time.sleep(0.3)
+    gs.events["game_stopped"][0]({})
+    assert len(sent) == 1 and "Zelda" in sent[0][1] and "minut" in sent[0][1], sent
+    # chiudi: avviso, poi il gioco si chiude dopo GRAZIA secondi (con il launcher dell'app)
+    chiusi = []
+    gs.app = type("App", (), {"state": type("St", (), {"launcher": type("L", (), {"stop": lambda self: chiusi.append(1)})()})()})()
+    mod.GRAZIA = 0.1
+    s = gs.routes["salva"]({"giorno_ore": 0.0001, "attivo": True, "chiudi": True, "preavviso": False})
+    assert s["chiudi"] and not s["preavviso"] and len(s["giorni"]) == 7 and round(s["rimasto"], 2) == 0.36, s
+    sent.clear()
+    gs.events["game_started"][0]({"title": "Zelda"})
+    for _ in range(40):  # limite ~0,4 s + GRAZIA 0,1 s, con margine per macchine lente
+        if chiusi:
+            break
+        time.sleep(0.05)
+    assert chiusi == [1] and len(sent) == 1 and "chiude" in sent[0][1], (chiusi, sent)
+    gs.events["game_stopped"][0]({})
     N.send = real_send  # non lasciare il finto invio agli altri test
     u.close()
     print("ok  limite-tempo: periodi, mezzanotte, partita in corso, avvisi, validazione")
@@ -335,20 +360,43 @@ def test_obiettivi(t):
             raise AssertionError(f"accettato: {bad[:1]}")
     assert len(gs.routes["stato"]()["obiettivi"]) == 3          # i rifiuti non hanno toccato quelli salvati
     assert gs.routes["salva"]({"obiettivi": []})["obiettivi"] == []
+    # sfide proposte dalla libreria: contano da quando le accetti
+    u.set_flag("hk", "status", "playing")
+    pr = gs.routes["stato"]()["proposte"]
+    assert pr[0] == {"tipo": "finisci", "gioco": "hk", "titolo": "Hollow Knight", "id_gioco": 3}, pr
+    assert {"tipo": "giorni", "n": 5, "periodo": "settimana"} in pr and not any(p["tipo"] == "prova" for p in pr)  # n64 gia' giocata
+    r = gs.routes["salva"]({"obiettivi": [pr[0], {"tipo": "prova", "console": "n64"}]})
+    by = {o["tipo"]: o for o in r["obiettivi"]}
+    assert not by["finisci"]["fatto"] and by["finisci"]["titolo"] == "Hollow Knight" and by["finisci"]["id_gioco"] == 3
+    assert not by["prova"]["fatto"], by                         # le partite di prima non valgono
+    assert all(p.get("gioco") != "hk" for p in r["proposte"])   # gia' accettata: non si ripropone
+    creato = by["prova"]["creato"]
+    u.record_play("zelda", 60)
+    u.set_flag("hk", "status", "done")
+    r = gs.routes["salva"]({"obiettivi": r["obiettivi"]})       # risalvare non sposta l'inizio della sfida
+    by = {o["tipo"]: o for o in r["obiettivi"]}
+    assert by["finisci"]["fatto"] and by["prova"]["fatto"] and by["prova"]["creato"] == creato, by
+    for bad in ([{"tipo": "finisci"}], [{"tipo": "prova", "console": ""}]):
+        try:
+            gs.routes["salva"]({"obiettivi": bad})
+        except HTTPException as e:
+            assert e.status_code == 400
+        else:
+            raise AssertionError(f"accettato: {bad}")
     u.close()
-    print("ok  obiettivi: serie, mezzanotte, avanzamento (finiti/ore/giorni), distintivi, validazione")
+    print("ok  obiettivi: serie, mezzanotte, avanzamento, sfide proposte, distintivi, validazione")
 
 
 def test_riepilogo(t):
     mod = load("riepilogo-annuale")
     ts = lambda m, dd, h: datetime(2025, m, dd, h).timestamp()  # noqa: E731
     sess = [("a", ts(3, 3, 10), 3600), ("a2", ts(3, 4, 10), 7200), ("b", ts(7, 5, 21), 1800)]
-    info = {"a": ("ga", "Gioco A", "N64"), "a2": ("ga", "Gioco A", "PC"), "b": ("gb", "Gioco B", "PC")}
+    info = {"a": ("ga", "Gioco A", "N64", 1), "a2": ("ga", "Gioco A", "PC", 2), "b": ("gb", "Gioco B", "PC", 3)}
     r = mod.riepilogo(sess, info, 2, 2025)
     assert r["ore"] == 3.5 and r["partite"] == 3 and r["giorni"] == 3 and r["giochi"] == 2 and r["finiti"] == 2
     assert r["top"][0]["titolo"] == "Gioco A" and r["top"][0]["ore"] == 3.0 and r["top"][0]["partite"] == 2   # due versioni = un gioco
-    assert r["console"] == "PC" and r["mese"] == "marzo" and r["sessione_piu_lunga"] == {"ore": 2.0, "titolo": "Gioco A"}
-    assert r["giorno_settimana"] in ("lunedì", "martedì") and sum(r["per_mese"]) == 3.5
+    assert r["console"] == "PC" and r["mese"] == 2 and r["sessione_piu_lunga"] == {"ore": 2.0, "titolo": "Gioco A", "id": 2}
+    assert r["top"][0]["id"] == 1 and r["giorno_settimana"] in (0, 1) and sum(r["per_mese"]) == 3.5  # 3/3/2025 lunedi', 4/3 martedi'
     vuoto = mod.riepilogo([], {}, 0, 2025)
     assert vuoto["ore"] == 0 and vuoto["top"] == [] and vuoto["mese"] is None and vuoto["console"] is None
 
@@ -360,6 +408,7 @@ def test_riepilogo(t):
     mod.register(gs)
     d = gs.routes["anno"](anno=0)
     assert d["anni"] == [2025, 2024] and d["anno"] == 2025 and d["ore"] == 1.0 and d["top"][0]["titolo"] == "Zelda Ocarina of Time"
+    assert d["top"][0]["id"] == 1 and d["mese"] == 4
     assert gs.routes["anno"](anno=2024)["ore"] == 0.2
     try:
         gs.routes["anno"](anno=1800)
@@ -499,13 +548,21 @@ def test_calendario(t):
         assert e.status_code == 400
     else:
         raise AssertionError("intervallo non valido accettato")
+    # tutti=True: niente filtro sui generi preferiti
+    chiesti = []
+    mod.httpx.get = lambda url, params, **kw: (chiesti.append(params), type("R", (), {"status_code": 200, "json": lambda self: {"results": []}})())[1]
+    gs.routes["uscite"](giorni=30, tutti=True)
+    assert all("genres" not in p for p in chiesti), chiesti
+    chiesti.clear()
+    assert gs.routes["uscite"](giorni=31)["generi"] == ["action", "platformer", "adventure"]
+    assert any(p.get("genres") == "action,platformer,adventure" for p in chiesti), chiesti
     u.close()
     print("ok  calendario-uscite: desideri (solo nome esatto e data futura), prossime per genere, tetto di richieste, chiave")
 
 
 def main():
-    test_stasera_logica()
     test_pulizia_logica()
+    test_calendario_logica()
     for fn in (test_anniversari, test_diario, test_limite_tempo, test_obiettivi, test_riepilogo, test_steamgriddb, test_calendario):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             fn(Path(t))
