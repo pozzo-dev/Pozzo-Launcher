@@ -178,8 +178,8 @@ def test_rotte(tmp):
     cfg = config.load(tmp / "config.toml")
     cfg.app["downloads"] = {"max_active": 1, "dir": str(tmp / "out")}
     with TestClient(create_app(cfg)) as c:
-        r = c.post("/api/downloads/settings", json={"debrid": {"realdebrid": {"enabled": True, "key": "RD"}}, "seed_ratio": 2})
-        assert r.status_code == 200 and r.json()["debrid"]["realdebrid"]["key_set"] and r.json()["seed_ratio"] == 2
+        r = c.post("/api/downloads/settings", json={"debrid": {"realdebrid": {"enabled": True, "key": "RD"}}, "limit_up": 2})
+        assert r.status_code == 200 and r.json()["debrid"]["realdebrid"]["key_set"] and r.json()["limit_up"] == 2
         assert '"RD"' not in c.get("/api/downloads").text and '"RD"' in (tmp / config.SETTINGS_FILE).read_text("utf-8")
         assert c.post("/api/downloads/settings", json={"encryption": "x"}).status_code == 400
         assert c.post("/api/downloads/alt-speed", json={"on": True}).json()["alt_active"] is True

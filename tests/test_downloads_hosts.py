@@ -234,6 +234,23 @@ def test_cattura_download_solo_su_windows():
     print("ok  cattura del download: solo Windows, URL letto senza WebView2 nei test")
 
 
+def test_redirect_verso_lan_rifiutato(monkeypatch):
+    """Un redirect verso la rete locale in hosts.resolve viene bloccato da assert_public."""
+    import httpx
+    import pytest
+
+    def handler(req):
+        if req.url.host == "megaup.net":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1:8080/internal"})
+        raise AssertionError(f"SSRF raggiunto: {req.url}")
+
+    real_client = httpx.Client
+    monkeypatch.setattr(hosts.httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(SL, "with_browser", lambda u: pytest.fail("il browser non va aperto dopo SSRF"))
+    with pytest.raises(ValueError, match="rete locale"):
+        hosts.resolve("https://megaup.net/abc123/")
+
+
 if __name__ == "__main__":
     test_datanodes()
     test_is_file_url()

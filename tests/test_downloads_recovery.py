@@ -260,3 +260,69 @@ def test_403_senza_byte_scaricati_e_un_rifiuto_non_un_link_scaduto(tmp, monkeypa
     time.sleep(1.5)
     assert len(calls) == 1
     m.stop()
+
+
+def test_mirror_failover_dopo_hash_mismatch_non_va_in_deadlock(tmp):
+    """Con max_active=1, dopo HashMismatch il mirror successivo deve rientrare in gate() senza deadlock."""
+    import hashlib
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    good = b"dati validi del gioco"
+    want = hashlib.sha256(good).hexdigest()
+    files = {"/bad.bin": b"corrotto!!", "/good.bin": good}
+
+    class Hd(BaseHTTPRequestHandler):
+        def do_GET(self):
+            b = files[self.path]
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Hd)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    m = _mgr(tmp, max_active=1)
+    try:
+        m.start()
+        t = m.add(base + "/bad.bin", sha256=want, mirrors=[base + "/good.bin"])
+        assert _wait(lambda: t.status == T.COMPLETED, 10), (t.status, t.error, m._dl_ids, m._gates)
+        assert (tmp / "out" / "bad.bin").read_bytes() == good
+        assert "part" not in t.options
+    finally:
+        m.stop()
+        srv.shutdown()
+
+
+def test_mutazioni_concorrenti_finish_e_view_senza_errori(tmp):
+    """Mutazioni in finish.py protette da mgr.lock non collidono con view()/deepcopy."""
+    from pozzo.downloads import finish
+    m = _mgr(tmp)
+    t = T.DownloadTask(source="https://x.test/g.zip", save_path=str(tmp), name="g.zip", status=T.COMPLETED)
+    m.tasks[t.id] = t
+    errs = []
+    stop = threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            try:
+                with m.lock:
+                    t.view()
+            except Exception as e:
+                errs.append(e)
+
+    th = threading.Thread(target=reader, daemon=True)
+    th.start()
+    try:
+        for i in range(200):
+            finish._step(t, m, f"step_{i % 20}", "active")
+            with m.lock:
+                t.set_stage("extract", "active", i % 100)
+            finish._step(t, m, f"step_{i % 20}", "done")
+    finally:
+        stop.set()
+        th.join(5)
+    assert not errs, errs

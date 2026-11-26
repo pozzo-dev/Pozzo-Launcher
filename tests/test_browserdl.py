@@ -216,3 +216,35 @@ def test_watch_scrive_nel_registro_solo_le_novita():
 def test_un_popup_pubblicitario_non_e_il_file():
     assert B._same_site("https://dl.fuckingfast.co/x", "https://fuckingfast.co/a")
     assert not B._same_site("https://ads.example.net/x.rar", "https://fuckingfast.co/a")
+
+
+def test_ouo_multiup_datanodes_una_sola_finestra(monkeypatch):
+    """ouo -> multiup -> datanodes resta nella stessa finestra WebView2 senza chiuderla e riaprirla."""
+    from pozzo.downloads import multiup as M
+
+    class NavWin(FakeWin):
+        def __init__(self, urls):
+            super().__init__(urls)
+            self.loaded = []
+
+        def load_url(self, u):
+            self.loaded.append(u)
+            self.urls = [u]
+            B._URI["value"] = "https://s12.datanodes.to/d/tok1234567890ab/Gioco.nsp"
+
+    win = NavWin(["https://ouo.io/abc", "https://multiup.io/en/mirror/c4ebca5bad6275fa349b6afef5cc4cc7"])
+    creates = [0]
+
+    def create_window(*a, **kw):
+        creates[0] += 1
+        return win
+
+    monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace(create_window=create_window))
+    monkeypatch.setattr(B.time, "sleep", lambda s: None)
+    monkeypatch.setitem(B._HOOKED, "on", True)
+    monkeypatch.setattr(M, "find", lambda u: ("https://datanodes.to/xyz/Gioco.nsp", ""))
+    B._URI["value"] = ""
+    out = B.resolve("https://ouo.io/abc", timeout=5)
+    assert out == "https://s12.datanodes.to/d/tok1234567890ab/Gioco.nsp"
+    assert creates[0] == 1 and win.loaded == ["https://datanodes.to/xyz/Gioco.nsp"]
+    assert win.calls == ["destroy"]

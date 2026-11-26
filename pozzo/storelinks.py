@@ -55,7 +55,7 @@ _FILE = re.compile(r"\.(rar|zip|7z|iso|bin|exe|nsp|xci|nsz|pkg|tar|gz)$|\.(part\
 # host che danno il file vero: tutto il resto (sito dello sviluppatore, forum, immagini) non è un download
 FILE_HOSTS = {"fuckingfast.co", "dl.fuckingfast.co", "datanodes.to", "filekeeper.net", "1fichier.com",
               "megaup.net", "krakenfiles.com", "pixeldrain.com", "gofile.io", "multiup.io", "multiup.org",
-              "multiup.eu", "zippyshare.com", "letsupload.io", "onedrive.live.com", "1drv.ms",
+              "multiup.eu", "letsupload.io", "onedrive.live.com", "1drv.ms",
               "drive.google.com", "mega.nz", "mediafire.com", "racaty.net", "bowfile.com", "mixdrop.co"}
 # siti che elencano il torrent: si aprono nel browser (a scaricare è il magnet)
 TORRENT_SITES = {"1337x.to", "1337x.st", "1337x.gd", "1377x.to", "rutor.info", "rutor.is", "tapochek.net",
@@ -343,8 +343,40 @@ def paste(url: str, timeout: float = 20.0) -> dict:
 
 # ---------------------------------------------------------------- risoluzione degli accorciatori
 
+class _BrowserLock:
+    """Lock rientrante condiviso tra storelinks e browserdl: `locked()` e' True solo per gli altri thread."""
+
+    def __init__(self):
+        self._rlock = threading.RLock()
+        self._owner = None
+        self._depth = 0
+
+    def locked(self) -> bool:
+        return self._depth > 0 and self._owner != threading.get_ident()
+
+    def acquire(self, blocking=True, timeout=-1):
+        ok = self._rlock.acquire(blocking, timeout)
+        if ok:
+            self._owner = threading.get_ident()
+            self._depth += 1
+        return ok
+
+    def release(self):
+        self._depth -= 1
+        if self._depth == 0:
+            self._owner = None
+        self._rlock.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *a):
+        self.release()
+
+
 RESOLVER: dict = {"fn": None, "reason": None}
-_LOCK = threading.Lock()  # una finestra nascosta alla volta: piu' download insieme non devono aprirne tre
+_LOCK = _BrowserLock()  # una finestra nascosta alla volta: piu' download insieme non devono aprirne tre
 
 
 def set_resolver(fn, reason=None) -> None:
@@ -354,8 +386,13 @@ def set_resolver(fn, reason=None) -> None:
 
 
 BROWSER_TIMEOUT = 90  # secondi: tetto di tutta l'attesa (il risolutore del browser ne usa 75, piu' l'apertura e la coda)
-# parametri di una URL firmata: il link vale per poco, non va messo in cache per 30 giorni
-_SIGNED = re.compile(r"[?&](sig|signature|token|expires|policy|auth|key)=", re.I)
+# parametri o percorsi di una URL firmata/CDN temporanea: il link vale per poco, non va messo in cache per 30 giorni
+_SIGNED = re.compile(r"[?&](sig|signature|token|expires|policy|auth|key|hash|md5|hdnea|x-amz-signature)=", re.I)
+_TOKEN_PATH = re.compile(r"/(?:d|dl|download)/[A-Za-z0-9_~.%-]{12,}(?:/|$)", re.I)
+
+
+def _ephemeral(url: str) -> bool:
+    return bool(_SIGNED.search(url) or _TOKEN_PATH.search(urlsplit(url).path))
 
 
 def with_browser(url: str, timeout: float | None = None) -> str:
@@ -370,14 +407,15 @@ def with_browser(url: str, timeout: float | None = None) -> str:
     if not fn:
         resolvers.note("browser nascosto non disponibile")
         return ""
-    resolvers.phase(f"Apro la pagina nel browser nascosto (fino a {timeout:g} s)…")
-    if _LOCK.locked():  # phase() nel thread `run` non fa nulla: va mostrato qui, prima del thread
-        resolvers.phase("In attesa del browser (un altro download lo sta usando)")
-    out, gone = [], threading.Event()
+    busy = _LOCK.locked()
+    resolvers.phase("In attesa del browser (un altro download lo sta usando)" if busy
+                    else f"Apro la pagina nel browser nascosto (fino a {timeout:g} s)…")
+    out, acquired, gone = [], threading.Event(), threading.Event()
 
     def run():  # thread a parte: se la finestra si pianta l'attesa finisce lo stesso
         with _LOCK:
-            if gone.is_set():  # l'attesa e' gia' scaduta mentre un'altra finestra era aperta
+            acquired.set()
+            if gone.is_set():
                 return
             try:
                 out.append(fn(url) or "")
@@ -386,6 +424,13 @@ def with_browser(url: str, timeout: float | None = None) -> str:
 
     th = threading.Thread(target=run, daemon=True, name="browser-hidden")
     th.start()
+    # la coda ha un tetto: se chi tiene il lock e' piantato, non si aspetta per sempre
+    if not acquired.wait(BROWSER_TIMEOUT * 3):
+        gone.set()
+        resolvers.note("il browser nascosto e' occupato da troppo tempo")
+        return ""
+    if busy:
+        resolvers.phase(f"Apro la pagina nel browser nascosto (fino a {timeout:g} s)…")
     th.join(timeout)
     gone.set()
     if not out:
@@ -407,21 +452,29 @@ def resolve(cache, url: str) -> str:
     if not is_shortener(url):
         return url
     hit = cache.kv_get(RESOLVED_PREFIX + url, RESOLVED_TTL)
+    from .downloads import hosts, iface  # risolve i link dei download: esce dall'interfaccia scelta per i download
     if hit:
-        return hit
-    from .downloads import iface  # risolve i link dei download: esce dall'interfaccia scelta per i download
+        try:
+            hosts.assert_public(hit)  # la cache vale 30 giorni: il DNS di allora potrebbe non valere piu'
+            return hit
+        except hosts.UnsafeURL:
+            cache.kv_set(RESOLVED_PREFIX + url, "")  # voce scartata (falsa = non in cache)
     final = ""
-    try:  # alcuni accorciatori non chiedono nulla: un semplice GET basta
-        with httpx.Client(headers=HEADERS, timeout=httpx.Timeout(15, connect=8), follow_redirects=True, **iface.client_kw()) as c:
-            r = c.get(url)
-        if r.status_code == 200 and not is_shortener(str(r.url)):
-            final = str(r.url)
-    except httpx.HTTPError:
-        pass
+    # ouo.io / ouo.press chiedono sempre Turnstile/JS: col browser disponibile saltiamo i 15 s sprecati in httpx
+    if not (RESOLVER["fn"] and iface.BIND != ()):
+        try:
+            with httpx.Client(headers=HEADERS, timeout=httpx.Timeout(15, connect=8), follow_redirects=True,
+                              event_hooks={"response": [hosts._redirect_public]}, **iface.client_kw()) as c:
+                r = c.get(url)
+            if r.status_code == 200 and not is_shortener(str(r.url)):
+                final = str(r.url)
+        except httpx.HTTPError:
+            pass
     if not final and iface.BIND != ():  # kill switch: il browser nascosto non si lega all'interfaccia
         final = with_browser(url)
     if final and not is_shortener(final):
-        if not _SIGNED.search(final):  # URL firmata (scade): in cache a 30 giorni farebbe danni
+        hosts.assert_public(final)
+        if not _ephemeral(final):  # URL firmata o CDN temporaneo: in cache a 30 giorni farebbe danni
             cache.kv_set(RESOLVED_PREFIX + url, final)
         return final
     return url

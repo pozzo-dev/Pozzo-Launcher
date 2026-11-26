@@ -246,3 +246,19 @@ def test_motivo_nelle_note():
     finally:
         resolvers._FNS[:] = old
     assert url == PAGE and any("MultiUp: il file non esiste più su MultiUp" in p for p in phases), phases
+
+
+def test_redirect_ssrf_multiup_rifiutato(monkeypatch):
+    """Un /redirect/ o redirect HTTP di MultiUp verso rete locale non viene mai scelto."""
+    def handler(req):
+        if req.url.path == "/en/mirror/c4ebca5bad6275fa349b6afef5cc4cc7":
+            return multiup.httpx.Response(200, text=_page('<a namehost="krakenfiles.com" href="https://multiup.io/redirect/ssrf">k</a>'))
+        if req.url.path.endswith("ssrf"):
+            return multiup.httpx.Response(302, headers={"location": "http://192.168.1.1/admin"})
+        raise AssertionError(f"SSRF raggiunto: {req.url}")
+
+    real = multiup.httpx.Client
+    monkeypatch.setattr(multiup.httpx, "Client", lambda **kw: real(transport=multiup.httpx.MockTransport(handler), **kw))
+    r = multiup.mirrors(REAL_URL)
+    assert all("192.168.1.1" not in m["url"] for m in r["mirrors"])
+    assert multiup.find(REAL_URL)[0] == ""

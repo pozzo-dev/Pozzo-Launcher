@@ -192,3 +192,86 @@ def test_repack_pc_estratto_lascia_il_setup_da_avviare(tmp):
     assert not calls and z.exists()  # niente libreria, archivio tenuto finche' non si installa
     assert any("Repack pronto" in l["msg"] for l in t.log_after(0)[0])
 
+
+def test_arcade_zip_non_viene_estratto(tmp, monkeypatch):
+    """Per console arcade (.zip in plat.exts), il .zip e' gia' la ROM: non va estratto."""
+    cfg = make_cfg(tmp)
+    ctx, calls, got = make_ctx(cfg, online={"id": 7, "title": "Metal Slug", "key": "online/7", "platform": "neogeo",
+                                            "store": "online", "files": []})
+    z = tmp / "dl" / "mslug.zip"
+    z.parent.mkdir()
+    with zipfile.ZipFile(z, "w") as f:
+        f.writestr("201-p1.p1", b"x" * 20)
+    monkeypatch.setattr(finish.X, "extract", lambda *a, **k: pytest.fail("uno zip arcade non va estratto"))
+    t = _task(tmp, "mslug.zip")
+    finish.run(t, Mgr(), ctx)
+    placed = list(cfg.roms.rglob("mslug.zip"))
+    assert len(placed) == 1 and calls == [{"platforms": ["neogeo"]}] and got
+    assert t._stage("extract")["state"] == "skip" and t._stage("library")["state"] == "done"
+
+
+def test_giochi_a_cartella_estratti_ps3_ps5_switch2(tmp):
+    """Cartelle estratte PS3 (PS3_GAME/USRDIR/EBOOT.BIN), PS5 (eboot.bin) e Switch 2 (exefs+romfs) riconosciute."""
+    for pid, members, check_rel in (
+        ("ps3", {"GiocoPS3/PS3_GAME/USRDIR/EBOOT.BIN": b"eboot", "GiocoPS3/PS3_GAME/PARAM.SFO": b"sfo"},
+         "GiocoPS3/PS3_GAME/USRDIR/EBOOT.BIN"),
+        ("ps5", {"GiocoPS5/eboot.bin": b"eboot", "GiocoPS5/sce_sys/param.sfo": b"sfo"},
+         "GiocoPS5/eboot.bin"),
+        ("switch2", {"GiocoSW2/exefs/main": b"main", "GiocoSW2/romfs/data.bin": b"data"},
+         "GiocoSW2/exefs/main"),
+    ):
+        sub = tmp / pid
+        sub.mkdir()
+        cfg = make_cfg(sub)
+        ctx, calls, got = make_ctx(cfg, online={"id": 7, "title": f"Gioco {pid}", "key": "online/7",
+                                                "platform": pid, "store": "online", "files": []})
+        z = sub / "dl" / f"Gioco_{pid}.zip"
+        z.parent.mkdir(parents=True)
+        with zipfile.ZipFile(z, "w") as f:
+            for k, v in members.items():
+                f.writestr(k, v)
+        t = DownloadTask(source=f"https://x/{z.name}", save_path=str(z.parent), name=z.name,
+                         status=COMPLETED, options={"game_id": 7})
+        finish.run(t, Mgr(switch2_format="off"), ctx)
+        assert t._stage("library")["state"] == "done", (pid, t.log_after(0)[0])
+        assert (cfg.roms / finish.P.PLATFORMS[pid].name / check_rel).is_file()
+        assert calls == [{"platforms": [pid]}]
+
+
+def test_archivio_annidato_un_livello(tmp):
+    """Un archivio che contiene un solo altro archivio e nessuna ROM si estrae di un altro livello (max 1)."""
+    import py7zr
+    ctx, calls, got, cfg = _ctx(tmp)
+    dl = tmp / "dl"
+    dl.mkdir()
+    inner = dl / "Gioco.7z"
+    with py7zr.SevenZipFile(inner, "w") as f:
+        f.writestr(b"x" * 50, "Gioco/Gioco [0100AAAA].xci")
+    outer = dl / "Outer.zip"
+    with zipfile.ZipFile(outer, "w") as f:
+        f.write(inner, "Outer/Gioco.7z")
+    inner.unlink()
+    t = _task(tmp, "Outer.zip")
+    finish.run(t, Mgr(), ctx)
+    assert len(list(cfg.roms.rglob("*.xci"))) == 1 and calls
+    assert not outer.exists()
+
+
+def test_pacchetto_installabile_pkg_vpk_cia_avviso_non_fatale(tmp):
+    """Un .pkg/.vpk/.cia entra in libreria ma lascia un avviso chiaro che va installato nell'emulatore."""
+    for pid, fname in (("psvita", "Gioco.vpk"), ("3ds", "Gioco.cia"), ("ps4", "Gioco.pkg")):
+        sub = tmp / pid
+        sub.mkdir()
+        cfg = make_cfg(sub)
+        ctx, calls, got = make_ctx(cfg, online={"id": 7, "title": "Gioco", "key": "online/7",
+                                                "platform": pid, "store": "online", "files": []})
+        dl = sub / "dl"
+        dl.mkdir(parents=True)
+        (dl / fname).write_bytes(b"pkgdata")
+        t = DownloadTask(source=f"https://x/{fname}", save_path=str(dl), name=fname,
+                         status=COMPLETED, options={"game_id": 7})
+        finish.run(t, Mgr(), ctx)
+        assert t._stage("library")["state"] == "done" and calls
+        assert "install" in (t._stage("library").get("note") or "").lower(), t.stages
+        assert any("install" in l["msg"].lower() for l in t.log_after(0)[0])
+

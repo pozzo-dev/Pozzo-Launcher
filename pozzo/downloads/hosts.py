@@ -35,19 +35,30 @@ def host(url: str) -> str:
     return (urlsplit(url or "").hostname or "").lower().removeprefix("www.")
 
 
+class UnsafeURL(ValueError):
+    """Link rifiutato perche' non pubblico o non http(s): non va mai aperto ne' riprovato nel browser."""
+
+
 def assert_public(url: str) -> None:
     """ValueError se il link (uscito da una pagina o da un accorciatore) punta a una rete locale: SSRF. Bloccante (DNS).
-    shortcut: un host che non si risolve passa (httpx fallira' dopo); i redirect del client dei download si controllano nel manager (_redirect_public); quelli dei resolver in hosts/multiup no, migliorare se serve."""
+    shortcut: un host che non si risolve passa (httpx fallira' dopo)."""
     u = urlsplit(url or "")
     if u.scheme not in ("http", "https") or not u.hostname:
-        raise ValueError("Link non valido: serve un indirizzo http(s)")
+        raise UnsafeURL("Link non valido: serve un indirizzo http(s)")
     try:
         ips = {a[4][0] for a in socket.getaddrinfo(u.hostname, u.port or 443)}
     except socket.gaierror:
         return
     for ip in ips:
         if not ipaddress.ip_address(ip.split("%")[0]).is_global:
-            raise ValueError(f"Link rifiutato: {u.hostname} punta a una rete locale. Scegli un altro provider")
+            raise UnsafeURL(f"Link rifiutato: {u.hostname} punta a una rete locale. Scegli un altro provider")
+
+
+def _redirect_public(r: httpx.Response) -> None:
+    """Hook sincrono per httpx.Client: blocca qualsiasi redirect verso rete locale/non-http(s)."""
+    loc = r.headers.get("location")
+    if r.is_redirect and loc:
+        assert_public(str(r.request.url.join(loc)))
 
 
 _FILE_PATH = re.compile(r"\.(nsp|xci|nsz|zip|rar|7z|iso|bin|pkg|dmg|torrent)$", re.I)
@@ -130,8 +141,11 @@ def resolve(url: str) -> str:
     final = ""
     if h in _SITES:
         try:
-            with httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True, **iface.client_kw()) as s:
+            with httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True,
+                              event_hooks={"response": [_redirect_public]}, **iface.client_kw()) as s:
                 final = _SITES[h](url, s) or ""
+        except UnsafeURL:
+            raise
         except Blocked as e:
             resolvers.note(str(e))
             return ""
@@ -139,6 +153,7 @@ def resolve(url: str) -> str:
             final = ""
         final = urljoin(url, final.strip()) if final else ""
         if final and is_file_url(final, url):
+            assert_public(final)
             return final
     # shortcut: il link trovato dal browser non porta con sé i cookie della finestra (1fichier li chiede),
     # se un host rifiuta il download passare lì i cookie: task.options["headers"] li manda HTTP.run
@@ -148,4 +163,5 @@ def resolve(url: str) -> str:
     final = SL.with_browser(url)
     if not final or _same_page(final, url) or urlsplit(final).path.lower().rstrip("/") in _FORM_PATH:
         return ""  # il browser a volte finisce sul modulo («/download»): non e' un file
+    assert_public(final)
     return final

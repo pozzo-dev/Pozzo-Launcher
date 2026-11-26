@@ -614,17 +614,17 @@ def test_impostazioni_controllate(tmp):
     cfg = SimpleNamespace(cache=tmp / "cache", app={"downloads": {"dir": str(tmp / "out"), "discovery": False}})
     m = Manager(cfg, save=saved.append)
     assert m.settings()["discovery"] == {"dht": False, "pex": False, "lsd": False, "upnp": False}  # vecchio interruttore unico
-    s = m.update_settings({"max_active": 99, "segments": 0, "port": 70000, "seed_ratio": 1000, "seed_minutes": -3,
+    s = m.update_settings({"max_active": 99, "segments": 0, "port": 70000, "limit_up": 1000,
                            "max_active_torrent": "4", "trackers": ["udp://a:1/ann", "udp://a:1/ann", "ftp://no", " wss://w/x ", 5],
                            "discovery": {"dht": True}, "encryption": "require",
                            "alt_schedule": {"enabled": True, "from": "7:05", "days": [3, 1, 1]}})
-    assert (s["max_active"], s["segments"], s["port"], s["seed_ratio"], s["seed_minutes"], s["max_active_torrent"]) == (10, 1, 65535, 100.0, 0, 4)
+    assert (s["max_active"], s["segments"], s["port"], s["limit_up"], s["max_active_torrent"]) == (10, 1, 65535, 1000, 4)
     assert s["trackers"] == ["udp://a:1/ann", "wss://w/x"]
     assert s["discovery"] == {"dht": True, "pex": False, "lsd": False, "upnp": False}
     assert s["alt_schedule"] == {"enabled": True, "from": "07:05", "to": "07:00", "days": [1, 3]}
     assert saved[-1]["encryption"] == "require" and cfg.app["downloads"] is saved[-1]
     for bad in ({"encryption": "forse"}, {"alt_schedule": {"to": "25:00"}}, {"alt_schedule": {"days": [7]}},
-                {"limit_down": "tanto"}, {"seed_ratio": "nan"}, {"alt_enabled": "si"}, {"debrid": {"boh": {}}}, {"trackers": 3}):
+                {"limit_down": "tanto"}, {"limit_up": "nan"}, {"alt_enabled": "si"}, {"debrid": {"boh": {}}}, {"trackers": 3}):
         with pytest.raises(ValueError):
             m.update_settings(bad)
     m.update_settings({"debrid": {"realdebrid": {"enabled": True, "key": "SEGRETA"}}})

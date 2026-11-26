@@ -69,7 +69,7 @@
   Alla chiusura del gioco riprendono solo i download fermati da questa modalità: quelli messi in pausa a mano restano fermi.</p>
 
 <h3 data-i18n="j.dl.cats.title">Categorie</h3>
-<p class="muted small" data-i18n="j.dl.cats.desc">Una categoria ha una sua cartella e limiti di condivisione che valgono al posto di quelli globali (0 = come globale).
+<p class="muted small" data-i18n="j.dl.cats.desc">Una categoria ha una sua cartella che vale al posto di quella globale.
   Si assegna dalla finestra «Aggiungi download» o dai dettagli di un download.</p>
 <div id="dls-cats"></div>
 <button class="btn" id="dls-cat-add" type="button" data-i18n="j.dl.cats.add">Aggiungi categoria</button>
@@ -98,16 +98,6 @@
 </div>
 <p class="muted small" data-i18n="j.dl.bt.disc.desc">DHT, PeX e LSD trovano altri peer anche senza tracker (LSD nella rete di casa); UPnP apre da solo la porta sul router.
   Con la cifratura obbligatoria ci si collega solo ai peer che la usano.</p>
-<h4 data-i18n="j.dl.share.title">Condivisione</h4>
-<div class="row wrap">
-  <label><span data-i18n="j.dl.share.ratio">Fermati al rapporto</span> <input class="field" id="dls-ratio" type="number" min="0" step="0.1"></label>
-  <label><span data-i18n="j.dl.share.minutes">oppure dopo (minuti)</span> <input class="field" id="dls-seed-min" type="number" min="0"></label>
-</div>
-<p class="muted small" data-i18n="j.dl.share.desc">Rapporto = dati inviati ÷ dimensione del torrent. 0 = non condividere: il torrent si ferma appena finito.</p>
-<label class="lbl-field"><span data-i18n="j.dl.seedaction">Al limite di condivisione</span>
-  <select class="field" id="dls-seed-action">
-    <option value="pause" data-i18n="j.dl.seedaction.pause">Metti in pausa il torrent</option>
-    <option value="remove" data-i18n="j.dl.seedaction.remove">Togli il torrent dall'elenco (i file restano)</option></select></label>
 <label class="lbl-field"><span data-i18n="j.dl.ipf">File IP filter (PeerGuardian .dat/.p2p o elenco di CIDR)</span>
   <span class="row tight"><input class="field grow" id="dls-ipf" aria-describedby="dls-ipf-err">
   <button class="btn" id="dls-ipf-pick" type="button" data-i18n="j.s2.pickFile">File…</button></span></label>

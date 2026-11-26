@@ -346,24 +346,63 @@ def _py7zr(g, tmp, dest, password, on_progress, cancelled, log, max_bytes):
         raise _Skip(f"py7zr: {e}") from e
 
 
-def _run7z(cmd: list, cancelled, on_progress=None, total=0) -> tuple[int, str]:
+def _tree_bytes(root: Path) -> int:
+    total = 0
+    for cur, _, files in os.walk(root):
+        for n in files:
+            p = Path(cur) / n
+            if not p.is_symlink():
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+    return total
+
+
+def _link_ok(target) -> bool:
+    """Collegamento relativo e che non risale: innocuo (poi _sanitize lo toglie). Assoluto, con «..» o ignoto: no."""
+    t = str(target or "").replace("\\", "/")
+    return bool(t) and not t.startswith("/") and not re.match(r"[A-Za-z]:", t) and ".." not in t.split("/")
+
+
+def _is_7z_symlink(kv: dict) -> bool:
+    if kv.get("Symbolic Link") or kv.get("Hard Link"):
+        return True
+    for tok in (kv.get("Attributes") or "").split():
+        if (tok.startswith("l") and len(tok) == 10) or (not tok.startswith(("-", "d", "l")) and "L" in tok):
+            return True
+    return (kv.get("Mode") or "").startswith("l")
+
+
+def _run7z(cmd: list, cancelled, on_progress=None, total=0, full: bool = False,
+           cap_dir: tuple[Path, int] | None = None) -> tuple[int, str]:
     proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             creationflags=_NOWIN)
     stop = threading.Event()
+    overflow = [False]
 
     def watch():  # la lettura dell'output blocca: l'annullo lo controlla un thread a parte
+        ticks = 0
         while not stop.wait(0.3):
             if cancelled():
+                proc.terminate()
+                return
+            ticks += 1
+            if cap_dir and ticks % 6 == 0 and _tree_bytes(cap_dir[0]) > cap_dir[1]:
+                overflow[0] = True
                 proc.terminate()
                 return
 
     t = threading.Thread(target=watch, daemon=True)
     t.start()
-    tail, last, carry = "", -1, ""
+    chunks, tail, last, carry = [], "", -1, ""
     try:
         while b := proc.stdout.read1(4096):
             text = b.decode("utf-8", "replace")
-            tail = (tail + text)[-4000:]
+            if full:
+                chunks.append(text)
+            else:
+                tail = (tail + text)[-4000:]
             if not (on_progress and total):
                 continue
             # la riga e' «NN% n nome-del-file» e poi viene cancellata con spazi (con un nome lungo la percentuale e'
@@ -383,7 +422,9 @@ def _run7z(cmd: list, cancelled, on_progress=None, total=0) -> tuple[int, str]:
         stop.set()
         if proc.poll() is None:
             proc.kill()
-    return proc.returncode, tail
+    if overflow[0]:
+        raise ArchiveError("L'archivio contiene piu' dati del dichiarato: estrazione interrotta")
+    return proc.returncode, ("".join(chunks) if full else tail)
 
 
 def _errtext(out: str) -> str:
@@ -398,16 +439,21 @@ def _via7z(g, tmp, dest, password, on_progress, cancelled, log, max_bytes):
         raise _Skip("7-Zip non trovato")
     pw = [f"-p{password}"] if password else []
     arch = str(g.volumes[0])
-    rc, out = _run7z([*exe, "l", "-slt", "-ba", "-sccUTF-8", *pw, "--", arch], cancelled)
-    low = out.lower()
+    rc, out = _run7z([*exe, "l", "-slt", "-ba", "-sccUTF-8", *pw, "--", arch], cancelled, full=True)
     if rc not in (0, 1):
+        diag = out[-4000:]
+        low = diag.lower()
         if "password" in low or "encrypted" in low:
             raise BadPassword("Password errata") if password else PasswordRequired("L'archivio e' protetto da password")
-        raise ArchiveError(f"7-Zip non riesce a leggere l'archivio: {_errtext(out)}")
+        raise ArchiveError(f"7-Zip non riesce a leggere l'archivio: {_errtext(diag)}")
     entries = []  # (path, size, cartella, cifrato)
     for blk in re.split(r"\r?\n\r?\n", out.strip()):
         kv = dict(ln.split(" = ", 1) for ln in blk.splitlines() if " = " in ln)
         if "Path" in kv:
+            if _is_7z_symlink(kv):
+                if not _link_ok(kv.get("Symbolic Link") or kv.get("Hard Link")):
+                    raise ArchiveError(f"Collegamento simbolico non ammesso nell'archivio: {kv['Path']}")
+                continue  # innocuo: niente voce, e se 7-Zip lo crea lo toglie _sanitize
             entries.append((kv["Path"], int(kv.get("Size") or 0), kv.get("Folder") == "+", kv.get("Encrypted") == "+"))
     files = [e for e in entries if not e[2]]
     for p, *_ in files:
@@ -417,9 +463,13 @@ def _via7z(g, tmp, dest, password, on_progress, cancelled, log, max_bytes):
         raise PasswordRequired("L'archivio e' protetto da password")
     total = sum(e[1] for e in files)
     _precheck(g, total, dest, max_bytes)
-    rc, out = _run7z([*exe, "x", "-y", "-bsp1", "-sccUTF-8", f"-o{tmp}", *pw, "--", arch], cancelled, on_progress, total)
+    cap = MAX_BYTES if max_bytes is None else max_bytes
+    rc, out = _run7z([*exe, "x", "-y", "-bsp1", "-sccUTF-8", f"-o{tmp}", *pw, "--", arch],
+                     cancelled, on_progress, total, cap_dir=(tmp, cap))
     if cancelled():
         raise Cancelled("Estrazione annullata")
+    if _tree_bytes(tmp) > cap:
+        raise ArchiveError("L'archivio contiene piu' dati del dichiarato: estrazione interrotta")
     if rc not in (0, 1):
         if "wrong password" in out.lower():
             raise BadPassword("Password errata")
@@ -443,21 +493,34 @@ def _rarfile(g, tmp, dest, password, on_progress, cancelled, log, max_bytes):
     with rf:
         infos = []
         for i in rf.infolist():
+            if (callable(getattr(i, "is_symlink", None)) and i.is_symlink()) or (
+                    getattr(i, "file_redir", None) and i.file_redir[0] in (1, 2, 3, 4)):
+                redir = getattr(i, "file_redir", None)
+                if not _link_ok(redir[2] if redir and len(redir) > 2 else None):
+                    raise ArchiveError(f"Collegamento simbolico non ammesso nell'archivio: {i.filename}")
+                continue
             if i.is_dir():
                 continue
-            if _safe_rel(i.filename) is None:
+            rel = _safe_rel(i.filename)
+            if rel is None:
                 raise ArchiveError(f"Percorso non sicuro nell'archivio: {i.filename}")
-            infos.append(i)
-        total = sum(i.file_size for i in infos)
+            infos.append((rel, i))
+        total = sum(i.file_size for _, i in infos)
         _precheck(g, total, dest, max_bytes)
         if rf.needs_password() and not password:
             raise PasswordRequired("L'archivio e' protetto da password")
-        done = 0
+        cap = MAX_BYTES if max_bytes is None else max_bytes
+        done = actual = 0
         try:
-            for i in infos:
+            for rel, i in infos:
                 if cancelled():
                     raise Cancelled("Estrazione annullata")
                 rf.extract(i, str(tmp), pwd=password or None)
+                out_f = tmp / rel
+                if out_f.is_file() and not out_f.is_symlink():
+                    actual += out_f.stat().st_size
+                if actual > cap:
+                    raise ArchiveError("L'archivio contiene piu' dati del dichiarato: estrazione interrotta")
                 done += i.file_size
                 if on_progress:
                     on_progress(done, total)

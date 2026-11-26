@@ -393,3 +393,65 @@ def test_switch_aggiornamento_va_nella_cartella_della_base(tmp):
     IN.ingest(ctx, None, "switch", [upd], poll=0.01)
     IN.ingest(ctx, None, "switch", [other], poll=0.01)
     assert (sw / "Super Mario RPG" / upd.name).is_file() and (sw / "Altro Gioco" / other.name).is_file()
+
+
+def test_ingest_cartelle_wiiu_xbox360_dos(tmp):
+    """Wii U Loadiine (code/*.rpx + content/meta), Xbox 360 (default.xex + asset) e MS-DOS spostano tutta la cartella."""
+    # Wii U Loadiine
+    (tmp / "wiiu").mkdir()
+    cfg = make_cfg(tmp / "wiiu")
+    ctx, calls, got = make_ctx(cfg)
+    wiiu_root = tmp / "wiiu" / "dl" / "ZeldaBotW"
+    (wiiu_root / "code").mkdir(parents=True)
+    (wiiu_root / "content").mkdir()
+    (wiiu_root / "meta").mkdir()
+    rpx = wiiu_root / "code" / "U-King.rpx"
+    rpx.write_bytes(b"rpx")
+    (wiiu_root / "content" / "map.bin").write_bytes(b"map")
+    (wiiu_root / "meta" / "meta.xml").write_text("<xml/>", "utf-8")
+    r = IN.ingest(ctx, None, "wiiu", [rpx], poll=0.01)
+    dest_wiiu = IN.target_dir(cfg, "wiiu") / "ZeldaBotW"
+    assert r["ok"] and r["files"] == [str(dest_wiiu / "code" / "U-King.rpx")]
+    assert (dest_wiiu / "content" / "map.bin").is_file() and (dest_wiiu / "meta" / "meta.xml").is_file()
+
+    # Xbox 360
+    (tmp / "x360").mkdir()
+    cfg2 = make_cfg(tmp / "x360")
+    ctx2, _, _ = make_ctx(cfg2)
+    x_root = tmp / "x360" / "dl" / "Halo3"
+    (x_root / "maps").mkdir(parents=True)
+    xex = x_root / "default.xex"
+    xex.write_bytes(b"xex")
+    (x_root / "maps" / "level.map").write_bytes(b"lvl")
+    r2 = IN.ingest(ctx2, None, "xbox360", [xex], poll=0.01, fresh=[x_root])
+    dest_x360 = IN.target_dir(cfg2, "xbox360") / "Halo3"
+    assert r2["ok"] and r2["files"] == [str(dest_x360 / "default.xex")]
+    assert (dest_x360 / "maps" / "level.map").is_file()
+
+    # MS-DOS
+    (tmp / "dos").mkdir()
+    cfg3 = make_cfg(tmp / "dos")
+    ctx3, _, _ = make_ctx(cfg3)
+    d_root = tmp / "dos" / "dl" / "Doom"
+    d_root.mkdir(parents=True)
+    exe = d_root / "DOOM.EXE"
+    exe.write_bytes(b"mz")
+    (d_root / "DOOM.WAD").write_bytes(b"iwad")
+    r3 = IN.ingest(ctx3, None, "dos", [exe], poll=0.01, fresh=[d_root])
+    dest_dos = IN.target_dir(cfg3, "dos") / "Doom"
+    assert r3["ok"] and r3["files"] == [str(dest_dos / "DOOM.EXE")]
+    assert (dest_dos / "DOOM.WAD").is_file()
+
+
+def test_ingest_psx_saturn_sidecar_sbi_sub(tmp):
+    """I file .sbi e .sub accanto a .cue/.bin per PSX e Saturn seguono nella cartella del gioco."""
+    cfg = make_cfg(tmp)
+    cue, = extracted(tmp, "FF9.cue")
+    (cue.parent / "FF9.bin").write_bytes(b"bin")
+    (cue.parent / "FF9.sbi").write_bytes(b"sbi")
+    (cue.parent / "FF9.sub").write_bytes(b"sub")
+    cue.write_text('FILE "FF9.bin" BINARY\n  TRACK 01 MODE2/2352\n', "utf-8")
+    ctx, calls, got = make_ctx(cfg)
+    r = IN.ingest(ctx, None, "psx", [cue], poll=0.01)
+    d = IN.target_dir(cfg, "psx") / "FF9"
+    assert r["ok"] and (d / "FF9.sbi").is_file() and (d / "FF9.sub").is_file()

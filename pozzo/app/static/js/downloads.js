@@ -714,7 +714,7 @@ function dlAltButton() {
 /** barra di stato: i nodi sono fissi, cambia solo il testo (il fuoco non si perde) */
 function dlStatus() {
   const { speed, up } = DLU.summary(DL.tasks), s = DL.settings || {};
-  const running = DL.tasks.filter((t) => t.status === "running" && !(t.options || {}).seeding).length;
+  const running = DL.tasks.filter((t) => t.status === "running").length;
   const set = (id, txt) => { const el = $(id); if (el && el.textContent !== txt) el.textContent = txt; };
   const pre = s.alt_active ? "alt_" : "", d = s[pre + "limit_down"] || 0, u = s[pre + "limit_up"] || 0;
   set("#dl-s-down", "↓ " + (speed > 0 ? DLU.speed(speed) : "0 B/s"));
@@ -740,9 +740,9 @@ function dlRow(t, member = false) {
   const btn = (act, ico, label, extra = "") => `<button class="icon-btn" type="button" data-act="${act}" title="${label}" aria-label="${label}: ${esc(name)}"${extra}>${ico}</button>`;
   const live = t.status === "running" || t.status === "queued";
   const install = !!o.setup && t.status === "completed"; // repack estratto: il setup si avvia da qui
-  const st = o.seeding ? tr("d.status.seeding", "In condivisione") : DLU.status(t.status, t);
+  const st = DLU.status(t.status, t);
   const note = t.status === "error" ? t.error || t.phase : t.phase; // errore corto in riga, completo nel title
-  return `<tr class="dl-row${member ? " dl-member" : ""}" tabindex="0" data-id="${esc(t.id)}" data-status="${esc(t.status)}"${o.seeding ? ' data-seed="1"' : ""}>
+  return `<tr class="dl-row${member ? " dl-member" : ""}" tabindex="0" data-id="${esc(t.id)}" data-status="${esc(t.status)}">
     <td class="c-name"><span class="dl-ico" aria-hidden="true" title="${tor ? "Torrent" : "HTTP"}">${tor ? "🧲" : "🌐"}</span>${tor ? btn("toggle", "▸", tr("d.files.details", "File e dettagli")) : ""}<b title="${esc(t.source)}">${esc(name)}</b>${o.start_at ? `<span class="dl-type" title="${tr("d.sched.tt", "Avvio pianificato")}">⏰ ${esc(o.start_at)}</span>` : ""}${dlReadyHtml(t)}</td>
     <td class="hide-s">${esc(DLU.host(t))}${t.category ? ` <span class="dl-type" title="${tr("d.cat", "Categoria")}">🏷 ${esc(t.category)}</span>` : ""}</td>
     <td class="num">${t.size ? DLU.bytes(t.size) : "?"}</td>
@@ -768,7 +768,7 @@ function dlGroupRow(g, open) {
     `<b>${title}</b>${kinds}<span class="muted small dl-gcount">${t("d.grp.count", { n: g.members.length })}</span>${dlReadyHtml(g)}</td>
     <td class="hide-s"></td>
     <td class="num">${g.size ? DLU.bytes(g.size) : "?"}</td>
-    <td class="c-prog"><div class="dl-bar" role="progressbar" aria-label="${tr("d.progress.aria", "Avanzamento: {name}", { name: title })}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="num">${g.size ? pct + "%" : "—"}</span>${g.unknown ? ` <span class="muted small">+${g.unknown} senza dimensione</span>` : ""}</td>
+    <td class="c-prog"><div class="dl-bar" role="progressbar" aria-label="${tr("d.progress.aria", "Avanzamento: {name}", { name: title })}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="num">${g.size ? pct + "%" : "—"}</span>${g.unknown ? ` <span class="muted small">${tr("d.grp.unknown", "+{n} senza dimensione", { n: g.unknown })}</span>` : ""}</td>
     <td class="num">${DLU.speed(g.speed)}</td>
     <td class="num hide-s">${DLU.eta(g.eta)}</td>
     <td class="c-st"><span class="dl-st">${esc(g.summary)}</span></td>
@@ -879,7 +879,7 @@ function dlPanelGeneral(t) {
   const o = t.options || {}, tor = t.type === "torrent";
   const when = (s) => (s ? new Date(s * 1000).toLocaleString(LOC()) : "");
   const kv = [[tr("d.col.name", "Nome"), t.name], [tr("d.kv.src", "Sorgente"), t.source], [tr("d.kv.folder", "Cartella"), t.save_path],
-    [tr("d.col.status", "Stato"), `${o.seeding ? tr("d.status.seeding", "In condivisione") : DLU.status(t.status, t)}${t.phase ? " · " + t.phase : ""}`],
+    [tr("d.col.status", "Stato"), `${DLU.status(t.status, t)}${t.phase ? " · " + t.phase : ""}`],
     [tr("d.col.size", "Dimensione"), tr("d.of", "{a} di {b}", { a: DLU.bytes(t.done), b: t.size ? DLU.bytes(t.size) : "?" })],
     [tr("d.kv.via", "Via"), o.resolved_by ? DLU.debridName(o.resolved_by) : ""], [tr("d.kv.sched", "Pianificazione"), o.start_at ? tr("d.sched.start", "Avvio alle {time}", { time: o.start_at }) : ""],
     [tr("d.limit", "Limite"), DLU.limit(o.limit)], [tr("d.col.prio", "Priorità"), DLU.prio(t.priority)],
@@ -1144,7 +1144,7 @@ function dlLogHead() {
   const t = dlTask(DL.log.id), d = $("#dl-log-dlg");
   d.dataset.status = t ? t.status : "";
   $("#dl-log-title").textContent = t ? tr("d.log.title", "Registro: {name}", { name: t.name || t.source }) : tr("d.log.removed", "Registro: download rimosso");
-  $("#dl-log-st").textContent = !t ? "" : (t.options || {}).seeding ? tr("d.status.seeding", "In condivisione") : DLU.status(t.status, t);
+  $("#dl-log-st").textContent = !t ? "" : DLU.status(t.status, t);
   dlLogSummary();
 }
 
@@ -1471,10 +1471,10 @@ const DLS_FIELDS = [
   ["#dls-down", "limit_down", "int"], ["#dls-up", "limit_up", "int"],
   ["#dls-alt-down", "alt_limit_down", "int"], ["#dls-alt-up", "alt_limit_up", "int"], ["#dls-alt-on", "alt_enabled", "bool"],
   ["#dls-port", "port", "int"], ["#dls-enc", "encryption", "str"],
-  ["#dls-ratio", "seed_ratio", "num"], ["#dls-seed-min", "seed_minutes", "int"], ["#dls-trackers", "trackers", "lines"],
+  ["#dls-trackers", "trackers", "lines"],
   ["#dls-game-mode", "game_mode", "str"], ["#dls-game-limit", "game_limit_kbps", "int"],
   ["#dls-game-http", "game_pause_http", "bool"], ["#s2-fmt", "switch2_format", "str"],
-  ["#dls-incomplete", "incomplete_dir", "str"], ["#dls-watch", "watch_dir", "str"], ["#dls-seed-action", "seed_action", "str"],
+  ["#dls-incomplete", "incomplete_dir", "str"], ["#dls-watch", "watch_dir", "str"],
   ["#dls-ipf", "ip_filter_path", "str"], ["#dls-pw", "passwords", "lines"], ["#dls-iface", "interface", "str"], ["#dls-cnl", "clicknload", "bool"],
 ];
 
@@ -1618,14 +1618,10 @@ const dlsInput = (k, v, label, extra = "") => `<label>${label} <input class="fie
 const dlsDel = (what) => `<button class="btn" type="button" data-del aria-label="${t("j.dl.remove")}: ${esc(what || "")}" title="${t("j.dl.remove")}">✕</button>`;
 
 function dlsCatRow(c) {
-  const act = (v, l) => `<option value="${v}"${(c.action || "") === v ? " selected" : ""}>${l}</option>`;
   return `<div class="dls-item" data-cat><div class="row wrap">
     ${dlsInput("name", c.name, t("j.dl.cat.name"), 'maxlength="64"')}
     <label class="grow">${t("j.dl.cat.folder")} <span class="row tight"><input class="field grow" data-k="folder" value="${esc(c.folder || "")}">
       <button class="btn" type="button" data-pick>${t("j.common.change")}</button></span></label>
-    ${dlsInput("seed_ratio", c.seed_ratio || 0, t("j.dl.share.ratio"), 'type="number" min="0" max="100" step="0.1"')}
-    ${dlsInput("seed_minutes", c.seed_minutes || 0, t("j.dl.share.minutes"), 'type="number" min="0" max="100000"')}
-    <label>${t("j.dl.seedaction")} <select class="field" data-k="action">${act("", t("j.dl.cat.global"))}${act("pause", t("j.dl.cat.pause"))}${act("remove", t("j.dl.cat.remove"))}</select></label>
     ${dlsDel(c.name)}</div></div>`;
 }
 
@@ -1680,8 +1676,7 @@ async function dlsListsBind() {
   const regexOk = (box, sel) => [...box.querySelectorAll(sel)].map((el) => mark(el, !!el.value.trim() && !dlsRe(el.value))).every(Boolean);
   const run = async (fn) => { try { await fn(); savedToast(null); } catch (e) { toast(e.message, true); } };
   const saveCats = () => run(async () => {
-    const categories = [...cats.querySelectorAll("[data-cat]")].map((r) => ({ name: dlsVal(r, "name"), folder: dlsVal(r, "folder"),
-      seed_ratio: Number(dlsVal(r, "seed_ratio")) || 0, seed_minutes: Math.round(Number(dlsVal(r, "seed_minutes"))) || 0, action: dlsVal(r, "action") })).filter((c) => c.name);
+    const categories = [...cats.querySelectorAll("[data-cat]")].map((r) => ({ name: dlsVal(r, "name"), folder: dlsVal(r, "folder") })).filter((c) => c.name);
     DL.settings.categories = (await api("/api/downloads/categories", { body: { categories } })).categories;
     dlsCatList();
   });

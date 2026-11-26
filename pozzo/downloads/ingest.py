@@ -108,7 +108,9 @@ def _refs(f: Path) -> list[Path]:
         names = [a or b for a, b in re.findall(r'^\s*FILE\s+(?:"([^"]+)"|(\S+))', txt, re.I | re.M)]
     else:  # gdi: "n lba tipo settori nome offset"
         names = [a or b for a, b in re.findall(r'^\s*\d+\s+\d+\s+\d+\s+\d+\s+(?:"([^"]+)"|(\S+))', txt, re.M)]
-    return [f.parent / n for n in names if (f.parent / n).is_file()]
+    base = f.parent.resolve()
+    # solo file accanto al cue: un riferimento assoluto o ../ non va spostato
+    return [r for n in names if (r := f.parent / n).is_file() and r.resolve().is_relative_to(base)]
 
 
 def _unique(path: Path) -> Path:
@@ -135,13 +137,114 @@ def _tid_folder(dest: Path, files: list[Path]) -> Path | None:
     return None
 
 
-def _place(p: P.Platform, files: list[Path], dest: Path) -> list[Path]:
-    """Sposta i file nella cartella console (regola in cima). Ritorna i percorsi giocabili nuovi.
-    shortcut: i file accanto non citati dal .cue/.gdi/.m3u (.sbi, .sub...) non seguono; da estendere se servono."""
-    folder = (_tid_folder(dest, files) or _unique(dest / (_name(files[0].stem) or "Gioco"))) if p.dir_games else None
-    out = []
+def _is_folder_game(p: P.Platform, d: Path) -> bool:
+    if not d.is_dir():
+        return False
+    if p.id == "ps3":
+        return any(f.is_file() and f.name.upper() == "EBOOT.BIN" and f.parent.name.upper() == "USRDIR" for f in d.rglob("*"))
+    if p.id == "ps5":
+        return any(f.is_file() and f.name.lower() == "eboot.bin" and f.parent.name.upper() != "USRDIR" for f in d.rglob("*"))
+    if p.id == "switch2":
+        return (d / "exefs").is_dir() and (d / "romfs").is_dir()
+    if p.id == "xbox360":
+        return any(f.is_file() and f.name.lower() == "default.xex" for f in d.rglob("*"))
+    if p.id == "wiiu":
+        return ((d / "content").is_dir() or (d / "meta").is_dir()) and (d / "code").is_dir() and any(
+            f.is_file() and f.suffix.lower() == ".rpx" for f in (d / "code").iterdir())
+    if p.id == "dos":
+        return any(f.is_file() and f.suffix.lower() in (".exe", ".com", ".bat") for f in d.rglob("*"))
+    return False
+
+
+def _folder_entry_file(p: P.Platform, root: Path) -> Path:
+    """File rappresentativo dentro `root` per `incremental._entry` e `_lib_match` (cartella del gioco per dir_games)."""
+    files = sorted(f for f in root.rglob("*") if f.is_file())
+    if p.id == "ps3":
+        eb = [f for f in files if f.name.upper() == "EBOOT.BIN" and f.parent.name.upper() == "USRDIR"]
+        if eb:
+            return min(eb, key=lambda f: len(f.parts))
+    elif p.id == "ps5":
+        eb = [f for f in files if f.name.lower() == "eboot.bin"]
+        if eb:
+            return min(eb, key=lambda f: len(f.parts))
+    elif p.id == "xbox360":
+        xex = [f for f in files if f.name.lower() == "default.xex"]
+        if xex:
+            return xex[0]
+    elif p.id == "wiiu":
+        rpx = [f for f in files if f.suffix.lower() == ".rpx" and f.parent.name.lower() == "code"]
+        if rpx:
+            return rpx[0]
+    return files[0] if files else root
+
+
+def _sidecars(p: P.Platform, f: Path, files: list[Path]) -> list[Path]:
+    """File .sbi/.sub accanto a immagini disco PSX/Saturn."""
+    if p.id not in ("psx", "saturn") or f.suffix.lower() not in (".cue", ".bin", ".ccd", ".img", ".iso", ".mdf"):
+        return []
+    try:
+        cands = [x for x in f.parent.iterdir() if x.is_file() and x.suffix.lower() in (".sbi", ".sub")]
+    except OSError:
+        return []
+    return [x for x in cands if x.stem.lower() == f.stem.lower()]  # .sub di altri nomi sono sottotitoli, non nostri
+
+
+def _folder_root(p: P.Platform, f: Path, dest: Path, dl_dir: str | Path | None, fresh: list[Path] = ()) -> Path | None:
+    """Cartella radice da spostare intera per layout a cartella (Wii U Loadiine, Xbox 360, MS-DOS).
+    Xbox 360 e DOS solo dentro una cartella estratta da questo download (`fresh`): mai una cartella di download condivisa."""
+    if p.id == "wiiu" and f.suffix.lower() == ".rpx" and f.parent.name.lower() == "code":
+        root = f.parent.parent
+        if (root / "content").is_dir() or (root / "meta").is_dir():
+            return root
+    elif p.id == "xbox360" and f.suffix.lower() == ".xex":
+        root = f.parent
+    elif p.id == "dos" and f.suffix.lower() in (".exe", ".com", ".bat"):
+        root = f.parent
+    else:
+        return None
+    if _norm(root) == _norm(dest) or (dl_dir and _norm(root) == _norm(dl_dir)):
+        return None
+    if p.id != "wiiu" and not any(Path(_norm(root)).is_relative_to(_norm(x)) for x in fresh):
+        return None
+    try:
+        has_extra = any(x != f for x in root.iterdir())
+    except OSError:
+        return None
+    return root if has_extra else None
+
+
+def _place(p: P.Platform, files: list[Path], dest: Path, dl_dir: str | Path | None = None, fresh: list[Path] = ()) -> list[Path]:
+    """Sposta i file (o le cartelle di gioco intere) nella cartella console (regola in cima). Ritorna i percorsi giocabili."""
+    folder = (_tid_folder(dest, files) or _unique(dest / (_name(files[0].stem) or "Gioco"))) if p.dir_games and not any(
+        f.is_dir() or (p.id == "xbox360" and f.name.lower() == "default.xex") for f in files) else None
+    out, moved_roots = [], {}
     for f in files:
-        members = list(dict.fromkeys([f, *_refs(f)]))
+        prev = next(((old, new) for old, new in moved_roots.items() if f == old or f.is_relative_to(old)), None)
+        if prev:
+            old, new = prev
+            out.append(_folder_entry_file(p, new) if f == old else new / f.relative_to(old))
+            continue
+        if f.is_dir():
+            if p.id == "ps3" and f.name.upper() == "PS3_GAME":
+                base = _unique(dest / (_BAD.sub("", f.parent.name).strip() or "Gioco"))
+                base.mkdir(parents=True, exist_ok=True)
+                target = base / f.name
+                shutil.move(str(f), str(target))
+                moved_roots[f] = target
+                out.append(_folder_entry_file(p, base))
+            else:
+                target = _unique(dest / (_BAD.sub("", f.name).strip() or "Gioco"))
+                shutil.move(str(f), str(target))
+                moved_roots[f] = target
+                out.append(_folder_entry_file(p, target))
+            continue
+        if root := _folder_root(p, f, dest, dl_dir, fresh):
+            target = _unique(dest / (_BAD.sub("", root.name).strip() or _name(f.stem) or "Gioco"))
+            shutil.move(str(root), str(target))
+            moved_roots[root] = target
+            out.append(target / f.relative_to(root))
+            continue
+        members = list(dict.fromkeys([f, *_refs(f), *_sidecars(p, f, files)]))
         sub = folder or (_unique(dest / (_BAD.sub("", f.stem).strip() or "Gioco")) if len(members) > 1 else None)
         base = sub or dest
         base.mkdir(parents=True, exist_ok=True)
@@ -210,9 +313,10 @@ def _recheck(ctx, pid: str, placed: list[Path], drop: str | None, say, poll: flo
 
 
 def ingest(ctx, game_id: int | None, platform: str | None, files: list[Path | str], timeout: float = 60,
-           poll: float = 1.0, on_status=None, rule: dict | None = None) -> dict:
+           poll: float = 1.0, on_status=None, rule: dict | None = None, fresh: list[Path] = ()) -> dict:
     """Mette in libreria i giochi scaricati ed estratti (da chiamare in un thread).
     `ctx`: cfg, lib, events, api_scan_start; opzionali job/state (lavori in corso) e downloads (cartella download).
+    `fresh`: cartelle estratte da questo download (solo queste si spostano intere).
     `on_status(msg, level="info")`: cosa sta facendo, per il log del download. Dopo `timeout` secondi senza il gioco in
     libreria (solo scansione normale) smette di aspettare: pending, la scansione continua da sola.
     Ritorna {"ok", "game_id" (id del gioco posseduto, None se non ancora in libreria), "files" (percorsi finali),
@@ -230,16 +334,18 @@ def ingest(ctx, game_id: int | None, platform: str | None, files: list[Path | st
     if not p:
         return {"ok": False, "game_id": None, "files": [], "error": f"Console non valida: {platform!r}"}
     exts = {"." + e for e in p.exts}
-    good = [Path(f) for f in files if Path(f).is_file() and Path(f).suffix.lower() in exts]
+    good = [Path(f) for f in files if (Path(f).is_file() and Path(f).suffix.lower() in exts)
+            or (Path(f).is_dir() and _is_folder_game(p, Path(f)))]
     if not good:
         return {"ok": False, "game_id": None, "files": [],
                 "error": f"Nessun file giocabile per {p.name} (servono: {', '.join(p.exts)})"}
     mgr = getattr(ctx, "downloads", None)
-    dest = target_dir(cfg, p.id, mgr.settings().get("dir") if mgr else None, rule)
+    dl_dir = mgr.settings().get("dir") if mgr else None
+    dest = target_dir(cfg, p.id, dl_dir, rule)
     scanned = _dirs(cfg, p.id)
     # file gia' sotto una cartella console scansionata (es. download dentro la cartella ROM): restano dove sono
     say(f"Cartella della console: {dest}")
-    placed = good if not (rule or {}).get("subfolder") and all(any(Path(_norm(f)).is_relative_to(_norm(d)) for d in scanned) for f in good) else _place(p, good, dest)
+    placed = good if not (rule or {}).get("subfolder") and all(any(Path(_norm(f)).is_relative_to(_norm(d)) for d in scanned) for f in good) else _place(p, good, dest, dl_dir, fresh)
     drop = online["key"] if online and online.get("store") == "online" else None
     if drop:  # il titolo della voce online resta "posseduto" alla ricostruzione
         c = Cache(cfg.cache)

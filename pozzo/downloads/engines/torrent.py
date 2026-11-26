@@ -25,6 +25,7 @@ RESUME_EVERY = 30
 FILES_EVERY = 3  # s: ogni quanto si rifa l'elenco file della vista (avanzamento per file)
 META_TIMEOUT = 240  # secondi: un magnet senza peer non tiene occupato un posto della coda per sempre
 STALL_AFTER = 60  # secondi senza seed e senza dati prima di dichiarare il download «in stallo»
+MAX_TORRENT = 10 * 1024 * 1024  # byte: tetto di un .torrent (caricato o scaricato da un link, anche da RSS)
 PRIORITIES = (0, 1, 4, 7)  # salta, normale, alta, massima
 ENCRYPTION = {"prefer": (1, 3), "require": (0, 2), "disable": (2, 1)}  # -> (in/out_enc_policy, allowed_enc_level)
 
@@ -147,6 +148,13 @@ def disk_full(ec) -> bool:
     return cat == "system" and ec.value() in ((112, 39) if os.name == "nt" else (errno.ENOSPC,))
 
 
+def _info_hash(p) -> str:
+    ih = p.ti.info_hashes() if p.ti else p.info_hashes
+    b = ih.get_best()
+    s = str(b) if (ih.has_v1() or ih.has_v2()) else ""
+    return "" if not s or set(s) == {"0"} else s
+
+
 class Engine:
     """La sessione condivisa (creata al primo torrent) e i torrent attivi, per task id."""
 
@@ -154,6 +162,7 @@ class Engine:
         self.folder = Path(folder)  # resume data: <task id>.fastresume
         self.ses = None
         self.handles: dict = {}
+        self._ih: dict[str, str] = {}  # info-hash -> task id attivo (evita add_torrent duplicati)
         self._pack: dict = {}
         self._resume: dict = {}  # task id -> bytes appena arrivati dall'alert
         self.logs: dict = {}  # task id -> task.log: tracker e errori dei file arrivano come alert
@@ -163,7 +172,6 @@ class Engine:
         self.dead_trackers: dict[str, set[str]] = {}
         self.trackers: list[str] = []  # aggiunti a ogni torrent
         self.pex = True
-        self.seed = (0.0, 0)  # (rapporto, minuti) di condivisione dopo la fine; (0, 0) = nessuna
         self.ip_path = ""  # file dei blocchi IP in uso; ip_error = perche' non e' applicato ("" se va)
         self.ip_error = ""
         self._ranges: list = []
@@ -188,7 +196,6 @@ class Engine:
                 "tracker_completion_timeout": 15, "tracker_receive_timeout": 5,
                 "alert_mask": lt.alert_category.status | lt.alert_category.storage | lt.alert_category.error | lt.alert_category.tracker}
         self.pex = bool(disc.get("pex"))  # per torrent (flag disable_pex): l'estensione non si toglie da una sessione aperta
-        self.seed = (float(s.get("seed_ratio") or 0), int(s.get("seed_minutes") or 0))
         if pack != self._pack:
             self._pack = pack
             if self.ses:
@@ -356,9 +363,14 @@ async def _params(task, eng: Engine, client):
         p.tracker_tiers = [0] * len(valid)
         return p
     if src.lower().startswith(("http://", "https://")):
-        r = await client.get(src)
-        r.raise_for_status()
-        data = r.content
+        async with client.stream("GET", src) as r:
+            r.raise_for_status()
+            data = bytearray()
+            async for chunk in r.aiter_bytes():
+                data += chunk
+                if len(data) > MAX_TORRENT:
+                    raise ValueError("File .torrent troppo grande (oltre 10 MB)")
+        data = bytes(data)
     else:
         data = await asyncio.to_thread(Path(src).expanduser().read_bytes)
     p = lt.add_torrent_params()
@@ -391,9 +403,8 @@ def _ratio(s) -> float:
     return round(s.all_time_upload / max(s.total_wanted_done, 1), 3)
 
 
-async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, space=None) -> None:
-    """Scarica i file scelti di `task`, poi condivide finche' non arriva a eng.seed (rapporto o minuti; chiama on_complete
-    alla fine dello scaricamento) e toglie il torrent dalla sessione. Lo stato sta in task.options. `gate`: attesa di un
+async def run(task, eng: Engine, client, gate=None, space=None) -> None:
+    """Scarica i file scelti di `task`, poi toglie subito il torrent dalla sessione (niente condivisione). Lo stato sta in task.options. `gate`: attesa di un
     posto nella coda quando i metadati arrivano dopo l'attesa (nell'attesa il manager non conta il magnet tra i posti).
     `space`: async fn() -> byte che mancano sul disco per i file scelti (0 = bastano), chiamata una volta coi metadati."""
     dest = Path(task.save_path).resolve()
@@ -403,9 +414,29 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
     p.save_path = str(dest)
     p.flags &= ~(lt.torrent_flags.paused | lt.torrent_flags.auto_managed)  # la coda la fa il manager, non libtorrent
     ses = eng.session()
+    ih = _info_hash(p)
+    ih_map = getattr(eng, "_ih", None)
+    if ih and ih_map is not None:
+        waited_ih = False
+        while ih_map.get(ih) not in (None, task.id):
+            if not waited_ih:
+                waited_ih = True
+                task.phase = "In attesa dello stesso torrent"
+                if gate:
+                    task.options["metadata"] = False  # come l'attesa dei metadati: il posto non e' occupato
+                task.log("Torrent con lo stesso info-hash già attivo: attendo che termini")
+            await asyncio.sleep(POLL)
+        if waited_ih:
+            task.phase = ""
+            if gate:
+                await gate()  # un posto va richiesto di nuovo
+                task.options["metadata"] = True
+        ih_map[ih] = task.id
     try:
         h = ses.add_torrent(p)
     except RuntimeError as e:
+        if ih and ih_map is not None and ih_map.get(ih) == task.id:
+            ih_map.pop(ih, None)
         raise ValueError(f"Torrent non aggiunto: {e}")
     eng.handles[task.id] = h
     eng.logs[task.id] = task.log
@@ -436,7 +467,7 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
     if task.options.pop("recheck", None):
         h.force_recheck()
         task.log("Ricontrollo dei file su disco")
-    ready, last_save, start, seeding = False, time.monotonic(), time.monotonic(), 0.0
+    ready, last_save, start = False, time.monotonic(), time.monotonic()
     state, peers, meta, mile, idle_since, waited = None, False, False, None, None, False
     spaced = False  # controllo dello spazio fatto (una volta per avvio)
     fcache = None  # (priorita', quando, indici dei file voluti, byte voluti, finito) dell'ultimo elenco file costruito
@@ -461,8 +492,9 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
                     ip, _, port = str(peer).rpartition(":")
                     h.connect_peer((ip, int(port)))
             waited = waited or not s.has_metadata
-            task.options.update(metadata=s.has_metadata, peers=s.num_peers, seeds=s.num_seeds, upload_rate=s.upload_rate,
-                                sequential=bool(task.options.get("sequential")), ratio=_ratio(s), trackers=len(h.trackers()),
+            task.options.update(metadata=(s.has_metadata and meta), peers=s.num_peers, seeds=s.num_seeds,
+                                upload_rate=s.upload_rate, sequential=bool(task.options.get("sequential")),
+                                ratio=_ratio(s), trackers=len(h.trackers()),
                                 bad_trackers=list(eng.dead_trackers.get(task.id, set())))
             # in stallo: scarica ma non c'e' nessun seed e non arriva un byte (i peer parziali non bastano)
             idle = st == "downloading" and not s.num_seeds and s.download_rate < 1
@@ -486,13 +518,15 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
                     task.log(f"Metadati ricevuti: {ti.name()}, {len(real)} file, {mb(ti.total_size())}")
                 if not ready:
                     prio = _select(task, h)
+                    locked = bool(task.options.get("wanted") or _so_indexes(task.source))
                     task.log(f"File scelti: {sum(1 for i in real if prio[i])} di {len(real)}")
-                    task.options["priorities"] = {str(i): v for i, v in enumerate(prio)}
+                    task.options["priorities"] = {str(i): v for i, v in enumerate(prio) if (not locked or v)}
                     h.prioritize_files(prio)
                     if not task.name:  # il nome del set («Minerva_Myrient») non dice niente: con un file solo vale il suo nome
                         chosen = [i for i in real if prio[i]]
                         task.name = Path(fs.file_path(chosen[0])).stem if len(chosen) == 1 else ti.name()
                     ready = True
+                locked = bool(task.options.get("wanted") or _so_indexes(task.source))
                 prio = [int(task.options["priorities"].get(str(i), 0)) for i in range(fs.num_files())]
                 prog = h.file_progress()
                 # l'elenco file (con l'avanzamento di ognuno) si rifa ogni FILES_EVERY s, subito se cambiano le priorita' e
@@ -503,7 +537,8 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
                 else:
                     files = [{"index": i, "name": fs.file_path(i), "size": fs.file_size(i), "priority": prio[i],
                               "progress": prog[i] / fs.file_size(i) if fs.file_size(i) else 1.0}
-                             for i in range(fs.num_files()) if not fs.file_flags(i) & lt.file_storage.flag_pad_file]
+                             for i in range(fs.num_files())
+                             if not fs.file_flags(i) & lt.file_storage.flag_pad_file and (not locked or prio[i])]
                     task.options["files"] = files
                     wanted, task.size = [f["index"] for f in files if f["priority"]], sum(f["size"] for f in files if f["priority"])
                     fcache = (prio, time.monotonic(), wanted, task.size, sum(prog[i] for i in wanted) >= task.size)
@@ -521,16 +556,8 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
                 elif m > mile:
                     mile = m
                     task.log(f"Avanzamento {m * 10}% ({mb(task.done)} di {mb(task.size)})")
-                if task.done >= task.size:
-                    ratio, minutes = task.options.get("seed_limits") or eng.seed  # quelli della categoria prevalgono
-                    if not seeding and (ratio or minutes):
-                        await eng.save(task.id)
-                        seeding = time.monotonic()
-                        on_complete()  # completato per la coda; il torrent resta a condividere
-                    if not (ratio or minutes) or (ratio and _ratio(s) >= ratio) or (minutes and time.monotonic() - seeding >= minutes * 60):
-                        if seeding:
-                            task.options["seed_reached"] = True  # il manager applica l'azione (pausa o rimuovi)
-                        break
+                if task.done >= task.size and s.is_finished:
+                    break
             if time.monotonic() - last_save > RESUME_EVERY:
                 await eng.save(task.id)
                 last_save = time.monotonic()
@@ -543,3 +570,5 @@ async def run(task, eng: Engine, client, on_complete=lambda: None, gate=None, sp
     finally:
         eng.logs.pop(task.id, None)
         await eng.remove(task.id)
+        if ih and ih_map is not None and ih_map.get(ih) == task.id:
+            ih_map.pop(ih, None)

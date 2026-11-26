@@ -231,3 +231,46 @@ def test_limite_tolto_o_alzato_vale_entro_un_secondo(clock):
         await b.take(1)
         return now["t"] - t0
     assert run(faster()) <= 1.0
+
+
+def test_non_ranged_non_azzera_fails_su_chunk_parziale(tmp_path, monkeypatch):
+    """Senza Range il cursore riparte da 0: ricevere qualche byte prima di cadere non deve azzerare fails."""
+    import httpx
+    calls = [0]
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"a" * H.CHUNK
+            raise httpx.ReadError("drop")
+
+    def handler(req):
+        calls[0] += 1
+        if calls[0] > 6:
+            raise RuntimeError("loop infinito")
+        return httpx.Response(200, headers={"Content-Length": str(H.CHUNK * 2)}, stream=Stream())
+
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(H, "RETRIES", 2)
+    monkeypatch.setattr(H.asyncio, "sleep", no_sleep)
+    t = _task(tmp_path, "https://x.test/f.bin")
+
+    async def main():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+            await H.run(t, c, H.Bucket(), 1, lambda u: u)
+
+    with pytest.raises(httpx.TransportError, match="troppi tentativi"):
+        asyncio.run(main())
+    assert calls[0] == 3  # 1 tentativo iniziale + 2 retry, non loop infinito
+
+
+def test_part_rimosso_dopo_completamento(tmp_path):
+    """A download HTTP completato `options['part']` va tolto: cancellare il vecchio task non tocca un nuovo .part."""
+    s, base = _serve({"/ok.bin": b"contenuto"})
+    try:
+        t = _task(tmp_path, base + "/ok.bin")
+        _go(t)
+        assert "part" not in t.options
+    finally:
+        s.shutdown()

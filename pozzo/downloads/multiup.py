@@ -38,7 +38,8 @@ def is_page(url: str) -> bool:
 
 
 def _get(url: str, **kw) -> httpx.Response:  # unico punto di rete
-    with httpx.Client(headers=hosts.HEADERS, timeout=hosts.TIMEOUT, **iface.client_kw()) as s:
+    with httpx.Client(headers=hosts.HEADERS, timeout=hosts.TIMEOUT,
+                      event_hooks={"response": [hosts._redirect_public]}, **iface.client_kw()) as s:
         return s.get(url, **kw)
 
 
@@ -70,7 +71,10 @@ def _hop(url: str) -> str:
     """Un solo salto di /redirect/ senza seguirlo: il Location e' l'host vero."""
     if "/redirect/" not in urlsplit(url).path:
         return url
-    return urljoin(url, _get(url, follow_redirects=False, timeout=8).headers.get("location") or "")
+    loc = urljoin(url, _get(url, follow_redirects=False, timeout=8).headers.get("location") or "")
+    if loc and loc != url:
+        hosts.assert_public(loc)
+    return loc
 
 
 def _name(html: str) -> str:
@@ -90,6 +94,8 @@ def _tries(url: str) -> list[str]:
 def _unhop(m: dict) -> dict:
     try:
         final = _hop(m["url"])
+    except hosts.UnsafeURL:
+        return {**m, "live": False}
     except httpx.HTTPError:
         final = ""
     if final and hosts.host(final) not in _HOSTS:
@@ -108,7 +114,7 @@ def mirrors(url: str) -> dict:
     for u in _tries(url):
         try:
             r = _get(u, follow_redirects=True)
-        except httpx.HTTPError:
+        except (httpx.HTTPError, hosts.UnsafeURL):
             reason = "MultiUp non risponde"
             continue
         found = _mirrors(r.text, str(r.url))

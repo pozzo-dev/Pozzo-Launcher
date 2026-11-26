@@ -251,7 +251,8 @@ async def _download(task, client, bucket, segments, url, headers, first, meta):
                             await bucket.take(len(chunk))
                             f.write(chunk)
                             seg[2] += len(chunk)
-                            fails = 0
+                            if ranged:
+                                fails = 0
                             sync_done()
                             if seg[1] >= 0 and seg[2] > seg[1]:
                                 break
@@ -299,7 +300,7 @@ async def _download(task, client, bucket, segments, url, headers, first, meta):
             raise HashMismatch(f"SHA-256 diverso da quello atteso: {final.name} messo in quarantena")
     final.unlink(missing_ok=True)
     part.replace(final)
-    for k in ("segs", "url", "url_at"):
+    for k in ("part", "segs", "url", "url_at"):
         task.options.pop(k, None)
     task.name = final.name
     task.size = task.size or task.done

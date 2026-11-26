@@ -97,13 +97,12 @@ def build_router(ctx) -> APIRouter:
                 continue
             status = {"completed": "done", "error": "error", "paused": "cancelled"}.get(t["status"], "running")
             speed = f" · {t['speed'] / 1048576:.1f} MB/s" if t["status"] == "running" and t["speed"] else ""
-            seeding = bool(t["options"].get("seeding"))
-            phase = {"queued": I.tr("s.activity.queued"), "paused": I.tr("s.activity.paused"), "completed": I.tr("s.activity.seedingDone") if seeding else I.tr("s.activity.done"),
+            phase = {"queued": I.tr("s.activity.queued"), "paused": I.tr("s.activity.paused"), "completed": I.tr("s.activity.done"),
                      "error": t["error"] or I.tr("s.activity.error")}.get(t["status"], f"{t['progress']:.0%}{speed}")
             out.append({"id": jid, "name": f"Download · {t['name'] or t['source'][:60]}", "kind": "download",
                         "status": status, "phase": phase, "progress": round(t["progress"], 3),
                         "started": t["created"], "finished": t["finished"],
-                        "stoppable": t["status"] in ("queued", "running") or seeding, "last": t["save_path"]})
+                        "stoppable": t["status"] in ("queued", "running"), "last": t["save_path"]})
         return out
 
     def _install_rows() -> list[dict]:

@@ -226,6 +226,56 @@ def test_risoluzione(tmp_path):
     print("ok  accorciatori: link vero tramite il browser, risultato in cache, fallback al link originale")
 
 
+def test_ouo_salta_httpx_e_token_cdn_non_in_cache(tmp_path, monkeypatch):
+    """ouo.io/ouo.press saltano httpx.Client se c'e' il browser; URL CDN con token /d/<tok>/... non vanno in cache."""
+    assert "zippyshare.com" not in SL.FILE_HOSTS
+    cfg = config.load(_make_cfg(tmp_path))
+    c = Cache(cfg.cache)
+    try:
+        http_calls = []
+
+        class BoomClient:
+            def __init__(self, *a, **kw):
+                http_calls.append(1)
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def get(self, *a, **kw): raise AssertionError("non doveva chiamare httpx")
+
+        monkeypatch.setattr(SL.httpx, "Client", BoomClient)
+        SL.set_resolver(lambda u: "https://s12.datanodes.to/d/abc123def456ghi789/Gioco.nsp"
+                        if "tok" in u else "https://datanodes.to/abc123/Gioco.nsp")
+        assert SL.resolve(c, "https://ouo.io/page1") == "https://datanodes.to/abc123/Gioco.nsp"
+        assert SL.resolve(c, "https://ouo.press/tok1") == "https://s12.datanodes.to/d/abc123def456ghi789/Gioco.nsp"
+        assert http_calls == []
+        assert c.kv_get(SL.RESOLVED_PREFIX + "https://ouo.io/page1", SL.RESOLVED_TTL) == "https://datanodes.to/abc123/Gioco.nsp"
+        assert c.kv_get(SL.RESOLVED_PREFIX + "https://ouo.press/tok1", SL.RESOLVED_TTL) is None
+    finally:
+        SL.set_resolver(None)
+        c.close()
+
+
+def test_redirect_ssrf_rifiutato_in_storelinks(tmp_path, monkeypatch):
+    """Un redirect di un accorciatore verso rete locale viene bloccato da assert_public."""
+    import httpx
+    import pytest
+    cfg = config.load(_make_cfg(tmp_path))
+    c = Cache(cfg.cache)
+
+    def handler(req):
+        if req.url.host == "ouo.io":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1:9999/secret"})
+        raise AssertionError(f"SSRF raggiunto: {req.url}")
+
+    real_client = httpx.Client
+    monkeypatch.setattr(SL.httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    SL.set_resolver(None)
+    try:
+        with pytest.raises(ValueError, match="rete locale"):
+            SL.resolve(c, "https://ouo.io/ssrf")
+    finally:
+        c.close()
+
+
 def test_api(tmp_path):
     """La scheda del gioco riceve tutti i link; «Scarica» li mette in coda per il manager."""
     cfg = config.load(_make_cfg(tmp_path))

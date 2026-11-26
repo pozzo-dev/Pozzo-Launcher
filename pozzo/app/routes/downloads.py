@@ -100,7 +100,10 @@ def build_router(ctx) -> APIRouter:
 
     @router.post("/api/downloads")
     def api_downloads_add(body: dict = Body(...)):
-        links = [str(x) for x in body.get("links") or [body.get("source") or ""] if str(x).strip()][:50]
+        raw = body.get("links") or [body.get("source") or ""]
+        if not isinstance(raw, list) or not isinstance(body.get("save_path") or "", str)                 or not isinstance(body.get("mirrors") or [], list):
+            raise HTTPException(400, I.tr("s.downloads.link_invalid"))  # tipi sbagliati: non un 500
+        links = [str(x) for x in raw if str(x).strip()][:50]
         if not links:
             raise HTTPException(400, I.tr("s.downloads.no_link"))
         out = []
@@ -275,8 +278,8 @@ def build_router(ctx) -> APIRouter:
     @router.post("/api/downloads/torrent-file")
     async def api_downloads_torrent_file(file: UploadFile = File(...), save_path: str = Form(""),
                                          start_at: str = Form(""), days: str = Form(""), force: str = Form("")):
-        data = await file.read(10 * 1024 * 1024 + 1)
-        if len(data) > 10 * 1024 * 1024:
+        data = await file.read(TOR.MAX_TORRENT + 1)
+        if len(data) > TOR.MAX_TORRENT:
             raise HTTPException(400, I.tr("s.downloads.torrent_too_big"))
         if not TOR.available():
             raise HTTPException(400, I.tr("s.downloads.need_libtorrent"))

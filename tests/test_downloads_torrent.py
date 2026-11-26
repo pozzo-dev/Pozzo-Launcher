@@ -94,7 +94,9 @@ def test_solo_il_file_scelto(swarm, tmp):
     assert (tmp / "out" / "set" / "b.bin").read_bytes() == swarm.data["b.bin"]
     assert not (tmp / "out" / "set" / "a.bin").exists()
     assert t.size == len(swarm.data["b.bin"])
-    assert [f["priority"] for f in t.options["files"]] == [0, 4]
+    assert [f["priority"] for f in t.options["files"]] == [4]
+    assert [f["name"].replace("\\", "/") for f in t.options["files"]] == ["set/b.bin"]
+    assert t.options["priorities"] == {"1": 4}
     m.stop()
 
 
@@ -130,7 +132,7 @@ def test_ripresa_dopo_riavvio_usa_i_resume_data(swarm, tmp):
     m2.resume(t.id)
     t2 = m2.tasks[t.id]
     assert _wait(lambda: t2.options.get("metadata") and t2.options.get("files"))
-    assert [f["priority"] for f in t2.options["files"]] == [0, 4]  # anche la scelta dei file e' sopravvissuta
+    assert [f["priority"] for f in t2.options["files"]] == [4]  # anche la scelta dei file e' sopravvissuta
     swarm.seed.apply_settings({"upload_rate_limit": 0})
     t2.options["connect"] = [swarm.peer]
     assert _wait(lambda: t2.status == T.COMPLETED), (t2.status, t2.error)
@@ -266,40 +268,16 @@ def test_tracker_aggiunti_anche_dal_vivo_e_limiti_per_torrent(swarm, tmp):
     m.stop()
 
 
-def test_condivisione_dopo_la_fine_non_occupa_posti(swarm, tmp):
-    m = _mgr(tmp, seed_ratio=50, max_active=1)
-    m.start()
-    t = m.add(str(swarm.torrent), connect=[swarm.peer])
-    assert _wait(lambda: t.status == T.COMPLETED), (t.status, t.error)
-    assert t.options["seeding"] is True and t.id in m._torrent.handles and t.finished
-    assert "ratio" in t.view()["options"]
-    u = m.add(swarm.magnet, force=True)  # l'unico posto e' libero: chi condivide non lo occupa (stesso torrent apposta)
-    assert _wait(lambda: u.status == T.RUNNING)
-    m.pause(t.id)  # ferma la condivisione, resta completato
-    assert _wait(lambda: t.id not in m._torrent.handles and "seeding" not in t.options)
-    assert t.status == T.COMPLETED
-    m.stop()
-
-
-def test_condivisione_riparte_dopo_il_riavvio(swarm, tmp):
-    m = _mgr(tmp, seed_ratio=50)
+def test_nessuna_condivisione_dopo_la_fine(swarm, tmp):
+    """A download finito il torrent esce subito dalla sessione e parte il post-download: niente seeding."""
+    m = _mgr(tmp, seed_ratio=50)  # vecchia impostazione: ignorata
     got = []
     m.on_completed = got.append
     m.start()
     t = m.add(str(swarm.torrent), connect=[swarm.peer])
-    assert _wait(lambda: t.status == T.COMPLETED and t.options.get("seeding")), (t.status, t.error)
-    finished = t.finished
-    m.stop()  # chiusura del launcher: non e' una fine della condivisione
-    assert t.options.get("seeding") is True and t.status == T.COMPLETED
-    m2 = _mgr(tmp, seed_ratio=50)
-    m2.on_completed = got.append
-    m2.start()
-    t2 = m2.tasks[t.id]
-    assert _wait(lambda: t2.id in m2._torrent.handles), t2.options
-    assert t2.options["seeding"] is True and t2.status == T.COMPLETED and t2.finished == finished
-    m2.pause(t2.id)  # fermata a mano: finisce davvero, e solo ora parte il post-download
-    assert _wait(lambda: "seeding" not in t2.options and len(got) == 1), (t2.options, got)
-    m2.stop()
+    assert _wait(lambda: t.status == T.COMPLETED and len(got) == 1), (t.status, t.error, got)
+    assert "seeding" not in t.options and t.id not in m._torrent.handles and t.finished
+    m.stop()
 
 
 def test_cancella_torrent_caricato_con_i_file(swarm, tmp):
@@ -515,4 +493,74 @@ def test_disco_pieno_durante_il_torrent_mette_in_pausa(tmp, monkeypatch):
     assert _wait(lambda: t.status == T.PAUSED, 30), (t.status, t.error)
     assert t.error.startswith("Disco pieno") and t.options["disk_full"] and m._batch == [0, 0]
     m.cancel(t.id)  # senza, il ciclo lo riprenderebbe (size 10 sta nel disco) mentre la cartella di prova sparisce
+    m.stop()
+
+
+def test_is_finished_richiesto_prima_di_completare(tmp, monkeypatch):
+    """task.done >= task.size non basta: serve s.is_finished (pezzi verificati da libtorrent)."""
+    import asyncio
+    polls = [0]
+
+    class FakeFS:
+        def num_files(self): return 1
+        def file_flags(self, i): return 0
+        def file_path(self, i): return "set/g.bin"
+        def file_size(self, i): return 100
+
+    class FakeTI:
+        def name(self): return "set"
+        def total_size(self): return 100
+        def num_files(self): return 1
+
+    class FakeHandle:
+        def is_valid(self): return True
+        def set_flags(self, f): pass
+        def unset_flags(self, f): pass
+        def trackers(self): return []
+        def replace_trackers(self, tr): pass
+        def force_reannounce(self): pass
+        def torrent_file(self): return FakeTI()
+        def prioritize_files(self, p): pass
+        def file_progress(self): return [100]
+        def status(self):
+            polls[0] += 1
+            return SimpleNamespace(
+                errc=SimpleNamespace(value=lambda: 0, message=lambda: ""),
+                state="downloading" if polls[0] < 3 else "finished",
+                num_peers=1, num_seeds=1, upload_rate=0, download_rate=0,
+                has_metadata=True, all_time_upload=0, total_wanted_done=100,
+                is_finished=(polls[0] >= 3),
+            )
+
+    monkeypatch.setattr(TOR, "POLL", 0.01)
+    monkeypatch.setattr(TOR, "_layout", lambda ti: FakeFS())
+
+    class FakeEng:
+        folder = tmp
+        handles = {}
+        logs = {}
+        dead_trackers = {}
+        pex = True
+        def resume_file(self, tid): return tmp / f"{tid}.fastresume"
+        def session(self): return SimpleNamespace(add_torrent=lambda p: FakeHandle())
+        def add_trackers(self, h, task=None): pass
+        def _pump(self): pass
+        async def save(self, tid): pass
+        async def remove(self, tid): self.handles.pop(tid, None)
+
+    t = T.DownloadTask(source="magnet:?xt=urn:btih:" + "e" * 40, save_path=str(tmp), type="torrent")
+    asyncio.run(TOR.run(t, FakeEng(), None))
+    assert polls[0] >= 3
+
+
+def test_due_task_concorrenti_stesso_info_hash(swarm, tmp):
+    """Due download Minerva concorrenti con lo stesso info-hash non falliscono con 'Torrent non aggiunto'."""
+    m = _mgr(tmp, max_active=2)
+    m.start()
+    t1 = m.add(swarm.magnet, connect=[swarm.peer], wanted="a.bin", force=True)
+    t2 = m.add(swarm.magnet, connect=[swarm.peer], wanted="b.bin", force=True)
+    assert _wait(lambda: (t1.status == T.COMPLETED and t2.status == T.COMPLETED) or t1.status == T.ERROR or t2.status == T.ERROR, 90)
+    assert t1.status == T.COMPLETED and t2.status == T.COMPLETED, ((t1.status, t1.error), (t2.status, t2.error))
+    assert (tmp / "out" / "set" / "a.bin").read_bytes() == swarm.data["a.bin"]
+    assert (tmp / "out" / "set" / "b.bin").read_bytes() == swarm.data["b.bin"]
     m.stop()

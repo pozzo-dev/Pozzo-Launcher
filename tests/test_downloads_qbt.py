@@ -1,4 +1,4 @@
-"""Funzioni «alla qBittorrent»: categorie e tag, cartella degli incompleti, limiti per categoria, IP filter, RSS."""
+"""Funzioni «alla qBittorrent»: categorie e tag, cartella degli incompleti, IP filter, RSS."""
 import asyncio
 import sys
 from pathlib import Path
@@ -26,11 +26,11 @@ def _mgr(tmp, **dl):
 # ------------------------------------------------------------ categorie e tag
 def test_categorie_validate_e_cartella(tmp):
     m = _mgr(tmp)
-    cats = [{"name": "Giochi", "folder": str(tmp / "giochi"), "seed_ratio": "2", "seed_minutes": 30, "action": "remove"}, {"name": "Altro"}]
+    cats = [{"name": "Giochi", "folder": str(tmp / "giochi"), "seed_ratio": "2", "action": "remove"}, {"name": "Altro"}]
     s = m.update_settings({"categories": cats})
-    assert s["categories"][0] == {"name": "Giochi", "folder": str(tmp / "giochi"), "seed_ratio": 2.0, "seed_minutes": 30, "action": "remove"}
+    assert s["categories"][0] == {"name": "Giochi", "folder": str(tmp / "giochi")}  # vecchi campi di condivisione scartati
     assert (tmp / "giochi").is_dir() and s["categories"][1]["folder"] == ""
-    for bad in ("x", [{"name": ""}], [{"name": "A"}, {"name": "a"}], [{"name": "A", "action": "boh"}],
+    for bad in ("x", [{"name": ""}], [{"name": "A"}, {"name": "a"}],
                 [{"name": "A", "folder": str(tmp / "out" / "f.txt" / "x")}]):
         if bad != "x" and "f.txt" in str(bad):
             (tmp / "out").mkdir(exist_ok=True)
@@ -135,39 +135,6 @@ def test_incompleti_nel_post_prima_di_on_completed(tmp):
 def test_senza_incompleti_comportamento_di_prima(tmp):
     t = _mgr(tmp).add("https://x.example/a.zip")
     assert t.save_path == str(tmp / "out") and "final_dir" not in t.options
-
-
-# ------------------------------------------------------------ limiti di condivisione per categoria
-def test_limiti_categoria_prevalgono(tmp):
-    pytest.importorskip("libtorrent")
-    m = _mgr(tmp, seed_ratio=1.0, seed_minutes=10, seed_action="pause",
-             categories=[{"name": "k", "seed_ratio": 3, "seed_minutes": 0, "action": "remove"}, {"name": "v"}])
-    t = m.add(MAGNET, category="k")
-    m._apply_seed(t)
-    assert t.options["seed_limits"] == [3.0, 10] and t.options["seed_action"] == "remove"  # minuti: globali (0 = non impostato)
-    m.set_category(t.id, "v")
-    assert "seed_limits" not in t.options and t.options["seed_action"] == "pause"  # globali, live nel motore
-
-
-@pytest.mark.parametrize("action", ["remove", "pause"])
-def test_azione_a_limite_raggiunto(tmp, monkeypatch, action):
-    pytest.importorskip("libtorrent")
-    m = _mgr(tmp, categories=[{"name": "k", "seed_ratio": 1, "action": action}])
-    t = m.add(MAGNET, category="k")
-
-    async def fake(task, eng, client, done, gate=None, space=None):  # il motore: ha condiviso fino al limite
-        task.options.update(seeding=True, seed_reached=True)
-        task.status = T.COMPLETED
-
-    monkeypatch.setattr(TOR, "run", fake)
-    m._client = None
-    asyncio.run(m._job(t, 0))
-    assert not t.options.get("seeding") and "seed_reached" not in t.options
-    m._auto_resume()
-    if action == "remove":
-        assert t.options["autoremove"] and t.id not in m.tasks  # via dalla lista
-    else:
-        assert t.options["seed_stopped"] and t.id in m.tasks and t.status == T.COMPLETED
 
 
 # ------------------------------------------------------------ IP filter

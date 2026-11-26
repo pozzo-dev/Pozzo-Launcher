@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 import re
 import sys
-import threading
 import time
 from urllib.parse import urlparse
 
-from ..downloads import hosts as H
+from .. import storelinks as SL
+from ..downloads import hosts as H, multiup as M
 
 TIMEOUT = 75.0
 _URI = {"value": ""}
@@ -24,7 +24,7 @@ _REASON = {"why": ""}
 _HOOKED = {"on": False}
 SHOW = {"fn": None}  # impostata dal gestore dei download: True = finestra visibile
 _NEWWIN: list[str] = []  # indirizzi che la pagina ha provato ad aprire in una finestra nuova
-_LOCK = threading.Lock()  # una finestra alla volta: URI, motivo e titolo sono unici, due risoluzioni insieme si pesterebbero
+_LOCK = SL._LOCK  # lock unico con storelinks: una finestra alla volta, niente doppi browser o attesa doppia
 TITLE = "Pozzo (risoluzione)"  # titolo unico: gli agganci riconoscono da qui la finestra nascosta e non toccano le altre
 OFFSCREEN = -32000  # dove nasce (e resta) la finestra: anche se la piattaforma la mostrasse, fuori dallo schermo
 
@@ -408,6 +408,7 @@ def _resolve(link: str, timeout: float) -> str | None:
     page, page_at = "", 0.0  # pagina di destinazione: si aspetta un attimo se il download parte li'
     watch = Watch(win, t0, hidden=not show)
     nw_seen = 0
+    jumped = False  # il salto al mirror MultiUp si fa una volta sola, senza allungare il tempo
     try:
         while time.time() < end:
             time.sleep(0.5)
@@ -437,6 +438,23 @@ def _resolve(link: str, timeout: float) -> str | None:
                             pass
                     if not available() or h not in H.BROWSER_ONLY:
                         return cur  # host con un risolutore suo (1fichier, MegaUp…): lo fa lui
+                elif M.is_page(cur):
+                    if cur != seen:
+                        seen = cur
+                        _step("Browser nascosto: pagina MultiUp, cerco il mirror")
+                    if available() and not jumped:
+                        mirror, _ = M.find(cur)
+                        if mirror and H.host(mirror) in H.BROWSER_ONLY:
+                            _step(f"Browser nascosto: apro il mirror {H.host(mirror)}")
+                            start = mirror.rstrip("/")
+                            page, page_at = "", 0.0
+                            jumped = True
+                            if hasattr(win, "load_url"):
+                                win.load_url(mirror)
+                            else:
+                                win.evaluate_js(f"location.href = {json.dumps(mirror)}")
+                            continue
+                    return cur
                 else:
                     # pagina di destinazione: alcuni host la usano come salto verso il download vero
                     # (megaup -> download.megaup.net), quindi si lascia un attimo per vederlo partire

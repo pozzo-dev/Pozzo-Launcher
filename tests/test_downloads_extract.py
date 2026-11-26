@@ -432,3 +432,99 @@ def test_avanzamento_7z_con_nome_lungo(monkeypatch):
     seen.clear()
     E._run7z(["7z"], lambda: False, lambda done, total: seen.append(done * 100 // total), 1000)
     assert seen == [10, 50, 75, 100]
+
+
+def test_via7z_listing_oltre_4000_char_non_tronca(tmp_path, dest, monkeypatch):
+    """Un listing 7z > 4000 byte non deve troncare le prime voci (traversal / password / somma)."""
+    s = tmp_path / "big7z.py"
+    s.write_text('''
+import os, sys
+a = sys.argv[1:]
+if a[0] == "l":
+    mode = os.environ.get("MODE", "evil")
+    first = "../evil.txt" if mode == "evil" else "Game/first.bin"
+    enc = "+" if mode == "enc" else "-"
+    print(f"Path = {first}\\nSize = 10\\nFolder = -\\nEncrypted = {enc}\\n")
+    for i in range(80):
+        print(f"Path = Game/pad_{i:03d}_{'x'*40}.bin\\nSize = 1\\nFolder = -\\nEncrypted = -\\n")
+    sys.exit(0)
+out = [x[2:] for x in a if x.startswith("-o")][0]
+os.makedirs(out + "/Game", exist_ok=True)
+open(out + "/Game/first.bin", "wb").write(b"a" * 10)
+''', encoding="utf-8")
+    monkeypatch.setattr(E, "_sevenzip", lambda: [sys.executable, str(s)])
+    f = rarfile_path(tmp_path)
+    monkeypatch.setenv("MODE", "evil")
+    with pytest.raises(E.ArchiveError, match="non sicuro"):
+        E.extract(f, dest)
+    monkeypatch.setenv("MODE", "enc")
+    with pytest.raises(E.PasswordRequired):
+        E.extract(f, dest)
+    monkeypatch.setenv("MODE", "ok")
+    seen = []
+    assert E.extract(f, dest, on_progress=lambda d, t: seen.append((d, t)))
+    assert list(dest.iterdir())
+
+
+def test_via7z_e_rarfile_rifiutano_symlink_e_limite_reale(tmp_path, dest, monkeypatch):
+    """Symlink rifiutati prima dell'estrazione; cap reale dei byte estratti applicato anche a 7z e rarfile."""
+    s = tmp_path / "sec7z.py"
+    s.write_text('''
+import os, sys
+a = sys.argv[1:]
+if a[0] == "l":
+    attrs = os.environ.get("FAKE_ATTRS", "A")
+    print(f"Path = Game/a.bin\\nSize = 5\\nFolder = -\\nAttributes = {attrs}\\nEncrypted = -\\n")
+    sys.exit(0)
+if os.environ.get("FAKE_SYMLINK"):
+    raise RuntimeError("non doveva estrarre")
+out = [x[2:] for x in a if x.startswith("-o")][0]
+os.makedirs(out + "/Game", exist_ok=True)
+open(out + "/Game/a.bin", "wb").write(b"x" * 100)
+''', encoding="utf-8")
+    monkeypatch.setattr(E, "_sevenzip", lambda: [sys.executable, str(s)])
+    f = rarfile_path(tmp_path)
+    monkeypatch.setenv("FAKE_ATTRS", " lrwxrwxrwx")
+    monkeypatch.setenv("FAKE_SYMLINK", "1")
+    with pytest.raises(E.ArchiveError, match="simbolico"):
+        E.extract(f, dest)
+    monkeypatch.setenv("FAKE_ATTRS", "A")
+    monkeypatch.delenv("FAKE_SYMLINK")
+    with pytest.raises(E.ArchiveError, match="piu' dati"):
+        E.extract(f, dest, max_bytes=20)
+    assert list(dest.iterdir()) == []
+
+    import rarfile
+    monkeypatch.setattr(E, "_sevenzip", lambda: None)
+    monkeypatch.setattr(rarfile, "tool_setup", lambda *a, **k: None)
+    extracted_calls = []
+
+    class Info:
+        def __init__(self, n, size, sym=False):
+            self.filename, self.file_size, self._sym = n, size, sym
+        def is_dir(self): return False
+        def is_symlink(self): return self._sym
+
+    mode = ["sym"]
+
+    class RF:
+        def __init__(self, p): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def infolist(self): return [Info("Game/a.bin", 5, sym=(mode[0] == "sym"))]
+        def needs_password(self): return False
+        def extract(self, i, path, pwd=None):
+            extracted_calls.append(i.filename)
+            p = Path(path) / i.filename
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"x" * 100)
+
+    monkeypatch.setattr(rarfile, "RarFile", RF)
+    rf = touch(tmp_path, "sym.rar")[0]
+    with pytest.raises(E.ArchiveError, match="simbolico"):
+        E.extract(rf, dest)
+    assert extracted_calls == []
+    mode[0] = "bomb"
+    with pytest.raises(E.ArchiveError, match="piu' dati"):
+        E.extract(rf, dest, max_bytes=20)
+    assert list(dest.iterdir()) == []
