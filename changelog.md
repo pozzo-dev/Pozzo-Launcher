@@ -1,7 +1,6 @@
 # Changelog
 
-## Non rilasciato
-
+## 0.21.0 (2026-11-26)
 ### Corretto
 
 - **Download**: le ROM zip di MAME/NeoGeo restano intere in libreria, gli archivi annidati (un .7z con uno .zip dentro) si estraggono fino alla ROM, e le cartelle di gioco (PS3, Wii U, Xbox 360, MS-DOS) e i file di corredo dei CD (.sbi, .sub) vengono spostati insieme.
