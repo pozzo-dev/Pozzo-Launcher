@@ -106,20 +106,12 @@ def _legacy(cfg, key: str):
 def _load(p: Path) -> dict:
     """Legge il file del profilo. Se e' illeggibile (bloccato) alza l'errore: ripartire da {} cancellerebbe gli account.
     Un JSON rotto va in <nome>.rotto.json, come settings.json."""
-    if not p.exists():
-        return {}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except ValueError:
-        os.replace(p, p.with_suffix(".rotto.json"))
-        return {}
+    return C.read_json_bak(p, quarantine=True)
 
 
 def _save(p: Path, data: dict):
-    tmp = p.with_suffix(".tmp")
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    C._replace(tmp, p)
+    C.write_json_atomic(p, data)
 
 
 def get(cfg, key: str, default=None):

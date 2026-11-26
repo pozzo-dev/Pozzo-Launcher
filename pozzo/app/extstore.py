@@ -236,8 +236,11 @@ def remove_source(cfg, link: str) -> list[str]:
 def install(cfg, ext_id: str, source: str | None = None) -> dict:
     if source and source not in (s["link"] for s in sources(cfg)):
         raise ValueError("fonte sconosciuta: aggiungila prima allo store")
-    found = fetch_source(source)[0] if source else fetch_all(cfg)[0]
+    found, report = (fetch_source(source)[0], []) if source else fetch_all(cfg)
     e = next((x for x in found if x["id"] == ext_id), None)
+    # store ufficiale irraggiungibile: una fonte di terzi non deve prendere il posto di un'estensione gia' nota
+    if e and not source and not e.get("official") and any(r["official"] and r["errors"] for r in report)             and any(p["id"] == ext_id for p in X.list_plugins(cfg)):
+        raise ValueError("store ufficiale non raggiungibile: non installo/aggiorno questa estensione da una fonte di terzi")
     if e is None:
         raise ValueError(f"estensione non trovata nelle fonti: {ext_id}")
     if not compatible(e):

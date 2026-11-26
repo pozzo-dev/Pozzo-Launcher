@@ -35,7 +35,10 @@ def build_router(ctx) -> APIRouter:
 
     @router.post("/api/steamcmd/install")
     def api_steamcmd_install(body: dict = Body(...)):
-        g = ctx.lib.game(int(body.get("game_id") or 0))
+        try:
+            g = ctx.lib.game(int(body.get("game_id") or 0))
+        except (TypeError, ValueError):
+            raise HTTPException(400, I.tr("s.emuextra.invalid"))
         m = re.search(r"/(\d+)$", g.get("install_uri") or "") if g.get("store") == "steam" else None
         if not m:
             raise HTTPException(400, I.tr("s.steamcmd.notSteam"))

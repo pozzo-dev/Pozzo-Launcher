@@ -191,14 +191,3 @@ def latest(cfg) -> dict:
     cur = snaps[-1] if snaps else None
     prev = snaps[-2] if len(snaps) > 1 else None
     return {"report": cur, "previous": prev, "diff": diff(prev, cur) if prev else None}
-
-
-def history(cfg) -> list[dict]:
-    out, prev = [], None
-    for f in sorted(_folder(cfg).glob("*.json")):
-        s = _load(f)
-        if not s:
-            continue
-        out.append({"file": f.name, "time": s["time"], "peggiora": bool(prev and diff(prev, s)["peggiora"])})
-        prev = s
-    return out[::-1]

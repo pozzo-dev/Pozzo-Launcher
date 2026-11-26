@@ -42,6 +42,7 @@ from urllib.parse import urlparse
 from . import config as C
 from .library import saves as SV
 from .library.userdata import DELETED, UserData
+from .remote import certs
 
 FORMAT = 1
 GAME_FIELDS = ("favorite", "hidden", "preferred", "status", "note", "my_rating", "last_played")
@@ -275,6 +276,9 @@ def merge(ud: UserData, b: dict) -> dict:
                 n["colls"] += 1
         ledits = {f"{s}\t{k}": a for s, k, a in db.execute("SELECT slug, key, action FROM collection_edits")}
         for sk, (action, rt) in (b.get("edits") or {}).items():
+            # collezione cancellata qui dopo quella modifica: le righe restano nell'altro PC finche' non sa della cancellazione
+            if st.get(("coll", sk.split("	", 1)[0], DELETED), 0) >= rt:
+                continue
             if _newer(rt, st.get(("edit", sk, ""), 0), ledits.get(sk), action) and ledits.get(sk) != action:
                 slug, key = sk.split("\t", 1)
                 db.execute("INSERT OR REPLACE INTO collection_edits VALUES(?, ?, ?)", (slug, key, action))
@@ -317,7 +321,8 @@ def settings_bundle(cfg, c: dict) -> dict:
     data = _settings_subset(cfg)
     h = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
     if c.get("settings_hash") != h:
-        c.update(settings_hash=h, settings_t=time.time())
+        # prima volta: ora 0, cosi' un PC nuovo non sembra "il piu' recente" e non cancella le chiavi dell'altro
+        c.update(settings_hash=h, settings_t=time.time() if c.get("settings_hash") else 0)
         save_conf(cfg, c)
     return {"t": c["settings_t"], "data": data}
 
@@ -329,16 +334,12 @@ def merge_settings(cfg, c: dict, remote: dict | None) -> bool:
 
     def change(s):
         for k in SETTINGS_SECTIONS:
-            if k in data.get("sections", {}):
+            if k in data.get("sections", {}):  # cio' che manca nel pacchetto remoto si tiene: mai cancellare
                 s[k] = data["sections"][k]
-            else:
-                s.pop(k, None)
         app = s.setdefault("app", {})
         for k in APP_KEYS:
             if k in data.get("app", {}):
                 app[k] = data["app"][k]
-            else:
-                app.pop(k, None)
     C._update_settings(cfg, change)
     h = hashlib.sha256(json.dumps(_settings_subset(cfg), sort_keys=True).encode()).hexdigest()
     c.update(settings_hash=h, settings_t=remote["t"])
@@ -753,11 +754,23 @@ class Sync:
         return {"ok": True, "from": len(incoming), "merged": merged}
 
     # ------------------------------------------------------------ PC in rete locale
+    def _upgrade_fp(self, peer: dict, got: str | None):
+        """Abbinato prima della 0.21: l'impronta salvata e' quella del certificato intero e salta al prossimo rinnovo. Si passa a quella della chiave."""
+        if not got or not peer.get("fp") or peer["fp"] == got:
+            return
+        c = conf(self.cfg)
+        for p in c.get("peers") or []:
+            if p.get("id") == peer.get("id"):
+                p["fp"] = got
+        peer["fp"] = got
+        save_conf(self.cfg, c)
+
     def via_peer(self, peer: dict) -> dict:
         on, body = self.saves_enabled(), {"pc": self.pc(), "bundles": self.bundles()}
         if on:
             body["saves"] = self.saves_manifest()
         r = request(peer["url"], "/api/sync/exchange", body, token=peer["token"], fp=peer.get("fp"))
+        self._upgrade_fp(peer, r.get("_fp"))
         out = {"ok": True, "merged": self.receive(r.get("bundles") or {})}
         if on:
             res = {"ok": True, "from": 1 if isinstance(r.get("saves"), dict) else 0,
@@ -822,8 +835,10 @@ def request(url: str, path: str, body: dict, token: str | None = None, fp: str |
     conn = http.client.HTTPSConnection(u.hostname, u.port or 8766, context=ctx, timeout=60)
     try:
         conn.connect()
-        got = hashlib.sha256(conn.sock.getpeercert(binary_form=True)).hexdigest()
-        if fp and got != fp:
+        der = conn.sock.getpeercert(binary_form=True)
+        # si fissa la chiave pubblica (resta uguale quando il certificato si rifa'); accetta anche la vecchia impronta del certificato
+        got = certs.spki_fp(der)
+        if fp and fp not in (got, hashlib.sha256(der).hexdigest()):
             raise RuntimeError("Il certificato del PC remoto e' cambiato: abbinalo di nuovo")
         headers = {"Content-Type": "application/json"}
         if token:

@@ -73,6 +73,27 @@ def _graft(new, cur):
     return new
 
 
+# accessi concessi o tolti dopo la copia: un ripristino non deve resuscitare telefoni, ospiti, inviti o PC revocati
+_LIVE = {"phone": ("devices", "lib_invites"), "sync": ("peers",)}
+
+
+def _replace_keep_live(cur: dict, data: dict):
+    """Sostituisce le impostazioni attuali con quelle della copia, tenendo i valori ATTUALI di _LIVE."""
+    now = {sec: {k: v for k, v in ((cur.get("app") or {}).get(sec) or {}).items() if k in keys}
+           for sec, keys in _LIVE.items()}
+    cur.clear()
+    cur.update(data)
+    app = cur.get("app")
+    if not isinstance(app, dict):
+        return
+    for sec, keys in _LIVE.items():
+        if isinstance(app.get(sec), dict):
+            for k in keys:
+                app[sec].pop(k, None)
+                if k in now[sec]:
+                    app[sec][k] = now[sec][k]
+
+
 def _json_bytes(raw: bytes, secrets: bool) -> bytes:
     if secrets:
         return raw
@@ -335,7 +356,7 @@ def restore(cfg, name: str, user=None, profiles: dict | None = None) -> dict:
             data = json.loads(raw)  # una copia con settings.json rotto si ferma qui, prima di toccare il file
             if not isinstance(data, dict):
                 raise ValueError("settings.json della copia non valido")
-            C._update_settings(cfg, lambda cur: (cur.clear(), cur.update(data)))  # lock + scrittura atomica come gli altri
+            C._update_settings(cfg, lambda cur: _replace_keep_live(cur, data))  # lock + scrittura atomica come gli altri
             restored.append("settings.json")
         td = C.settings_path(cfg).parent / "themes"
         for n in sorted(x for x in names if x.startswith("themes/") and "/" not in x[7:] and x[7:]):

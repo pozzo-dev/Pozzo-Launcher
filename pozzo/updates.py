@@ -286,8 +286,7 @@ def _verified(path: Path, item: dict, root: Path | None = None) -> bool:
 
 
 def _inside(root: Path, path: Path) -> bool:
-    base, candidate = root.resolve(), path.resolve()
-    return candidate == base or base in candidate.parents
+    return path.resolve().is_relative_to(root.resolve())
 
 
 def _remove(path: Path):
@@ -464,6 +463,17 @@ def _stage_with_fallback(stage: Path, differential, full):
     return None
 
 
+def _unlisted(root: Path, listed: dict) -> list[str]:
+    """File e link del pacchetto che il manifest firmato non elenca."""
+    extra = []
+    for item in sorted(root.rglob("*")):
+        if item.is_symlink() or item.is_file():
+            relative = item.relative_to(root).as_posix()
+            if relative not in listed:
+                extra.append(relative)
+    return extra
+
+
 def _stage_full(installed: Path, stage: Path, package: Path, kind: str, old: dict | None,
                 new: dict | None, platform: str):
     unpacked = stage.with_name(stage.name + "-unpacked")
@@ -479,6 +489,10 @@ def _stage_full(installed: Path, stage: Path, package: Path, kind: str, old: dic
             except (OSError, ValueError):
                 trusted_old = None
         _prune_removed(stage, trusted_old, new, platform)
+        if new:  # il pacchetto non e' firmato: solo cio' che elenca il manifest firmato entra nello stage
+            extra = _unlisted(unpacked, _platform_files(new, platform))
+            if extra:
+                raise SignatureError(f"File non elencati nel manifest firmato: {extra[0]}")
         _overlay(unpacked, stage, stage)
         if new:
             _verify_files(stage, _platform_files(new, platform))

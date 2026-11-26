@@ -61,7 +61,10 @@ def build_router(ctx) -> APIRouter:
 
     @router.post("/api/shots/open")
     def api_shot_open(body: dict = Body(default={})):
-        p = shots.path(int(body["id"])) if body.get("id") else shots.root
+        try:
+            p = shots.path(int(body["id"])) if body.get("id") else shots.root
+        except (TypeError, ValueError):
+            raise HTTPException(400, I.tr("s.emuextra.invalid"))
         if not p or not p.exists():
             shots.root.mkdir(parents=True, exist_ok=True)
             p = shots.root

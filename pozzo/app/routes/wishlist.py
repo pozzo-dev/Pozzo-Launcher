@@ -117,7 +117,10 @@ def build_router(ctx) -> APIRouter:
         if body.get("country"):
             cur["country"] = str(body["country"]).strip().upper()[:2]
         if body.get("threshold") not in (None, ""):
-            cur["threshold"] = max(5, min(95, int(body["threshold"])))
+            try:
+                cur["threshold"] = max(5, min(95, int(body["threshold"])))
+            except (TypeError, ValueError):
+                raise HTTPException(400, I.tr("s.emuextra.invalid"))
         PC.put(cfg, "wishlist", cur, mirror=True)
         return _wish_payload()
 

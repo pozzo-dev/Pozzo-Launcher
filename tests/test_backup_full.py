@@ -121,7 +121,7 @@ def test_senza_credenziali_restano_anche_negli_elenchi():
         config.save_settings(cfg, app=now)
         backup.restore(cfg, out.name)
         s = json.loads(config.settings_path(cfg).read_text(encoding="utf-8"))["app"]
-        assert s["phone"]["devices"] == [{"id": "a", "name": "Tel", "token": "T1b"}, {"id": "b", "name": "Vecchio"}], s["phone"]
+        assert s["phone"]["devices"] == [{"id": "c", "name": "Nuovo", "token": "T9"}, {"id": "a", "name": "Tel", "token": "T1b"}], s["phone"]  # i dispositivi restano quelli di ora: «b» revocato non torna
         assert s["sync"]["peers"][0]["token"] == "T3"
         assert [w["secret"] for w in s["webhooks"]] == ["S1", "S2"], s["webhooks"]
 

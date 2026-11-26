@@ -395,7 +395,10 @@ def build_router(ctx) -> APIRouter:
         """«Scarica video snap»: spento di default (disco e banda). max_mb e' il tetto per file (5-500)."""
         upd = {"video_snap": bool(body.get("enabled"))}
         if "max_mb" in body:
-            upd["video_max_mb"] = max(5, min(500, int(body["max_mb"] or 30)))
+            try:
+                upd["video_max_mb"] = max(5, min(500, int(body["max_mb"] or 30)))
+            except (TypeError, ValueError):
+                raise HTTPException(400, I.tr("s.emuextra.invalid"))
         C.save_settings(cfg, app=upd)
         return api_video_snap_get()
 

@@ -12,8 +12,6 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import sys
-
 FROZEN = getattr(sys, "frozen", False)  # eseguibile creato con PyInstaller
 DATA_DIR = "PozzoLauncher"
 OLD_DATA_DIR = "GameScraper"  # nome usato fino alla 0.8: i dati si portano via una volta sola
@@ -177,11 +175,45 @@ def settings_path(cfg: Config) -> Path:
     return base / SETTINGS_FILE
 
 
-def read_settings(cfg: Config) -> dict:
-    p = settings_path(cfg)
+def read_json_bak(p: Path, quarantine: bool = False) -> dict:
+    """JSON di p. Se e' rotto si legge la copia <nome>.bak (l'ultimo file buono) e si avvisa; senza copia, {}.
+    quarantine=True sposta il file rotto in <nome>.rotto.json. Gli OSError (file bloccato) salgono a chi chiama."""
+    if not p.exists():
+        return {}
     try:
-        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-    except (OSError, ValueError):
+        return json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        bak = p.with_suffix(".bak")
+        try:
+            data = json.loads(bak.read_text(encoding="utf-8")) if bak.exists() else {}
+        except (OSError, ValueError):
+            data = {}
+        print(f"[config] {p.name} illeggibile: " + ("uso la copia .bak" if data else "nessuna copia valida"), file=sys.stderr)
+        if quarantine:
+            os.replace(p, p.with_suffix(".rotto.json"))
+        return data
+
+
+def write_json_atomic(p: Path, data: dict):
+    """Scrive p con flush+fsync prima della sostituzione (un blackout non lascia un file a meta') e tiene in
+    <nome>.bak l'ultima versione precedente."""
+    tmp = p.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=2, ensure_ascii=False))
+        f.flush()
+        os.fsync(f.fileno())
+    if p.exists():
+        try:
+            shutil.copyfile(p, p.with_suffix(".bak"))
+        except OSError:
+            pass  # la copia e' un di piu': non deve impedire il salvataggio
+    _replace(tmp, p)
+
+
+def read_settings(cfg: Config) -> dict:
+    try:
+        return read_json_bak(settings_path(cfg))
+    except OSError:
         return {}
 
 
@@ -265,15 +297,9 @@ def _update_settings(cfg: Config, change):
     da {} cancellerebbe tutte le altre impostazioni. Un JSON rotto resta in settings.rotto.json."""
     p = settings_path(cfg)
     with _WRITE_LOCK:
-        try:
-            s = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-        except ValueError:
-            os.replace(p, p.with_suffix(".rotto.json"))
-            s = {}
+        s = read_json_bak(p, quarantine=True)
         change(s)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
-        _replace(tmp, p)
+        write_json_atomic(p, s)
         apply_settings(cfg)
 
 

@@ -85,7 +85,7 @@ def test_api_sync_saves(tmp):
     from pozzo.remote.phone import PhoneGate
     hub = app.state.phone_hub
     gate = TestClient(PhoneGate(app, hub), base_url="https://testserver")
-    pc_token = gate.post("/api/sync/pair", json={"code": hub.new_code(), "name": "Portatile"}).json()
+    pc_token = gate.post("/api/sync/pair", json={"code": hub.new_code("pc"), "name": "Portatile"}).json()
     gate.cookies.set("gs_phone", pc_token["token"])
     got = gate.post("/api/sync/saves/file", json={"key": "gba/AAA", "rel": "salvataggi/AAA/slot1.sav"})
     assert got.status_code == 200, got.text

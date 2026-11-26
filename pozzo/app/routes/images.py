@@ -6,13 +6,19 @@ import hashlib
 import httpx
 import threading
 import time
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from ..common import THUMB_WIDTHS, _REMOTE_DOWN, _REMOTE_MISS, _REMOTE_SEM
 from ... import i18n as I
+
+
+def _rel_in_cache(rel) -> bool:
+    """Controllo lessicale: senza resolve, cosi' una cache spostata altrove con una junction continua a funzionare."""
+    p = PurePath(str(rel))
+    return not (p.is_absolute() or p.drive or p.root or ".." in p.parts)
 
 
 def file_response(path: Path, **kw):
@@ -240,7 +246,7 @@ def build_router(ctx) -> APIRouter:
             if not rel:
                 raise HTTPException(404)
         src = Path(cfg.cache) / rel
-        if not src.exists():
+        if not _rel_in_cache(rel) or not src.exists():  # `rel` viene dal database utente: mai fuori dalla cache
             raise HTTPException(404)
         # l'immagine di un gioco puo' cambiare (scelta a mano, nuovo scraping): il browser deve sempre
         # ricontrollare. L'ETag identifica il FILE (percorso + data + dimensione): se e' lo stesso si

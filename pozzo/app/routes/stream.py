@@ -83,7 +83,10 @@ def build_router(ctx) -> APIRouter:
         if body.get("reset_cert"):
             conf.pop("cert_sha256", None)
         if body.get("count") not in (None, ""):
-            conf["count"] = max(0, min(100, int(body["count"])))
+            try:
+                conf["count"] = max(0, min(100, int(body["count"])))
+            except (TypeError, ValueError):
+                raise HTTPException(400, I.tr("s.emuextra.invalid"))
         C.save_settings(cfg, app={"sunshine": conf})
         cfg.app["sunshine"] = conf
         if not body.get("publish"):

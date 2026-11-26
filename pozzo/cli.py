@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -201,21 +202,34 @@ def cmd_app(args):
 
 def _local_server(cfg):
     """URL di un PozzoLauncher gia' aperto, altrimenti ne avvia uno senza finestra in questo processo."""
-    from .app.server import _is_pozzo, _port_free
+    from .app.server import _bind_port, _claim_port, _wait_pozzo
     port = int(cfg.app.get("port", 8765))
-    if _is_pozzo(port):
-        return f"http://127.0.0.1:{port}", None
+    sock = _bind_port(port)  # legata prima di costruire l'app, come in server.run
+    if sock is None:
+        if _wait_pozzo(port):
+            return f"http://127.0.0.1:{port}", None
+        got = _claim_port(port + 1)
+        if got is None:
+            raise SystemExit(f"Nessuna porta libera da {port} in poi")
+        sock, port = got
     import threading
 
     import uvicorn
 
     from .app.server import LocalGuard, create_app
-    free = port if _port_free(port) else next(q for q in range(port + 1, port + 50) if _port_free(q))
-    srv = uvicorn.Server(uvicorn.Config(LocalGuard(create_app(cfg), free), host="127.0.0.1", port=free, log_level="warning"))
-    threading.Thread(target=srv.run, daemon=True).start()
-    while not srv.started:
+    try:
+        app = LocalGuard(create_app(cfg), port)
+    except BaseException:
+        sock.close()
+        raise
+    srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    t = threading.Thread(target=srv.run, kwargs={"sockets": [sock]}, daemon=True)
+    t.start()
+    while not srv.started and t.is_alive():
         time.sleep(0.05)
-    return f"http://127.0.0.1:{free}", srv
+    if not srv.started:
+        raise SystemExit("Il server locale non e' partito: controlla il log")
+    return f"http://127.0.0.1:{port}", srv
 
 
 def cmd_play(args):
@@ -257,8 +271,11 @@ def cmd_bigpicture(args):
         import webbrowser
         webbrowser.open(f"http://127.0.0.1:{port}/bigpicture")
         return
-    webview.create_window("PozzoLauncher Big Picture", f"http://127.0.0.1:{port}/bigpicture", fullscreen=True,
-                          background_color="#0b0d12")
+    from .app.server import _make_api
+    url = f"http://127.0.0.1:{port}/"
+    api = _make_api(webview, url, {"on": True}, threading.Event(), {}, {})  # senza js_api uscita da schermo intero e focus non funzionano
+    webview.create_window("PozzoLauncher Big Picture", url + "bigpicture", fullscreen=True,
+                          background_color="#0b0d12", js_api=api)
     webview.start()
 
 

@@ -64,11 +64,6 @@ def build_router(ctx) -> APIRouter:
             return _spotify_control(action, body)
         app.add_api_route(f"/api/spotify/{_path}", _handler, methods=["POST"], name=f"api_spotify_{_path}")
 
-    @router.post("/api/spotify/shuffle")
-    def api_spotify_shuffle(body: dict = Body(default={})):
-        try: return spotify.control("shuffle", body.get("state", False))
-        except SpotifyError as error: _media_http_error(error)
-
     @router.post("/api/spotify/logout")
     def api_spotify_logout():
         spotify.logout()
@@ -104,11 +99,6 @@ def build_router(ctx) -> APIRouter:
     @router.post("/api/discord/deafen")
     def api_discord_voice_deafen(body: dict = Body(default={})):
         try: return discord_voice.set_voice(deaf=body.get("enabled", True))
-        except DiscordVoiceError as error: _media_http_error(error)
-
-    @router.post("/api/discord/volume")
-    def api_discord_voice_volume(body: dict = Body(default={})):
-        try: return discord_voice.set_voice(volume=body.get("value", 100))
         except DiscordVoiceError as error: _media_http_error(error)
 
     @router.post("/api/discord/leave")

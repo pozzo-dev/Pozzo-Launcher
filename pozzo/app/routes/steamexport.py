@@ -13,9 +13,16 @@ from ... import platforms as P
 from ... import steamshortcuts as SS
 from ...remote.sunshine import launcher_cmd
 from ...stores.steam import Steam
+from ..extensions import is_inside
 
 # tipo di immagine Pozzo -> tipo di immagine Steam (fanart come capsula larga se manca l'header)
 ART = {"p": ("cover",), "wide": ("header", "fanart"), "hero": ("hero", "fanart"), "logo": ("logo",), "icon": ("icon",)}
+
+
+def file_in_cache(cache, rel: str) -> Path | None:
+    """File della cache per un percorso relativo; None se esce dalla cache (db utente da backup/sync: non fidato)."""
+    p = Path(cache) / rel
+    return p if is_inside(cache, p) and p.exists() else None
 
 
 def build_router(ctx) -> APIRouter:
@@ -32,8 +39,7 @@ def build_router(ctx) -> APIRouter:
         if rel.startswith("url:"):
             h = hashlib.sha1(rel[4:].encode(), usedforsecurity=False).hexdigest()
             return next(iter((Path(cfg.cache) / "media" / "net").glob(f"{h}.*")), None)
-        p = Path(cfg.cache) / rel
-        return p if p.exists() else None
+        return file_in_cache(cfg.cache, rel)
 
     @router.get("/api/steam-export")
     def api_info():

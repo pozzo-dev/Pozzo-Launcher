@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import secrets
 import threading
@@ -27,6 +28,8 @@ from pathlib import Path
 
 from fastapi import Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
+
+log = logging.getLogger(__name__)
 
 PORT = 8766
 COOKIE = "gs_phone"
@@ -95,7 +98,7 @@ PAD_POS_KEYS = {"l2", "l1", "r1", "r2", "ls", "rs", "dpad", "face", "mid"}
 def _phone_cookie(r: Response, request, token: str):
     """Cookie del telefono abbinato. Lax e non Strict: Safari su iPhone tratta l'apertura dall'icona nella Home come
     arrivo da un altro sito e non manda i cookie Strict, cosi' l'app riaperta sembrava non abbinata. POST e WebSocket
-    da altri siti restano bloccati (Lax + controllo dell'Origin in server.py). Secure solo in HTTPS: in chiaro il
+    da altri siti restano bloccati (Lax + controllo dell'Origin in PhoneGate). Secure solo in HTTPS: in chiaro il
     browser lo scarterebbe."""
     r.set_cookie(COOKIE, token, max_age=3 * 365 * 86400, httponly=True,
                  secure=request.url.scheme == "https", samesite="lax", path="/")
@@ -139,6 +142,10 @@ def _clean_pad(body: dict) -> dict:
     return out
 
 
+def _header(scope, name: bytes) -> str:
+    return next((v.decode("latin-1") for k, v in scope.get("headers", []) if k == name), "")
+
+
 def _cookie(scope) -> str | None:
     for k, v in scope.get("headers", []):
         if k == b"cookie":
@@ -147,6 +154,14 @@ def _cookie(scope) -> str | None:
                 if name == COOKIE:
                     return val
     return None
+
+
+def _tr(key: str, raw_headers) -> str:
+    """Messaggio nella lingua del telefono: questo server non ha il contesto della richiesta dell'app, quindi si legge dagli header."""
+    from .. import i18n as I
+    h = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw_headers}
+    m = re.search(r"(?:^|;\s*)gs_lang=([\w-]+)", h.get("cookie", ""))
+    return I.tr(key, I.from_request(m.group(1) if m else None, h.get("accept-language")))
 
 
 class PhoneGate:
@@ -162,6 +177,8 @@ class PhoneGate:
         method = "WS" if scope["type"] == "websocket" else scope.get("method", "GET")
         if method == "HEAD":
             method = "GET"
+        if method not in ("GET", "OPTIONS") and not self._origin_ok(scope):  # CSRF / WebSocket da un altro sito
+            return await self._deny(scope, receive, send, 403, _tr("s.phone.badOrigin", scope.get("headers") or []))
         if any(m == method and r.match(path) for m, r in _PUBLIC + _GUEST_PUBLIC):
             return await self.app(scope, receive, send)
         dev = self.hub.device_for(_cookie(scope))
@@ -178,6 +195,17 @@ class PhoneGate:
                 return await self._deny(scope, receive, send, 403, "Gioco non condiviso")
         scope.setdefault("state", {})["phone_device"] = dev["id"]
         return await self.app(scope, receive, send)
+
+    def _origin_ok(self, scope) -> bool:
+        """Senza Origin (client nativi) si passa; con Origin deve essere questo stesso server (o l'indirizzo pubblico)."""
+        origin = _header(scope, b"origin").lower().rstrip("/")
+        if not origin:
+            return True
+        host = _header(scope, b"host").lower()
+        pub = str(self.hub.conf.get("public_url") or "").strip().lower().rstrip("/")
+        if pub and "://" not in pub:
+            pub = "https://" + pub
+        return origin == f"https://{host}" or (bool(pub) and origin == pub)
 
     @staticmethod
     async def _deny(scope, receive, send, status, msg):
@@ -197,6 +225,7 @@ class PhoneHub:
         self.cfg = cfg
         self.save_settings = save_settings
         self.code: str | None = None
+        self.code_kind = "phone"  # per chi e' stato generato il codice: "phone" o "pc" (sincronizzazione)
         self.code_until = 0.0
         self.fails = 0
         self.guest_code: str | None = None  # invito per un amico a distanza (separato dal codice dei telefoni)
@@ -243,10 +272,15 @@ class PhoneHub:
         return [{k: v for k, v in d.items() if k != "token"} for d in self.conf["devices"]]
 
     @staticmethod
-    def _expired(d: dict) -> bool:
-        """Accesso a tempo (ospite della libreria o a distanza) scaduto."""
+    def _expired(d: dict, grace: float = 0) -> bool:
+        """Accesso a tempo (ospite della libreria o a distanza, o invito) scaduto da almeno `grace` secondi."""
         exp = d.get("created", 0) + GUEST_TTL if d.get("kind") == "guest" else d.get("exp")
-        return bool(exp and time.time() > exp)
+        return bool(exp and time.time() > exp + grace)
+
+    @classmethod
+    def _live(cls, items: list[dict]) -> list[dict]:
+        """Toglie quelli scaduti da piu' di 30 giorni: senza, la lista cresce per sempre (li pota chi salva)."""
+        return [d for d in items if not cls._expired(d, 30 * 86400)]
 
     def device_for(self, token: str | None) -> dict | None:
         if not token:
@@ -255,6 +289,7 @@ class PhoneHub:
         for d in self.conf["devices"]:
             if secrets.compare_digest(d.get("token", ""), h):
                 if self._expired(d):  # anche se il cookie c'e' ancora
+                    self.prune_expired()
                     return None
                 if time.time() - d.get("last", 0) > 300:  # ultimo accesso, aggiornato al massimo ogni 5 minuti
                     self._touch(d["id"])
@@ -269,9 +304,10 @@ class PhoneHub:
                     d["last"] = time.time()
             self._save(devices=devs)
 
-    def new_code(self) -> str:
+    def new_code(self, kind: str = "phone") -> str:
         with self.lock:
             self.code = f"{secrets.randbelow(1_000_000):06d}"
+            self.code_kind = kind
             self.code_until = time.time() + CODE_TTL
             self.fails = 0
             return self.code
@@ -281,15 +317,19 @@ class PhoneHub:
         with self.lock:
             if not self.code or time.time() > self.code_until or self.fails >= MAX_FAILS:
                 raise ValueError("Codice scaduto: generane uno nuovo dal PC (Impostazioni › Telefono)")
-            if not secrets.compare_digest(str(code).strip(), self.code):
-                self.fails += 1
+            if kind != self.code_kind or not secrets.compare_digest(str(code).strip(), self.code):
+                self.fails += 1  # un codice da telefono non abbina un PC e viceversa
                 raise ValueError("Codice sbagliato")
             self.code = None  # un codice vale una volta sola
+        return self.issue(name or "Telefono", kind)
+
+    def issue(self, name: str, kind: str = "phone") -> str:
+        """Nuovo dispositivo con il suo token (senza codice: lo usa chi ha gia' verificato l'altro, es. il PC che abbina)."""
         token = secrets.token_urlsafe(32)
-        dev = {"id": secrets.token_hex(6), "name": (name or "Telefono").strip()[:40], "token": _sha(token),
+        dev = {"id": secrets.token_hex(6), "name": name.strip()[:40], "token": _sha(token),
                "created": time.time(), "last": time.time(), "kind": kind}
         with self.devlock:
-            self._save(devices=[*self.conf["devices"], dev])
+            self._save(devices=[*self._live(self.conf["devices"]), dev])
         return token
 
     # ------------------------------------------------------------ amico a distanza
@@ -315,7 +355,7 @@ class PhoneHub:
         dev = {"id": secrets.token_hex(6), "name": (name or "Ospite").strip()[:40], "token": _sha(token),
                "created": time.time(), "last": time.time(), "kind": "guest"}
         with self.devlock:
-            self._save(devices=[*self.conf["devices"], dev])
+            self._save(devices=[*self._live(self.conf["devices"]), dev])
         return token
 
     def base_url(self) -> str:
@@ -336,9 +376,57 @@ class PhoneHub:
         return {"code": self.guest_code if live else None, "until": self.guest_until if live else 0.0,
                 "link": self.invite_link()}
 
+    def unpair_guest(self, did: str):
+        """Toglie da Sunshine il client Moonlight dell'ospite (best-effort: la revoca non deve mai fallire)."""
+        try:
+            from .sunshine import Sunshine
+            conf = self.cfg.app.get("sunshine") or {}
+            if not (conf.get("user") and conf.get("password")):
+                return
+            s = Sunshine.from_conf(dict(conf))
+            try:
+                for c in s.clients():
+                    if c.get("name") == f"pozzo-guest-{did}":
+                        s.unpair(c.get("uuid", ""))
+            finally:
+                s.close()
+        except Exception as e:
+            log.warning("Sunshine: client dell'ospite %s non rimosso: %s", did, e)
+
+    def _unpair_bg(self, did: str):  # in un thread: Sunshine puo' non rispondere per secondi
+        threading.Thread(target=self.unpair_guest, args=(did,), daemon=True).start()
+
+    def prune_expired(self):
+        """Elimina i dispositivi a tempo scaduti (e sgancia il Moonlight degli ospiti)."""
+        with self.devlock:
+            devs = self.conf["devices"]
+            gone = [d for d in devs if self._expired(d)]
+            if not gone:
+                return
+            self._save(devices=[d for d in devs if d not in gone])
+        for d in gone:
+            if d.get("kind") == "guest" and d.get("pinned"):
+                self._unpair_bg(d["id"])
+
+    def mark_pin(self, did: str, on: bool = True) -> bool:
+        """Un solo PIN Moonlight per ospite: True se il posto era libero (e ora e' preso)."""
+        with self.devlock:
+            devs = self.conf["devices"]
+            for d in devs:
+                if d["id"] == did:
+                    if on and d.get("pinned"):
+                        return False
+                    d["pinned"] = on
+                    self._save(devices=devs)
+                    return True
+        return False
+
     def revoke(self, did: str):
         with self.devlock:
+            old = next((d for d in self.conf["devices"] if d["id"] == did), None)
             self._save(devices=[d for d in self.conf["devices"] if d["id"] != did])
+        if old and old.get("kind") == "guest" and old.get("pinned"):
+            self._unpair_bg(did)
         with self.lock:
             for s, c in list(self.slots.items()):
                 if c["device"] == did:
@@ -766,15 +854,19 @@ def register(app, hub: PhoneHub, static_dir: Path):
         if not (conf.get("user") and conf.get("password")):
             raise HTTPException(409, "Il PC non ha le credenziali di Sunshine: vanno salvate in Impostazioni › Telefono e streaming")
         dev = hub.device_for(request.cookies.get(COOKIE)) or {}
+        if not dev.get("id") or not hub.mark_pin(dev["id"]):
+            raise HTTPException(409, _tr("s.phone.guestPinOnce", request.headers.raw))
         def _save(c):
             hub.cfg.app["sunshine"] = c
             hub.save_settings(hub.cfg, app={"sunshine": c})
         s = Sunshine.from_conf(dict(conf), _save)
         try:
-            return {"ok": True, **s.pin(pin, dev.get("name", ""))}
+            return {"ok": True, **s.pin(pin, f"pozzo-guest-{dev['id']}")}
         except PermissionError as e:
+            hub.mark_pin(dev["id"], False)
             raise HTTPException(401, str(e))
         except Exception as e:
+            hub.mark_pin(dev["id"], False)  # il PIN non e' arrivato: si puo' riprovare
             raise HTTPException(502, f"Sunshine non risponde: {e}")
         finally:
             s.close()
@@ -974,11 +1066,14 @@ def register(app, hub: PhoneHub, static_dir: Path):
     def api_phone(request: Request):
         _local(request)
         st = hub.status()
-        if hub.running() and (not hub.code or time.time() > hub.code_until):
+        live_pc = bool(hub.code) and hub.code_kind == "pc" and time.time() <= hub.code_until
+        if hub.running() and not live_pc and (not hub.code or time.time() > hub.code_until or hub.code_kind != "phone"):
             hub.new_code()
-        st["code"] = hub.code if hub.running() else None
+        # un codice «pc» ancora valido (Impostazioni › Sync) non si sostituisce ne' si mostra al telefono
+        show = hub.running() and not live_pc
+        st["code"] = hub.code if show else None
         st["code_until"] = hub.code_until
-        st["qr"] = _qr_svg(f"{st['urls'][0]}#code={hub.code}") if hub.running() and st["urls"] else ""
+        st["qr"] = _qr_svg(f"{st['urls'][0]}#code={hub.code}") if show and st["urls"] else ""
         st["qr_ca"] = _qr_svg(st["ca_url"]) if hub.running() and st.get("ca_url") and not st["ca_installed"] else ""
         return st
 

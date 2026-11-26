@@ -16,11 +16,12 @@ from ... import i18n as I
 
 
 def build_router(ctx) -> APIRouter:
-    _pregen_thumbs, api_scan_start, cfg, job, lib, state = ctx._pregen_thumbs, ctx.api_scan_start, ctx.cfg, ctx.job, ctx.lib, ctx.state
+    _pregen_thumbs, api_scan_start, cfg, lib, state = ctx._pregen_thumbs, ctx.api_scan_start, ctx.cfg, ctx.lib, ctx.state
     router = APIRouter()
 
     # ------------------------------------------------------------ configurazione guidata (primo avvio)
     setup_state: dict = {"status": "idle", "phase": "", "log": []}
+    setup_lock = threading.Lock()  # "running" si imposta qui, non nel thread: due clic rapidi non avviano due configurazioni
 
     def _setup_done() -> bool:
         return bool(cfg.app.get("setup_done")) or lib.built_at > 0
@@ -99,22 +100,25 @@ def build_router(ctx) -> APIRouter:
         sections["app"] = {"setup_done": True}
         C.save_settings(cfg, **sections)
         if body.get("start"):
-            if setup_state["status"] == "running":
-                raise HTTPException(409, I.tr("s.setup.already_running"))
+            with setup_lock:
+                if setup_state["status"] == "running":
+                    raise HTTPException(409, I.tr("s.setup.already_running"))
+                setup_state.update(status="running", log=[], phase=I.tr("b.onb.conclude.default"))
             threading.Thread(target=_setup_run, args=(bool(body.get("scrape", True)),), daemon=True).start()
         return api_setup()
 
     def _setup_run(scrape: bool):
         say = lambda m: setup_state["log"].append(_plain(str(m)))  # noqa: E731
-        setup_state.update(status="running", log=[], phase=I.tr("b.onb.conclude.default"))
         try:
             sel = [s["id"] for s in _setup_stores() if s["enabled"] and s["detected"]]
             if sel:
                 setup_state["phase"] = I.tr("s.setup.phase_import_stores")
                 sj = J.StoreJob(only=sel)
-                job["stores"] = sj
-                sj.say = lambda m, _j=sj: (_j.log.append(_plain(m)), say(m))
-                sj.run(cfg, lambda stats: lib.load())
+                if ctx._claim("stores", sj):  # un aggiornamento store gia' in corso non si sovrascrive
+                    sj.say = lambda m, _j=sj: (_j.log.append(_plain(m)), say(m))
+                    sj.run(cfg, lambda stats: lib.load())
+                else:
+                    say(I.tr("s.stores.storeUpdateBusy"))
             if not lib.built_at or not sel:
                 setup_state["phase"] = I.tr("s.setup.phase_build")
                 state["build_log"] = []

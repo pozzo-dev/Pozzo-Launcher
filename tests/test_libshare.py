@@ -229,12 +229,15 @@ def test_client_pairing_salva_token_e_impronta(monkeypatch):
     assert p == {"url": "https://host.example:8766", "token": "TKN", "fp": "ab" * 32} and seen["fp"] is None  # TOFU
 
 
-def test_client_impronta_diversa_rifiutata(monkeypatch):
+def test_client_impronta_diversa_rifiutata(monkeypatch, tmp_path):
+    import ssl
+    from pozzo.remote import certs
+    DER = ssl.PEM_cert_to_DER_cert(certs.ensure(tmp_path)[0].read_text())  # certificato vero: serve la chiave
     sent = []
 
     class Sock:
         def getpeercert(self, binary_form=False):
-            return b"altro-certificato"
+            return DER
 
     class FakeConn:
         def __init__(self, *a, **k):
@@ -255,7 +258,7 @@ def test_client_impronta_diversa_rifiutata(monkeypatch):
     with pytest.raises(PR.PinError):
         PR.open_pinned("https://h:8766", "00" * 32, "GET", "/api/lib-share/list", "TOKEN")
     assert not sent  # il token non e' stato mandato
-    PR.open_pinned("https://h:8766", hashlib.sha256(b"altro-certificato").hexdigest(), "GET", "/x", "TOKEN")
+    PR.open_pinned("https://h:8766", hashlib.sha256(DER).hexdigest(), "GET", "/x", "TOKEN")
     assert sent  # impronta giusta: la richiesta parte
 
 

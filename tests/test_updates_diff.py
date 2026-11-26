@@ -145,3 +145,23 @@ def test_release_manifest_and_file_assets_are_built_from_portable_archive(tmp_pa
     only = create(release, "0.12.1", payloads=False)
     assert json.loads(only.read_text(encoding="utf-8")) == manifest
     assert not list(release.glob("*-file-*"))
+
+
+def test_full_staging_rejects_file_not_in_signed_manifest(tmp_path):
+    import pytest
+    installed = tmp_path / "installed"
+    installed.mkdir()
+    (installed / "game.bin").write_bytes(b"old")
+    new = _manifest("0.12.1", **{"game.bin": b"new"})
+    stage = tmp_path / "stage"
+    package = tmp_path / "PozzoLauncher-0.12.1-windows-x64.zip"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr("dist/PozzoLauncher/game.bin", b"new")
+        archive.writestr("dist/PozzoLauncher/evil.dll", b"x")
+
+    with pytest.raises(updates.SignatureError):
+        updates._stage_full(installed, stage, package, "win", None, new, PLATFORM)
+
+    assert not stage.exists()
+    assert (installed / "game.bin").read_bytes() == b"old"
+    assert not (installed / "evil.dll").exists()

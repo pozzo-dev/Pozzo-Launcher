@@ -68,6 +68,48 @@ def lan_ips() -> list[str]:
     return ips
 
 
+def spki_fp(der: bytes) -> str:
+    """Impronta SHA-256 della chiave pubblica del certificato: non cambia quando il certificato si rifa' con la stessa chiave."""
+    import hashlib
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+
+    pub = x509.load_der_x509_certificate(der).public_key()
+    return hashlib.sha256(pub.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)).hexdigest()
+
+
+_NETS = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16"]
+
+
+def _in_ca(ca_cert, ip: str) -> bool:
+    """L'IP e' ammesso dalla CA? Fuori dai vincoli (es. 198.18/15 delle VPN fake-ip) il telefono rifiuta tutta la catena."""
+    from cryptography import x509
+    try:
+        ca_cert.extensions.get_extension_for_class(x509.NameConstraints)
+    except x509.ExtensionNotFound:
+        return True  # CA vecchia senza vincoli
+    return any(ipaddress.ip_address(ip) in ipaddress.ip_network(n) for n in _NETS)
+
+
+def _permitted(host: str) -> list:
+    from cryptography import x509
+    nets = _NETS
+    names = {"localhost", "local", host.lower()}
+    return [*(x509.IPAddress(ipaddress.ip_network(n)) for n in nets), *(x509.DNSName(n) for n in sorted(names) if n)]
+
+
+def _allowed(ca_cert, host: str) -> bool:
+    """Il nome puo' stare nel certificato? Le CA nuove ammettono solo reti locali (vedi _ca); quelle vecchie tutto."""
+    from cryptography import x509
+    try:
+        nc = ca_cert.extensions.get_extension_for_class(x509.NameConstraints).value
+    except x509.ExtensionNotFound:
+        return True
+    dns = [g.value for g in nc.permitted_subtrees or [] if isinstance(g, x509.DNSName)]
+    return any(host == d or host.endswith("." + d) for d in dns)
+
+
 def _private(path: Path):
     """Chiave leggibile solo dall'utente: con ca.key chiunque sul PC potrebbe firmare certificati fidati dal telefono."""
     try:
@@ -114,6 +156,8 @@ def _ca(folder: Path):
                                          data_encipherment=False, key_agreement=False, key_cert_sign=True,
                                          crl_sign=True, encipher_only=False, decipher_only=False), critical=True)
             .add_extension(x509.SubjectKeyIdentifier.from_public_key(pk.public_key()), critical=False)
+            # chi rubasse ca.key non puo' firmare siti qualunque: solo reti locali e il nome di questo PC
+            .add_extension(x509.NameConstraints(permitted_subtrees=_permitted(host), excluded_subtrees=None), critical=True)
             .sign(pk, hashes.SHA256()))
     key.write_bytes(pk.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                      serialization.NoEncryption()))
@@ -142,7 +186,7 @@ def _ensure(folder: Path) -> tuple[Path, Path, Path]:
     folder.mkdir(parents=True, exist_ok=True)
     ca_cert, ca_key = _ca(folder)
     crt, key, ca_crt = folder / CRT_FILE, folder / KEY_FILE, folder / CA_FILE
-    ips = lan_ips()
+    ips = [i for i in lan_ips() if _in_ca(ca_cert, i)]
     now = dt.datetime.now(dt.timezone.utc)
     if crt.exists() and key.exists():
         try:
@@ -160,11 +204,19 @@ def _ensure(folder: Path) -> tuple[Path, Path, Path]:
                 return crt, key, ca_crt
         except Exception:
             pass
-    pk = ec.generate_private_key(ec.SECP256R1())
+    pk = None
+    if key.exists():  # stessa chiave anche con certificato nuovo: i PC abbinati fissano la chiave, non il certificato
+        try:
+            pk = serialization.load_pem_private_key(key.read_bytes(), None)
+            if not isinstance(pk, ec.EllipticCurvePrivateKey):
+                pk = None
+        except Exception:
+            pk = None
+    pk = pk or ec.generate_private_key(ec.SECP256R1())
     host = socket.gethostname() or "localhost"
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"Pozzo Launcher ({host})"[:64])])
     alt: list[x509.GeneralName] = [x509.DNSName("localhost")]
-    if host and host != "localhost":
+    if host and host != "localhost" and _allowed(ca_cert, host.lower()):  # PC rinominato: fuori dai vincoli della CA
         try:
             alt.append(x509.DNSName(host))
             if "." not in host:  # nome di Windows: aggiungere .local aiuta dove c'e' il mDNS (es. iPhone)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ssl
 import threading
 from pathlib import Path
 
@@ -119,7 +120,7 @@ def build_router(ctx) -> APIRouter:
         """Codice per abbinare un altro PC a questo (accende il server HTTPS sulla rete di casa se serve)."""
         if not phone_hub.running() and not phone_hub.start(app):
             raise HTTPException(500, phone_hub.error or I.tr("s.sync.netDown"))
-        return {"code": phone_hub.new_code(), "minutes": PH.CODE_TTL // 60, **_sync_state()}
+        return {"code": phone_hub.new_code("pc"), "minutes": PH.CODE_TTL // 60, **_sync_state()}
 
     @router.post("/api/sync/peer")
     def api_sync_peer(body: dict = Body(...)):
@@ -128,9 +129,23 @@ def build_router(ctx) -> APIRouter:
         if not raw:
             raise HTTPException(400, I.tr("s.sync.needAddress"))
         url = f"https://{raw if ':' in raw else raw + ':' + str(PH.PORT)}"
+        # indirizzo e token per il senso inverso: l'altro PC ci tira i salvataggi (se il server non parte: solo andata)
+        back, back_token = {}, None
         try:
-            r = SY.request(url, "/api/sync/pair", {"code": str(body.get("code") or ""), "name": sync.pc()["pc_name"]})
+            if (phone_hub.running() or phone_hub.start(app)) and phone_hub.urls():
+                from ...remote import certs
+                crt = certs.ensure(phone_hub.certs_dir())[0]
+                fp = certs.spki_fp(ssl.PEM_cert_to_DER_cert(crt.read_text()))  # la chiave resta, il certificato cambia
+                back_token = phone_hub.issue(raw, "pc")
+                back = {"back": {"url": phone_hub.urls()[0].removesuffix("/m/"), "token": back_token, "fp": fp}}
+        except Exception:
+            back = {}
+        try:
+            r = SY.request(url, "/api/sync/pair", {"code": str(body.get("code") or ""), "name": sync.pc()["pc_name"],
+                                                   "pc": sync.pc(), **back})
         except Exception as e:
+            if back_token and (d := phone_hub.device_for(back_token)):
+                phone_hub.revoke(d["id"])
             raise HTTPException(400, I.tr("s.sync.pairFail", e=e))
         c = SY.conf(cfg)
         peer = {"id": r["pc"]["pc_id"], "name": r["pc"].get("pc_name") or raw, "url": url, "token": r["token"], "fp": r["_fp"]}
@@ -202,6 +217,15 @@ def build_router(ctx) -> APIRouter:
             token = phone_hub.pair(str(body.get("code") or ""), str(body.get("name") or "PC"), kind="pc")
         except ValueError as e:
             raise HTTPException(403, str(e))
+        back = body.get("back")
+        if isinstance(back, dict) and isinstance(body.get("pc"), dict):  # l'altro PC ci permette di tirare i suoi file
+            url, tok, pid = str(back.get("url") or ""), str(back.get("token") or ""), str(body["pc"].get("pc_id") or "")
+            if url.startswith("https://") and tok and pid and len(url) < 300:
+                c = SY.conf(cfg)
+                peer = {"id": pid, "name": str(body["pc"].get("pc_name") or body.get("name") or "PC")[:40], "url": url,
+                        "token": tok, "fp": str(back.get("fp") or "")}
+                c["peers"] = [p for p in c.get("peers") or [] if p["id"] != pid] + [peer]
+                SY.save_conf(cfg, c)
         return {"token": token, "pc": sync.pc()}
 
     @router.post("/api/sync/exchange")

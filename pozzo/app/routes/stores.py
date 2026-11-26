@@ -276,7 +276,10 @@ def build_router(ctx) -> APIRouter:
         if pid not in P.PLATFORMS:
             raise HTTPException(404, I.tr("s.stores.consoleUnknown"))
         name = f"netmeta:{pid}"
-        limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
+        try:
+            limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
+        except (TypeError, ValueError):
+            raise HTTPException(400, I.tr("s.emuextra.invalid"))
         if not _claim(name, J.NetMetaJob(limit=max(0, min(limit, 50000)), only=[pid],
                                          search_ziperto=bool(body.get("ziperto", True)))):
             return job[name].state()

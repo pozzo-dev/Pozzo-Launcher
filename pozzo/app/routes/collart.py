@@ -140,7 +140,8 @@ def build_router(ctx) -> APIRouter:
         return job["collart"].state()
 
     def _collart_auto():
-        time.sleep(45)  # dopo l'avvio: scarica in sottofondo le immagini mancanti delle collezioni
+        if ctx.stop.wait(45):  # dopo l'avvio: scarica in sottofondo le immagini mancanti; esce subito all'arresto
+            return
         try:
             if lib.games and job["collart"].status != "running":
                 _start_collart(True)

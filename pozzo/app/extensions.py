@@ -266,12 +266,34 @@ def experience_file(experience_id: str, rel: str) -> Path | None:
     return None
 
 
+_SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
+
+
+def is_inside(root: Path, path: Path) -> bool:
+    """True se `path` (risolto) sta dentro `root` (risolta): argine al path traversal."""
+    try:
+        return Path(path).resolve().is_relative_to(Path(root).resolve())
+    except (OSError, ValueError):
+        return False
+
+
+def _safe_dirname(name: str) -> bool:
+    """Nome di cartella singolo (figlia diretta): i temi utente possono avere maiuscole e spazi come in list_themes."""
+    return bool(name) and name not in (".", "..") and not any(c in "/\\" or ord(c) < 32 for c in name)
+
+
 def theme_file(cfg, tid: str, rel: str) -> Path | None:
+    if not _safe_dirname(tid or ""):
+        return None
     for base in theme_dirs(cfg):
-        root = (base / tid).resolve()
-        f = (root / rel).resolve()
-        if root.is_dir() and root in f.parents and f.is_file():
-            return f
+        try:
+            # root non risolta: una cartella collegata (symlink/junction) vale; il file deve restare dentro la root
+            root = base / tid
+            f = (root / rel).resolve()
+            if root.is_dir() and root.resolve() != f and is_inside(root, f) and f.is_file():
+                return f
+        except OSError:
+            continue
     return None
 
 
@@ -428,15 +450,17 @@ def list_plugins(cfg, errors: dict | None = None) -> list[dict]:
 
 
 def plugin_file(cfg, pid: str, rel: str) -> Path | None:
+    if not _SAFE_ID.fullmatch(pid or ""):
+        return None
     bases = plugin_dirs(cfg)
     repo_ext = Path(__file__).resolve().parent.parent.parent / "extensions"
     if repo_ext.is_dir():
         bases = [*bases, repo_ext]
     for base in bases:
         try:
-            root = (base / pid).resolve()
+            root = base / pid  # non risolta: plugin collegato con symlink/junction alle sorgenti
             f = (root / rel).resolve()
-            if root.is_dir() and root in f.parents and f.is_file() and f.suffix in (".js", ".css", ".png", ".jpg",
+            if root.is_dir() and root.resolve() != f and is_inside(root, f) and f.is_file() and f.suffix in (".js", ".css", ".png", ".jpg",
                                                                                    ".svg", ".webp", ".json", ".woff2"):
                 return f
         except OSError:  # percorso non attraversabile: come se non ci fosse

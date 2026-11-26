@@ -85,6 +85,7 @@ def test_folder_sync_and_profiles():
         # impostazioni: solo se scelto, e mai i percorsi del PC
         for c in (cfg_a, cfg_b):
             sync.save_conf(c, {**sync.conf(c), "what": "all"})
+        sa.run(), sb.run()  # primo giro: registra lo stato iniziale (ora 0), contano solo le modifiche dopo
         config.save_settings(cfg_a, paths={"roms": "D:/ROM"})
         config.set_setting(cfg_a, "catalogs", {"gba": ["https://esempio.test/gba/"]})
         sa.run(), sb.run()
@@ -167,10 +168,10 @@ def test_server_profiles_and_lan_gate():
 
         hub = app.state.phone_hub
         gate = TestClient(PhoneGate(app, hub), base_url="https://testserver")
-        hub.new_code()
+        hub.new_code("pc")
         bad = gate.post("/api/sync/pair", json={"code": "000000", "name": "PC finto"})
         assert bad.status_code == 403
-        code = hub.new_code()
+        code = hub.new_code("pc")
         r = gate.post("/api/sync/pair", json={"code": code, "name": "Portatile"}).json()
         gate.cookies.set("gs_phone", r["token"])  # come un browser: il cookie resta per le richieste successive
         assert r["pc"]["pc_id"]

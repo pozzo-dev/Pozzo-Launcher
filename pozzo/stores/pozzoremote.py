@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..remote import certs
 from .base import StoreGame, StoreProvider
 
 INSTALLED_KEY = "pozzoremote:installed"  # kv: id -> {title, exe, args, cwd, dir}
@@ -50,8 +51,11 @@ def norm_url(raw: str) -> str:
     return f"https://{host}:{u.port or PORT}"
 
 
+_UPGRADED = threading.Event()  # un'impronta salvata e' cambiata: da scrivere su disco (flush_pins)
+
+
 def open_pinned(url: str, fp: str | None, method: str, path: str, token: str | None = None, body: dict | None = None,
-                headers: dict | None = None, timeout: float = 60):
+                headers: dict | None = None, timeout: float = 60, server: dict | None = None):
     """(connessione, risposta, impronta). Con fp=None (solo l'abbinamento) ci si fida del certificato che arriva."""
     u = urlparse(url)
     ctx = ssl.create_default_context()
@@ -61,9 +65,14 @@ def open_pinned(url: str, fp: str | None, method: str, path: str, token: str | N
     conn = http.client.HTTPSConnection(u.hostname, u.port or PORT, context=ctx, timeout=timeout)
     try:
         conn.connect()
-        got = hashlib.sha256(conn.sock.getpeercert(binary_form=True)).hexdigest()
-        if fp is not None and got != fp:
+        der = conn.sock.getpeercert(binary_form=True)
+        # si fissa la chiave pubblica; accetta anche la vecchia impronta dell'intero certificato (stessa regola di sync.request)
+        got = certs.spki_fp(der)
+        if fp is not None and fp not in (got, hashlib.sha256(der).hexdigest()):
             raise PinError("Il certificato del server e' cambiato: rifiuto di collegarmi (rifai l'abbinamento solo se ti fidi)")
+        if server is not None and fp and fp != got:  # abbinato prima della 0.21: si passa all'impronta della chiave
+            server["fp"] = got
+            _UPGRADED.set()
         h = {"Accept": "application/json", **(headers or {})}
         data = None
         if body is not None:
@@ -78,7 +87,7 @@ def open_pinned(url: str, fp: str | None, method: str, path: str, token: str | N
 
 
 def call(server: dict, method: str, path: str, body: dict | None = None) -> dict:
-    conn, r, _ = open_pinned(server["url"], server["fp"], method, path, server["token"], body)
+    conn, r, _ = open_pinned(server["url"], server["fp"], method, path, server["token"], body, server=server)
     try:
         raw = r.read(64 * 1024 * 1024)
         if r.status >= 400:
@@ -103,6 +112,14 @@ def pair(raw_url: str, code: str, name: str) -> dict:
         return {"url": url, "token": data["token"], "fp": fp}
     finally:
         conn.close()
+
+
+def flush_pins(cfg) -> None:
+    """Scrive su disco le impronte aggiornate da open_pinned (i dict dei server sono quelli del config in memoria)."""
+    if _UPGRADED.is_set():
+        _UPGRADED.clear()
+        from .. import config as C
+        C.save_settings(cfg, stores={"pozzoremote": dict(cfg.stores.get("pozzoremote", {}))})
 
 
 def servers(settings: dict) -> list[dict]:
@@ -130,7 +147,7 @@ def fetch_cover(server: dict, g: dict, folder: Path) -> str:
     for old in folder.glob(dest.name + ".*"):
         return str(old)
     try:
-        conn, r, _ = open_pinned(server["url"], server["fp"], "GET", f"/api/lib-share/cover/{int(g['id'])}", server["token"])
+        conn, r, _ = open_pinned(server["url"], server["fp"], "GET", f"/api/lib-share/cover/{int(g['id'])}", server["token"], server=server)
         try:
             data = r.read(MAX_COVER + 1) if r.status == 200 else b""
         finally:
@@ -179,6 +196,7 @@ class PozzoRemote(StoreProvider):
                 seen.add(gid)
                 cover = await asyncio.to_thread(fetch_cover, sv, g, covers) if g.get("cover") else ""
                 games.append(_game(gid, g["title"], done.get(gid), int(g.get("size") or 0), cover, g.get("platform") or ""))
+        flush_pins(self.cfg)
         games += [_game(gid, rec["title"], rec, 0, "", "") for gid, rec in done.items() if gid not in seen]
         return games
 
@@ -239,6 +257,7 @@ def start(cfg, cache_factory, gid: str, on_done, tr) -> None:
         except Exception as e:  # noqa: BLE001 - l'errore si vede nell'attivita'
             _state(gid, status="error", finished=time.time(), phase=f"{type(e).__name__}: {e}")
         finally:
+            flush_pins(cfg)
             on_done(ok)
     threading.Thread(target=run, daemon=True, name="pozzoremote-install").start()
 
@@ -257,7 +276,7 @@ def download(sv: dict, entry: dict, folder: Path, progress, tr) -> Path:
         have = 0 if zipped or not part.exists() else part.stat().st_size
         try:
             conn, r, _ = open_pinned(sv["url"], sv["fp"], "GET", f"/api/lib-share/download/{int(entry['id'])}", sv["token"],
-                                     headers={"Range": f"bytes={have}-"} if have else None, timeout=60)
+                                     headers={"Range": f"bytes={have}-"} if have else None, timeout=60, server=sv)
         except PinError:
             raise
         except OSError:

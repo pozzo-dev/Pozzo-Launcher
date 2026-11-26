@@ -14,6 +14,7 @@ altrimenti all'uscita riscriverebbe le sue impostazioni.
 
 from __future__ import annotations
 
+import glob
 import os
 import re
 import shutil
@@ -132,7 +133,7 @@ def backup(p: Path) -> Path | None:
 
 
 def latest_backup(p: Path) -> Path | None:
-    found = sorted(p.parent.glob(p.name + BACKUP_TAG + "*"))
+    found = sorted(p.parent.glob(glob.escape(p.name) + BACKUP_TAG + "*"))
     return found[-1] if found else None
 
 

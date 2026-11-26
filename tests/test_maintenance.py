@@ -50,4 +50,3 @@ def test_run_failure_isolated(tmp_path, monkeypatch):
     assert s["covers_missing"] == 0
     r = M.latest(cfg)
     assert r["report"]["time"] == s["time"] and r["diff"] is None
-    assert len(M.history(cfg)) == 1

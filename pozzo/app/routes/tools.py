@@ -22,7 +22,7 @@ def build_router(ctx) -> APIRouter:
         return [Path(x).resolve() for x in (cfg.roms, *getattr(cfg, "extra_roms", []), d or default_dir()) if x]
 
     def _inside(p: Path) -> bool:
-        return any(r == p or r in p.parents for r in _roots())
+        return any(p.is_relative_to(r) for r in _roots())
 
     def _path(raw, key="path") -> Path:
         raw = str(raw or "").strip().strip('"')

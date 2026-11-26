@@ -617,10 +617,211 @@ def _is_pozzo(port: int) -> bool:
         return False
 
 
+def _bind_port(port: int, host: str = "127.0.0.1"):
+    """Socket gia' legato alla porta (la si tiene fino all'avvio di uvicorn), o None se e' occupata. Legare PRIMA di
+    costruire l'app: due copie avviate insieme non lavorano entrambe sugli stessi dati."""
+    import socket
+    sk = socket.socket()
+    try:
+        if sys.platform != "win32":  # su Windows SO_REUSEADDR permetterebbe di rubare la porta
+            sk.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sk.bind((host, port))
+        sk.listen()  # su Linux, senza listen() un altro socket con SO_REUSEADDR lega la stessa porta
+        return sk
+    except OSError:
+        sk.close()
+        return None
+
+
+def _claim_port(port: int):
+    """(socket, porta) della prima porta libera da `port` in su (50 tentativi), o None."""
+    for q in range(port, port + 50):
+        if (sk := _bind_port(q)) is not None:
+            return sk, q
+    return None
+
+
+def _wait_pozzo(port: int, secs: float = 4.0) -> bool:
+    """Una copia di Pozzo risponde su `port`? Se ha appena legato la porta sta ancora costruendo l'app: si attende."""
+    end = time.time() + secs
+    while True:
+        if _is_pozzo(port):
+            return True
+        if time.time() >= end:
+            return False
+        time.sleep(0.5)
+
+
+def _make_api(webview, url, state_fs, shown, activity_win, media_win):
+    """js_api di pywebview: finestra principale e Big Picture (cli) la condividono, cosi' schermo intero e focus funzionano ovunque."""
+    class Api:
+        """Esposto al JavaScript come window.pywebview.api: finestre native di scelta file/cartella."""
+
+        def pick_file(self):
+            win = webview.windows[0]
+            kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+            types = ("Programmi (*.exe)", "Tutti i file (*.*)") if sys.platform == "win32" else ("Tutti i file (*)",)
+            r = win.create_file_dialog(kind, file_types=types)
+            return r[0] if r else None
+
+        def pick_files(self):
+            """Scelta di piu' file (BIOS, chiavi): lista di percorsi o None."""
+            win = webview.windows[0]
+            kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+            r = win.create_file_dialog(kind, allow_multiple=True)
+            return list(r) if r else None
+
+        def login(self, store_id):
+            """Apre la pagina ufficiale di login (Epic/GOG) e cattura il codice di autorizzazione."""
+            import json as _json
+            import urllib.request
+            prov = STORES.BY_ID.get(store_id)
+            if not prov or not getattr(prov, "login_url", None):
+                return {"ok": False, "error": "login non previsto"}
+            win = webview.create_window(f"Accedi a {prov.name}", prov.login_url, width=520, height=760)
+            done = {"code": None}
+
+            def watch():
+                for _ in range(600):  # 5 minuti
+                    time.sleep(0.5)
+                    try:
+                        u = win.get_current_url() or ""
+                    except Exception:
+                        return
+                    if store_id == "gog" and "on_login_success" in u and "code=" in u:
+                        done["code"] = u
+                    elif store_id == "epic" and "/id/api/redirect" in u:
+                        try:
+                            done["code"] = win.evaluate_js("document.body.innerText")
+                        except Exception:
+                            pass
+                    if done["code"]:
+                        win.destroy()
+                        return
+            watch()
+            if not done["code"]:
+                return {"ok": False, "error": "accesso annullato"}
+            req = urllib.request.Request(f"{url}api/accounts/{store_id}/code",
+                                         data=_json.dumps({"code": done["code"]}).encode(),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:  # nosec B310 - URL http(s) fissi o scelti dall'utente
+                    return {"ok": True, **_json.loads(r.read())}
+            except Exception as e:
+                return {"ok": False, "error": str(getattr(e, "read", lambda: b"")().decode() or e)}
+
+        def window_ready(self, color):
+            """Barra del titolo, bordo e comparsa della finestra con il colore del tema. La chiama il
+            frontend quando tema e interfaccia sono gia' applicati: prima non si vede nulla, cosi' non
+            si vede per un attimo il tema predefinito e i colori di sistema."""
+            win = webview.windows[0]
+            try:
+                if sys.platform == "win32" and color:
+                    window_titlebar(win.native.Handle.ToInt64(), color)
+            except Exception:  # colore non valido o finestra non pronta: si mostra lo stesso
+                pass
+            if not shown.is_set():  # le chiamate successive (cambio tema) aggiornano solo titolo e bordo
+                shown.set()
+                win.show()
+            return True
+
+        def focus_window(self):
+            """Riporta in primo piano la finestra dell'app quando il gioco si chiude."""
+            win = webview.windows[0]
+            try:
+                win.restore()
+                win.show()
+                if sys.platform == "win32":
+                    import ctypes
+                    hwnd = win.native.Handle.ToInt64()
+                    ctypes.windll.user32.ShowWindow(hwnd, 9)
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                elif sys.platform == "darwin":
+                    from .. import macos
+                    macos.osascript(f'tell application "System Events" to set frontmost of (first process whose unix id is {os.getpid()}) to true')
+            except Exception:
+                pass
+            return True
+
+        def set_fullscreen(self, on):
+            """Schermo intero (Big Picture)."""
+            win = webview.windows[0]
+            if bool(on) != state_fs["on"]:
+                win.toggle_fullscreen()
+                state_fs["on"] = bool(on)
+            return state_fs["on"]
+
+        def open_activity(self):
+            """Finestra separata con le operazioni in corso; se e' gia' aperta torna in primo piano."""
+            w = activity_win.get("w")
+            if w is not None and w in webview.windows:
+                w.restore()
+                w.show()
+                return True
+            activity_win["w"] = webview.create_window("Attività · Pozzo Launcher", f"{url}activity", width=520,
+                                                      height=640, min_size=(360, 300), background_color="#111318",
+                                                      js_api=api)
+            return True
+
+        def open_media(self):
+            """Seconda finestra del launcher aperta sulla vista Media: il launcher principale resta libero
+            (altre schermate, giochi) mentre qui si guarda una serie. Se e' gia' aperta torna in primo piano."""
+            w = media_win.get("w")
+            if w is not None and w in webview.windows:
+                w.restore()
+                w.show()
+                return True
+            mapi = MediaApi()
+            w = webview.create_window("Media · Pozzo Launcher", f"{url}#media-window", width=1280, height=820,
+                                      min_size=(720, 480), background_color="#0f1115", js_api=mapi)
+            mapi.win = w
+            media_win["w"] = w
+            return True
+
+        def resolve_link(self, link):
+            """Link vero dietro un accorciatore (ouo) o dietro la pagina di un host di file: finestra
+            nascosta, clic da soli, URL del download letto da WebView2. None se non si arriva al file."""
+            return browserdl.resolve(link)
+
+        def pick_folder(self):
+            win = webview.windows[0]
+            kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
+            r = win.create_file_dialog(kind)
+            return r[0] if r else None
+
+    class MediaApi(Api):
+        """js_api della finestra Media: schermo intero, dialoghi e colore del titolo riguardano QUESTA finestra e non la principale."""
+        win = None
+        fs = False
+
+        def set_fullscreen(self, on):
+            if self.win is not None and bool(on) != self.fs:
+                self.win.toggle_fullscreen()
+                self.fs = bool(on)
+            return self.fs
+
+        def pick_folder(self):
+            win = self.win or webview.windows[0]
+            kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
+            r = win.create_file_dialog(kind)
+            return r[0] if r else None
+
+        def window_ready(self, color):
+            try:
+                if sys.platform == "win32" and color and self.win is not None:
+                    window_titlebar(self.win.native.Handle.ToInt64(), color)
+            except Exception:
+                pass
+            return True
+
+    api = Api()  # la finestra Attivita' riusa la stessa istanza
+    return api
+
 def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
     import uvicorn
-    if not _port_free(port):
-        if _is_pozzo(port):  # una copia e' gia' aperta: non se ne avvia un'altra sugli stessi dati
+    sock = _bind_port(port)
+    if sock is None:
+        if _wait_pozzo(port):  # una copia e' gia' aperta: non se ne avvia un'altra sugli stessi dati
             if not browser and _focus_running_window(port):
                 print("Pozzo Launcher e' gia' aperto: ho riportato in primo piano la sua finestra.")
                 return
@@ -629,12 +830,17 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
             import webbrowser
             webbrowser.open(f"http://127.0.0.1:{port}/" + ("bigpicture" if bigpicture else ""))
             return
-        free = next((q for q in range(port + 1, port + 50) if _port_free(q)), None)
-        if free is None:
+        got = _claim_port(port + 1)
+        if got is None:
             raise SystemExit(f"Porta {port} occupata da un altro programma: scegline un'altra con --port")
+        sock, free = got
         print(f"Porta {port} occupata da un altro programma: uso la {free}")
         port = free
-    inner = create_app(cfg)
+    try:
+        inner = create_app(cfg)
+    except BaseException:
+        sock.close()
+        raise
     app = LocalGuard(inner, port)  # il server del telefono usa l'app senza guardia, dietro PhoneGate
     url = f"http://127.0.0.1:{port}/"
     start_url = url + ("bigpicture" if bigpicture else "")
@@ -647,188 +853,31 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
             inner.state.events.close()
             signal.raise_signal(signal.SIGINT)  # come Ctrl+C: uvicorn.run si ferma in ordine
         QUIT["fn"] = stop_browser
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=1)
+        uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning",
+                                      timeout_graceful_shutdown=1)).run(sockets=[sock])
         return
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning",
                                            timeout_graceful_shutdown=1))  # SSE/keep-alive aperti non devono tenere la chiusura appesa
-    t = threading.Thread(target=server.run, daemon=True)
+    t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     t.start()
 
     def stop_server():
         inner.state.events.close()  # prima di fermare il server: gli SSE aperti finiscono da soli, senza traceback
         server.should_exit = True
     QUIT["fn"] = stop_server
-    while not server.started:
+    while not server.started and t.is_alive():
         time.sleep(0.05)
+    if not server.started:  # il thread del server e' morto prima di partire: niente attesa infinita
+        raise SystemExit("Il server locale non e' partito: controlla il log (porta occupata o errore all'avvio)")
     try:
         import webview
-
-        class Api:
-            """Esposto al JavaScript come window.pywebview.api: finestre native di scelta file/cartella."""
-
-            def pick_file(self):
-                win = webview.windows[0]
-                kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
-                types = ("Programmi (*.exe)", "Tutti i file (*.*)") if sys.platform == "win32" else ("Tutti i file (*)",)
-                r = win.create_file_dialog(kind, file_types=types)
-                return r[0] if r else None
-
-            def pick_files(self):
-                """Scelta di piu' file (BIOS, chiavi): lista di percorsi o None."""
-                win = webview.windows[0]
-                kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
-                r = win.create_file_dialog(kind, allow_multiple=True)
-                return list(r) if r else None
-
-            def login(self, store_id):
-                """Apre la pagina ufficiale di login (Epic/GOG) e cattura il codice di autorizzazione."""
-                import json as _json
-                import urllib.request
-                prov = STORES.BY_ID.get(store_id)
-                if not prov or not getattr(prov, "login_url", None):
-                    return {"ok": False, "error": "login non previsto"}
-                win = webview.create_window(f"Accedi a {prov.name}", prov.login_url, width=520, height=760)
-                done = {"code": None}
-
-                def watch():
-                    for _ in range(600):  # 5 minuti
-                        time.sleep(0.5)
-                        try:
-                            u = win.get_current_url() or ""
-                        except Exception:
-                            return
-                        if store_id == "gog" and "on_login_success" in u and "code=" in u:
-                            done["code"] = u
-                        elif store_id == "epic" and "/id/api/redirect" in u:
-                            try:
-                                done["code"] = win.evaluate_js("document.body.innerText")
-                            except Exception:
-                                pass
-                        if done["code"]:
-                            win.destroy()
-                            return
-                watch()
-                if not done["code"]:
-                    return {"ok": False, "error": "accesso annullato"}
-                req = urllib.request.Request(f"{url}api/accounts/{store_id}/code",
-                                             data=_json.dumps({"code": done["code"]}).encode(),
-                                             headers={"Content-Type": "application/json"}, method="POST")
-                try:
-                    with urllib.request.urlopen(req, timeout=60) as r:  # nosec B310 - URL http(s) fissi o scelti dall'utente
-                        return {"ok": True, **_json.loads(r.read())}
-                except Exception as e:
-                    return {"ok": False, "error": str(getattr(e, "read", lambda: b"")().decode() or e)}
-
-            def window_ready(self, color):
-                """Barra del titolo, bordo e comparsa della finestra con il colore del tema. La chiama il
-                frontend quando tema e interfaccia sono gia' applicati: prima non si vede nulla, cosi' non
-                si vede per un attimo il tema predefinito e i colori di sistema."""
-                win = webview.windows[0]
-                try:
-                    if sys.platform == "win32" and color:
-                        window_titlebar(win.native.Handle.ToInt64(), color)
-                except Exception:  # colore non valido o finestra non pronta: si mostra lo stesso
-                    pass
-                if not shown.is_set():  # le chiamate successive (cambio tema) aggiornano solo titolo e bordo
-                    shown.set()
-                    win.show()
-                return True
-
-            def focus_window(self):
-                """Riporta in primo piano la finestra dell'app quando il gioco si chiude."""
-                win = webview.windows[0]
-                try:
-                    win.restore()
-                    win.show()
-                    if sys.platform == "win32":
-                        import ctypes
-                        hwnd = win.native.Handle.ToInt64()
-                        ctypes.windll.user32.ShowWindow(hwnd, 9)
-                        ctypes.windll.user32.SetForegroundWindow(hwnd)
-                    elif sys.platform == "darwin":
-                        from .. import macos
-                        macos.osascript(f'tell application "System Events" to set frontmost of (first process whose unix id is {os.getpid()}) to true')
-                except Exception:
-                    pass
-                return True
-
-            def set_fullscreen(self, on):
-                """Schermo intero (Big Picture)."""
-                win = webview.windows[0]
-                if bool(on) != state_fs["on"]:
-                    win.toggle_fullscreen()
-                    state_fs["on"] = bool(on)
-                return state_fs["on"]
-
-            def open_activity(self):
-                """Finestra separata con le operazioni in corso; se e' gia' aperta torna in primo piano."""
-                w = activity_win.get("w")
-                if w is not None and w in webview.windows:
-                    w.restore()
-                    w.show()
-                    return True
-                activity_win["w"] = webview.create_window("Attività · Pozzo Launcher", f"{url}activity", width=520,
-                                                          height=640, min_size=(360, 300), background_color="#111318",
-                                                          js_api=api)
-                return True
-
-            def open_media(self):
-                """Seconda finestra del launcher aperta sulla vista Media: il launcher principale resta libero
-                (altre schermate, giochi) mentre qui si guarda una serie. Se e' gia' aperta torna in primo piano."""
-                w = media_win.get("w")
-                if w is not None and w in webview.windows:
-                    w.restore()
-                    w.show()
-                    return True
-                mapi = MediaApi()
-                w = webview.create_window("Media · Pozzo Launcher", f"{url}#media-window", width=1280, height=820,
-                                          min_size=(720, 480), background_color="#0f1115", js_api=mapi)
-                mapi.win = w
-                media_win["w"] = w
-                return True
-
-            def resolve_link(self, link):
-                """Link vero dietro un accorciatore (ouo) o dietro la pagina di un host di file: finestra
-                nascosta, clic da soli, URL del download letto da WebView2. None se non si arriva al file."""
-                return browserdl.resolve(link)
-
-            def pick_folder(self):
-                win = webview.windows[0]
-                kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
-                r = win.create_file_dialog(kind)
-                return r[0] if r else None
-
-        class MediaApi(Api):
-            """js_api della finestra Media: schermo intero, dialoghi e colore del titolo riguardano QUESTA finestra e non la principale."""
-            win = None
-            fs = False
-
-            def set_fullscreen(self, on):
-                if self.win is not None and bool(on) != self.fs:
-                    self.win.toggle_fullscreen()
-                    self.fs = bool(on)
-                return self.fs
-
-            def pick_folder(self):
-                win = self.win or webview.windows[0]
-                kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
-                r = win.create_file_dialog(kind)
-                return r[0] if r else None
-
-            def window_ready(self, color):
-                try:
-                    if sys.platform == "win32" and color and self.win is not None:
-                        window_titlebar(self.win.native.Handle.ToInt64(), color)
-                except Exception:
-                    pass
-                return True
 
         state_fs = {"on": bigpicture}
         activity_win: dict = {}
         media_win: dict = {}
-        api = Api()
         # la finestra principale nasce nascosta e si mostra quando il frontend ha applicato tema e interfaccia
         shown = threading.Event()
+        api = _make_api(webview, url, state_fs, shown, activity_win, media_win)
         WINDOW_FOCUS["fn"] = api.focus_window
         SL.set_resolver(api.resolve_link, browserdl.reason)  # accorciatori (ouo) e host (DataNodes)
         browserdl.install()  # l'URL del download del WebView si legge solo con questo aggancio (Windows)

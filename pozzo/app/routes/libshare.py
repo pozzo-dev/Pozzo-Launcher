@@ -89,7 +89,7 @@ def build_router(ctx) -> APIRouter:
             one = LS.single_file(g)
             out.append({"id": g["id"], "ref": LS.ref(g), "title": g["title"], "platform": g["platform"],
                         "size": g.get("size") or 0, "kind": "file" if one else "zip",
-                        "name": one.name if one else "", "play": bool(W.plan(g)),
+                        "name": one.name if one else "", "play": bool(W.plan(g)) and g["platform"] != "psx",  # PS1 vuole il BIOS: agli ospiti /bios e' negato
                         "cover": f"/api/lib-share/cover/{g['id']}" if _cover(g) else ""})
         return {"games": out}
 

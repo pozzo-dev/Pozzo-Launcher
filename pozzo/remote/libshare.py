@@ -132,7 +132,7 @@ def pair(hub, code: str, name: str, ip: str = "") -> str:
             raise ValueError("Troppi tentativi sbagliati: riprova tra qualche minuto")
         h = _sha(_norm(code))
         with hub.devlock:  # inviti letti e salvati insieme: una revoca nel mezzo non va persa
-            invites = [dict(i) for i in hub.conf.get("lib_invites", [])]
+            invites = [dict(i) for i in hub._live(hub.conf.get("lib_invites", []))]  # scaduti da >30 giorni: via
             hit = None
             for i in invites:  # confronto a tempo costante su tutti
                 if secrets.compare_digest(i["hash"], h):
@@ -145,7 +145,7 @@ def pair(hub, code: str, name: str, ip: str = "") -> str:
             dev = {"id": secrets.token_hex(6), "name": (name or hit["name"]).strip()[:40], "token": _sha(token),
                    "created": now, "last": now, "kind": "lib", "exp": hit["exp"], "invite": hit["id"]}
             hit["used"], hit["device"] = True, dev["id"]
-            hub._save(devices=[*hub.conf["devices"], dev], lib_invites=invites)
+            hub._save(devices=[*hub._live(hub.conf["devices"]), dev], lib_invites=invites)
     return token
 
 

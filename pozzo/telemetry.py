@@ -11,6 +11,7 @@ from collections import deque
 from pathlib import Path
 
 MAX_ERRORS = 50
+MAX_BYTES = 8 * 1024 * 1024  # come applog: oltre questo errors.log passa a errors.log.old
 _lock = threading.Lock()
 _buf: deque[dict] = deque(maxlen=MAX_ERRORS)
 _path: Path | None = None  # impostato da set_path(); senza, il registro resta solo in memoria
@@ -20,6 +21,11 @@ _USER = re.compile(r"""(?i)(?:[A-Z]:[\\/]+Users[\\/]+|/(?:home|Users)/)[^\\/\s"'
 def set_path(path: str | os.PathLike | None) -> None:
     global _path
     _path = Path(path) if path else None
+    try:
+        if _path and _path.exists() and _path.stat().st_size > MAX_BYTES:
+            _path.replace(_path.with_suffix(_path.suffix + ".old"))
+    except OSError:
+        pass
 
 
 # parametri delle URL con chiavi o password usati da sources/, stores/, achievements e retroachievements ("y" e' la

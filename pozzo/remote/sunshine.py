@@ -305,6 +305,13 @@ class Sunshine:
         self._check(self.c.post("/api/pin", json=body))
         return {"pending": len(pending)}
 
+    def clients(self) -> list[dict]:
+        """Client Moonlight abbinati: [{name, uuid}]."""
+        return self._check(self.c.get("/api/clients/list")).json().get("named_certs") or []
+
+    def unpair(self, uuid: str):
+        self._check(self.c.post("/api/clients/unpair", json={"uuid": uuid}))
+
     def save(self, app: dict, index: int = -1):
         self._check(self.c.post("/api/apps", json={**app, "index": index}))
 
