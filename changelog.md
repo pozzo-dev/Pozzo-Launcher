@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.1 (2026-11-27)
+### Aggiunto
+
+- **Libreria e ricerca dati**: «🖼 Cerca solo le immagini» (Impostazioni › Libreria) cerca sul web copertina, sfondo e schermata dei giochi senza copertina, senza toccare gli altri dati.
+
+### Migliorato
+
+- **Libreria e ricerca dati**: ScreenScraper interroga due giochi alla volta (mai oltre i thread concessi dall'account): la ricerca dei dati è circa due volte più veloce.
+
+### Corretto
+
+- **Port**: la pagina non si ricarica più ogni secondo quando il catalogo non si può scaricare.
+- **Collegamento sul desktop**: i giochi avviati dal client dello store (Riot, Battle.net, Xbox) hanno l'icona del gioco e non quella del client.
+- **Interfaccia**: il link «Vai al contenuto» non compare più in alto a sinistra dopo una scansione; si vede solo navigando con Tab.
+- **Libreria e ricerca dati**: durante la scansione non compare più per un attimo una finestra di PowerShell.
+
 ## 0.21.0 (2026-11-26)
 ### Corretto
 
