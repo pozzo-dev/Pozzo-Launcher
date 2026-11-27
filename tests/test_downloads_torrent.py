@@ -35,7 +35,10 @@ def swarm(tmp):
     (tmp / "set.torrent").write_bytes(raw)
     ti = lt.torrent_info(raw)
     # non la porta 0: Windows puo' darne una riservata in UDP, il bind uTP fallisce e il seeder resta senza porta
-    seed = lt.session({"listen_interfaces": f"127.0.0.1:{_free_port()}", **LOCAL})
+    # il magnet non vuole nessun file finche' arrivano i metadati: un seed chiude i peer «non interessati» e la
+    # riconnessione allo stesso peer slitta di minuti (stallo sui runner Windows lenti); tutti i peer sono su 127.0.0.1
+    seed = lt.session({"listen_interfaces": f"127.0.0.1:{_free_port()}", **LOCAL,
+                       "close_redundant_connections": False, "allow_multiple_connections_per_ip": True})
     seed.set_peer_class_filter(lt.ip_filter())  # i peer locali di solito ignorano i limiti: qui il limite vale
     p = lt.add_torrent_params()
     p.ti, p.save_path = ti, str(src.parent)

@@ -15,6 +15,9 @@ import pytest
 from pozzo.library import launcher as L
 
 win = pytest.mark.skipif(sys.platform != "win32", reason="NtSuspendProcess solo su Windows")
+# in un venv Windows sys.executable e' un lanciatore che avvia il vero Python come figlio: si sospenderebbe
+# il lanciatore (CPU sempre 0) e non il ciclo
+PY = getattr(sys, "_base_executable", sys.executable)
 
 
 def _launcher():
@@ -30,7 +33,7 @@ def _cpu(p):
 
 @win
 def test_suspend_stops_cpu_and_resume_restarts_it():
-    p = subprocess.Popen([sys.executable, "-c", "while True: pass"])
+    p = subprocess.Popen([PY, "-c", "while True: pass"])
     try:
         time.sleep(0.5)
         assert L._suspend(p.pid, True)

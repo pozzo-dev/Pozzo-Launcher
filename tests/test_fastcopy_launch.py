@@ -165,6 +165,9 @@ def test_pc_rimappa_percorsi(env):
     # Path.exists() sul finto exe copiato: la copia finta crea solo la cartella, quindi creiamo il file
     _wait(ln, "error")  # target copiato inesistente (copia finta): comunque rimappato e ripulito
     assert str(tmp / "fast" / "manual_1" / "Foo" / "bin" / "foo.exe") in ln.state["message"]
+    end = time.time() + 10  # la copia si toglie nel finally, subito DOPO lo stato «error»: sui runner lenti arriva dopo
+    while ("remove", tmp / "fast" / "manual_1") not in calls and time.time() < end:
+        time.sleep(0.02)
     assert ("remove", tmp / "fast" / "manual_1") in calls
 
 

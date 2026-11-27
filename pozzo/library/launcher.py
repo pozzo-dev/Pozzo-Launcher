@@ -1511,12 +1511,13 @@ class Launcher:
             if quiet:
                 threading.Thread(target=hide_launcher_windows, args=(lname,), daemon=True).start()
             job = job if job and proc and job.add(proc) and Path(target).name.lower() not in self.LAUNCHER_EXES else None
-            self._set(status="running", message=target)
             self._proc, self._job = proc, job
             via_launcher = proc is None or Path(target).name.lower() in self.LAUNCHER_EXES
             track = launch.get("track_dir") or install_dir
             # gioco diretto: ci pensano Job e albero dei processi; la cartella (nei manuali e' quella dell'exe, anche Desktop) non va usata per chiudere
             self._track = track if via_launcher else None
+            # «running» solo con processo, Job e cartella gia' noti: un «Chiudi gioco» subito dopo li trova
+            self._set(status="running", message=target)
             seen = True  # senza cartella da controllare non si sa: si conta come prima
             if not via_launcher:
                 self._wait_proc(proc, job, comp)  # gioco avviato direttamente: si aspetta il suo processo (e i figli, nel Job)
@@ -1669,7 +1670,6 @@ class Launcher:
             cmd = [pl["exe"], *(FULLSCREEN_ARGS.get(pl["emulator"], []) if full else []), *self.prelaunch(dict(self.state)), *self.next_args, *args]
             self.next_args = []  # valgono solo per questo avvio
             self.on_event("game_launching", dict(self.state))
-            self._set(status="running", message=" ".join(f'"{c}"' if " " in c else c for c in cmd))
             t0 = time.time()
             import tempfile  # stderr su file temporaneo (non in memoria): serve per l'ultimo log in caso di crash
             with tempfile.TemporaryFile() as errf:  # chiuso anche se Popen o l'attesa falliscono
@@ -1677,6 +1677,8 @@ class Launcher:
                                         start_new_session=bool(job) and sys.platform != "win32")
                 job = job if job and job.add(proc) else None
                 self._proc, self._track, self._job = proc, None, job
+                # «running» dopo Popen: un «Chiudi gioco» immediato trova gia' il processo da chiudere
+                self._set(status="running", message=" ".join(f'"{c}"' if " " in c else c for c in cmd))
                 if full:  # rete di sicurezza per ogni emulatore: se la finestra non copre lo schermo, ci pensa Pozzo
                     threading.Thread(target=set_window_mode, args=(str(Path(pl["exe"]).parent), "fullscreen"),
                                      kwargs={"root_pid": proc.pid}, daemon=True).start()
