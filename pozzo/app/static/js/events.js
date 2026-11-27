@@ -10,6 +10,9 @@ function bind() {
     if (open && !detailWasOpen && h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
     detailWasOpen = open;
   }).observe($("#detail"), { attributes: true, attributeFilter: ["class"] });
+  // a11y: il link «Vai al contenuto» compare solo navigando con Tab (vedi a11y.css)
+  document.addEventListener("keydown", (e) => { if (e.key === "Tab") document.documentElement.classList.add("kbd-nav"); }, true);
+  document.addEventListener("pointerdown", () => document.documentElement.classList.remove("kbd-nav"), true);
   $("#feedback-btn").onclick = () => api("/api/open", {
     body: { url: "https://github.com/erpaffo/Pozzo-Launcher/issues/new/choose" },
   }).catch((e) => toast(e.message, true));
@@ -647,6 +650,8 @@ function bind() {
   $("#collart-missing").onclick = () => startCollart("missing");
   $("#collart-all").onclick = () => startCollart("all");
   $("#collart-stop").onclick = () => api("/api/collart/cancel", { body: {} });
+  $("#imgs-start").onclick = startImgs;
+  $("#imgs-stop").onclick = () => api("/api/media/fill-missing/cancel", { body: {} }).then(() => pollImgs());
   $("#smeta-all").onclick = () => startStoreMeta(false);
   $("#ph-on").onchange = (e) => phoneSet({ enabled: e.target.checked });
   $("#pads-test-btn").onclick = (e) => {

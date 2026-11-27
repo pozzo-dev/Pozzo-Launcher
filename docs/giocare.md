@@ -129,7 +129,8 @@ finisce di sincronizzare i salvataggi; Steam viene chiuso in modo pulito.
 ## Collegamento sul desktop
 
 Nel dettaglio di un gioco, **🖥 Collegamento sul desktop** crea un collegamento con l'icona del gioco: quella
-dell'eseguibile per i giochi PC avviati da un `.exe`, altrimenti ricavata dalla copertina. Il collegamento avvia il gioco **tramite
+dell'eseguibile per i giochi PC avviati da un `.exe`, altrimenti ricavata dalla copertina (anche per i giochi avviati
+dal client dello store, come Riot o Battle.net, così non compare l'icona del client). Il collegamento avvia il gioco **tramite
 Pozzo Launcher**: valgono emulatore, profilo e script, e il tempo di gioco viene registrato come quando lo avvii
 dall'app. Non è disponibile per i giochi degli store online, che non sono installati.
 

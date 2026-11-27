@@ -33,6 +33,14 @@ def split_cmd(base: str) -> tuple[str, str]:
     return (m.group(1), m.group(2)) if m else (base, "")
 
 
+def inside(path: str, folder: str | None) -> bool:
+    """True se `path` sta dentro `folder` (l'exe e' del gioco, non del client dello store)."""
+    try:
+        return bool(folder) and Path(path).resolve().is_relative_to(Path(folder).resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def make_icon(image: Path, out: Path) -> Path | None:
     """Icona .ico quadrata dalla copertina (centrata su fondo trasparente)."""
     try:

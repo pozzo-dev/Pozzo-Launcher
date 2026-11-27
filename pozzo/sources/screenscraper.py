@@ -99,7 +99,10 @@ class ScreenScraper(Source):
             self._check_fatal(r.text)
             self.log(f"[red]ScreenScraper: HTTP {r.status_code} {r.text[:200]}[/]")
             return False
-        threads = min(threads, int(self.cfg.ss.get("threads") or threads))
+        # due giochi alla volta (o i thread scelti in config), mai oltre quelli concessi dall'account
+        threads = min(threads, int(self.cfg.ss.get("threads") or 2))
+        if threads < 2:
+            self.log("ScreenScraper: l'account concede 1 thread, un gioco alla volta")
         self.concurrency = threads
         # 1 richiesta ogni 1,2 s per thread, come chiesto da ScreenScraper
         self.api_limiter = RateLimiter(threads / 1.2, threads)

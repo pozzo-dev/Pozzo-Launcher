@@ -127,7 +127,8 @@ to finish syncing cloud saves; Steam is shut down cleanly.
 ## Desktop Shortcut
 
 In the game details view, **🖥 Desktop Shortcut** creates a desktop shortcut with the game's icon: from the
-executable for PC games launched via `.exe`, or derived from the box art otherwise. The shortcut launches the game **via
+executable for PC games launched via `.exe`, or derived from the box art otherwise (also for games started by the
+store's client, such as Riot or Battle.net, so the client's icon doesn't show up). The shortcut launches the game **via
 Pozzo Launcher**: emulator, profile, and scripts still apply, and playtime is recorded just like when launching
 from within the app. This is not available for online store games that are not installed.
 

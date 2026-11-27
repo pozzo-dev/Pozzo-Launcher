@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "Une installation de mods est déjà en cours pour ce jeu",
  "f.phone_touch.started": "Ouvre Pozzo Launcher sur le téléphone : l'écran inférieur y apparaît tout seul.",
  "b.ext.tutorial": "Comment ça marche",
- "b.ext.tutorialBtn": "Tutoriel"
+ "b.ext.tutorialBtn": "Tutoriel",
+ "s.images.bulk.task": "Jeux",
+ "s.images.bulk.running": "Recherche des images de {title}",
+ "s.images.bulk.done": "Terminé : images trouvées pour {n} jeux sur {of}",
+ "s.images.bulk.cancelled": "Interrompue : images trouvées pour {n} jeux",
+ "s.images.bulk.already": "La recherche d'images est déjà en cours",
+ "k.lib.h.imgs": "Images des jeux non trouvés",
+ "k.lib.imgs.p": "Pour les jeux sans jaquette, cherche sur le web uniquement la jaquette, le fond et une capture : les autres données restent vides. Tu peux les changer depuis « Images du jeu » dans la fiche.",
+ "k.lib.imgs.btn": "🖼 Chercher seulement les images",
+ "k.lib.imgs.info": "Jeux sans jaquette : {n}"
 }

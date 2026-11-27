@@ -24,7 +24,8 @@ from datetime import datetime
 
 DEFAULTS = {
     # fonte          rate   daily   monthly reserve errors cooldown
-    "screenscraper": (0.8, 0, 0, 0, 5, 300),  # thread e quota letti dall'account
+    # 2 thread x 1 richiesta ogni 1,2 s; il limitatore della fonte resta a thread/1,2 (con 1 thread non si accelera)
+    "screenscraper": (2 / 1.2, 0, 0, 0, 5, 300),  # thread e quota letti dall'account
     "igdb": (4.0, 0, 0, 0, 5, 120),
     "thegamesdb": (1.0, 0, 1000, 20, 3, 600),  # API: quota mensile (la copia completa non ne consuma)
     "rawg": (2.0, 700, 19000, 200, 3, 600),  # piano gratuito: 20.000 richieste/mese

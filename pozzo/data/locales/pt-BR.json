@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "Já há uma instalação de mods em andamento para este jogo",
  "f.phone_touch.started": "Abra o Pozzo Launcher no celular: a tela inferior aparece lá sozinha.",
  "b.ext.tutorial": "Como funciona",
- "b.ext.tutorialBtn": "Tutorial"
+ "b.ext.tutorialBtn": "Tutorial",
+ "s.images.bulk.task": "Jogos",
+ "s.images.bulk.running": "Procurando imagens de {title}",
+ "s.images.bulk.done": "Concluído: imagens encontradas para {n} de {of} jogos",
+ "s.images.bulk.cancelled": "Interrompida: imagens encontradas para {n} jogos",
+ "s.images.bulk.already": "A busca de imagens já está em andamento",
+ "k.lib.h.imgs": "Imagens dos jogos não encontrados",
+ "k.lib.imgs.p": "Para jogos sem capa, busca na web só a capa, o fundo e uma captura de tela: os outros dados ficam vazios. Você pode trocá-las em “Imagens do jogo” na página do jogo.",
+ "k.lib.imgs.btn": "🖼 Buscar só as imagens",
+ "k.lib.imgs.info": "Jogos sem capa: {n}"
 }

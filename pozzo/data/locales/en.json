@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "A mod installation is already in progress for this game",
  "f.phone_touch.started": "Open Pozzo Launcher on the phone: the bottom screen appears there by itself.",
  "b.ext.tutorial": "How it works",
- "b.ext.tutorialBtn": "Tutorial"
+ "b.ext.tutorialBtn": "Tutorial",
+ "s.images.bulk.task": "Games",
+ "s.images.bulk.running": "Looking for images of {title}",
+ "s.images.bulk.done": "Done: images found for {n} of {of} games",
+ "s.images.bulk.cancelled": "Stopped: images found for {n} games",
+ "s.images.bulk.already": "The image search is already running",
+ "k.lib.h.imgs": "Images for games not found",
+ "k.lib.imgs.p": "For games without a cover, searches the web for the cover, background and screenshot only: the other data stays empty. You can change them from “Game images” in the game page.",
+ "k.lib.imgs.btn": "🖼 Search images only",
+ "k.lib.imgs.info": "Games without a cover: {n}"
 }

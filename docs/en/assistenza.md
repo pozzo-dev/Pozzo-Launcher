@@ -43,6 +43,7 @@ If you copy a ROM into a console folder while the app is open, it appears automa
 - **Check the filename**: Clean filenames such as `Pokemon - FireRed Version.gba` or No-Intro scene conventions are identified immediately. Names with unusual characters or cryptic abbreviations may fail to match.
 - **Compressed archives**: `.zip` and `.7z` archives are supported for classic consoles. For Nintendo Switch, `.nsp`, `.xci`, and `.nsz` formats are supported.
 - **Try manual search**: Right-click on the game and select **🖼 Game Images…**: you can upload an image from your PC, pick one from SteamGridDB, or paste an image URL from the web.
+- **Images only, for all of them at once**: in **Settings › Library › Images for games not found**, **🖼 Search images only** searches the web for the cover, background and screenshot of every game without a cover, leaving the other data untouched. You can then change them from **🖼 Game Images…**.
 - **Check the ? Missing Data view**: In the sidebar, click **? Missing Data** to view all games requiring verification and run **⟳ Search missing data** exclusively for them.
 
 ![The Missing Data view: groups all games requiring attention or manual metadata](../images/libreria-senza-dati.jpg)

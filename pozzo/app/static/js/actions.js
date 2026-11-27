@@ -497,6 +497,28 @@ async function startCollart(mode) {
   pollCollart(true);
 }
 
+/* ---- immagini dei giochi senza copertina (solo immagini dal web, niente metadati) */
+let imgsTimer = 0, imgsRunning = false;
+async function pollImgs(started = false) {
+  clearTimeout(imgsTimer);
+  let js;
+  try { js = await api("/api/media/fill-missing"); } catch { return; }
+  if (started && js.status !== "running") js.status = "running";
+  $("#imgs-info").textContent = t("k.lib.imgs.info", { n: js.missing });
+  renderJobInto($("#imgs-progress"), js);
+  const run = js.status === "running";
+  $("#imgs-start").disabled = run || !js.missing;
+  $("#imgs-stop").hidden = !run;
+  if (imgsRunning && !run) { await reload(true); if (S.detail) openDetail(S.detail.id); } // appena finita: copertine nella griglia
+  imgsRunning = run;
+  if (run && settingsOpen()) imgsTimer = setTimeout(pollImgs, 2000);
+}
+async function startImgs() {
+  try { await api("/api/media/fill-missing", { body: {} }); } catch (e) { return toast(e.message, true); }
+  imgsRunning = true;
+  pollImgs(true);
+}
+
 /* ---- HowLongToBeat */
 let hltbTimer = 0, hltbRunning = false;
 async function pollHltb(started = false) {

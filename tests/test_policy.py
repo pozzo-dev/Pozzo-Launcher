@@ -124,6 +124,30 @@ def test_policy_config(tmp: Path):
     print("ok  limiti configurabili da config.toml e dall'app")
 
 
+def test_screenscraper_due_alla_volta(tmp: Path):
+    from types import SimpleNamespace
+    from pozzo.pipeline import guard_source
+    from pozzo.sources import screenscraper as SS
+    from pozzo.sources.base import Context
+    (tmp / "ss.toml").write_text('[paths]\nroms="."\n[screenscraper]\ndevid="d"\ndevpassword="p"\nuser="u"\n', encoding="utf-8")
+    cfg = config.load(tmp / "ss.toml")
+    old = SS.request
+    try:
+        for account, conc, gap in ((4, 2, 0.6), (1, 1, 1.2)):
+            info = {"response": {"ssuser": {"id": "u", "maxthreads": str(account), "maxrequestsperday": "20000", "requeststoday": "0"}}}
+
+            async def fake(*a, **k):
+                return SimpleNamespace(status_code=200, json=lambda: info, text="", headers={})
+            SS.request = fake
+            src = SS.ScreenScraper(Context(cfg, None, None, lambda m: None))
+            assert asyncio.run(src.setup(set()))
+            guard_source(src, cfg, Ledger(tmp / f"ss{account}.db"), lambda m: None)
+            assert src.concurrency == conc and abs(src.api_limiter.interval - gap) < 0.01, (account, src.concurrency, src.api_limiter.interval)
+    finally:
+        SS.request = old
+    print("ok  ScreenScraper: due giochi alla volta a 1 richiesta ogni 1,2 s per thread, mai oltre l'account")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
@@ -132,4 +156,5 @@ if __name__ == "__main__":
         test_http_cache(tmp)
         test_ratings()
         test_policy_config(tmp)
+        test_screenscraper_due_alla_volta(tmp)
     print("TUTTI I TEST OK")

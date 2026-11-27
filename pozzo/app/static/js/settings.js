@@ -323,7 +323,7 @@ function showTab(tab) {
   if (id === "generale") { loadPower(); loadNotify(); loadProfilesSettings(); loadHints(); loadTour(); }
   else if (id === "download") loadDownloadSettings();
   else if (id === "sistema") { loadHealth(); loadAbout(); loadSystemErrors(); }
-  else if (id === "libreria") { loadScan(); loadSources(); renderCustomConsoles(); watchStatusStart(); api("/api/status").then(showStatus); pollHltb(); pollCollart(); }
+  else if (id === "libreria") { loadScan(); loadSources(); renderCustomConsoles(); watchStatusStart(); api("/api/status").then(showStatus); pollHltb(); pollCollart(); pollImgs(); }
   else if (id === "store") { loadAccounts(); loadPcStores(); loadSteamExport(); }
   else if (id === "emulatori") { loadEmu(); loadDownloadSettings(); } // Switch 2 salva tra le impostazioni dei download
   else if (id === "streaming") { loadRemote(); loadLibShare(); }
@@ -1522,8 +1522,10 @@ function renderScanJob(js) {
 }
 
 function setScanRunning(on) {
+  const lost = document.activeElement === $(on ? "#scan-start" : "#scan-cancel");
   $("#scan-start").hidden = on;
   $("#scan-cancel").hidden = !on;
+  if (lost) $(on ? "#scan-cancel" : "#scan-start").focus(); // il pulsante col focus sparisce: il focus non finisce sul body
   const b = $("#scan-btn");
   b.classList.toggle("busy", on);
   // solo l'etichetta: l'icona resta (prima il testo intero sostituiva anche quella)

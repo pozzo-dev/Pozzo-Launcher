@@ -63,7 +63,7 @@ Ordine delle fonti per un singolo campo, per esempio `description = ["screenscra
 
 | Sezione | Chiavi |
 |---|---|
-| `[screenscraper]` | `user`, `password`, `devid`, `devpassword`, `threads` (0 = massimo dell'account), `quota_reserve`, `ko_reserve`, `search_fallback` (`missing`, `true`, `false`), `only_primary`, `media_parallel` |
+| `[screenscraper]` | `user`, `password`, `devid`, `devpassword`, `threads` (default 2, mai oltre il massimo dell'account), `quota_reserve`, `ko_reserve`, `search_fallback` (`missing`, `true`, `false`), `only_primary`, `media_parallel` |
 | `[igdb]` | `client_id`, `client_secret`, `rate` (max 4), `search_fallback` |
 | `[rawg]` | `api_key` |
 | `[thegamesdb]` | `api_key`, `rate`, `quota_reserve` |

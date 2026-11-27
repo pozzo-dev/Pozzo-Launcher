@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "Für dieses Spiel läuft bereits eine Mod-Installation",
  "f.phone_touch.started": "Öffne Pozzo Launcher auf dem Handy: Der untere Bildschirm erscheint dort von selbst.",
  "b.ext.tutorial": "So funktioniert's",
- "b.ext.tutorialBtn": "Anleitung"
+ "b.ext.tutorialBtn": "Anleitung",
+ "s.images.bulk.task": "Spiele",
+ "s.images.bulk.running": "Suche Bilder für {title}",
+ "s.images.bulk.done": "Fertig: Bilder für {n} von {of} Spielen gefunden",
+ "s.images.bulk.cancelled": "Abgebrochen: Bilder für {n} Spiele gefunden",
+ "s.images.bulk.already": "Die Bildersuche läuft bereits",
+ "k.lib.h.imgs": "Bilder für nicht gefundene Spiele",
+ "k.lib.imgs.p": "Sucht für Spiele ohne Cover im Web nur Cover, Hintergrund und Screenshot: die übrigen Daten bleiben leer. Du kannst sie über „Spielbilder“ auf der Spielseite ändern.",
+ "k.lib.imgs.btn": "🖼 Nur Bilder suchen",
+ "k.lib.imgs.info": "Spiele ohne Cover: {n}"
 }

@@ -28,4 +28,10 @@ with tempfile.TemporaryDirectory() as t:
         else:
             assert "Type=Application" in txt and "Icon=/x/i.png" in txt and 'Exec=sh -c "' in txt
 sys.platform = "darwin"
+
+# icona: l'exe del gioco si', il client dello store (Riot, Battle.net, explorer.exe) no
+with tempfile.TemporaryDirectory() as t:
+    assert SC.inside(str(Path(t) / "Game" / "bin" / "g.exe"), str(Path(t) / "Game"))
+    assert not SC.inside(str(Path(t) / "Riot Client" / "RiotClientServices.exe"), str(Path(t) / "League of Legends"))
+    assert not SC.inside(str(Path(t) / "x.exe"), None) and not SC.inside("explorer.exe", "")
 print("ok")

@@ -140,8 +140,11 @@ def register(app, cfg, lib, launcher, start_store_job):
             # catalogo gia' salvato: si apre subito con quello e si aggiorna in background (force = pulsante «Aggiorna», in attesa)
             fast = bool(cached and cached.get("items") and not force)
             inst = PT.all_installed(cfg)
-            if fast and (time.time() - cached.get("time", 0) >= PT.TTL
-                         or inst and time.time() - refresh["rel"] >= PT.RELEASE_TTL):
+            since = time.time() - refresh["rel"]
+            # catalogo non scaricabile (rete, limite GitHub): la copia resta scaduta, senza pausa ogni apertura
+            # ripartirebbe e la pagina si ridisegnerebbe in loop
+            if fast and (since >= 900 and time.time() - cached.get("time", 0) >= PT.TTL
+                         or inst and since >= PT.RELEASE_TTL):
                 _start_refresh()
             cat = cached if fast else PT.catalog(c, force=bool(force))
             tok = PT._token(cfg)

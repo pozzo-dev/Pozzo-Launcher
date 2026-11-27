@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -170,6 +171,54 @@ def test_rotte(tmp: Path):
     print("ok  rotte preview/apply: nessun salvataggio senza conferma, nessuna sovrascrittura")
 
 
+def test_solo_immagini(tmp: Path):
+    (tmp / "roms" / "n64").mkdir(parents=True)
+    for n in ("Snow Game (USA).z64", "Rain Game (USA).z64"):
+        (tmp / "roms" / "n64" / n).write_bytes(n.encode() * 500)
+    (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = config.load(tmp / "config.toml")
+    build(cfg, log=lambda *a: None)
+    queries = []
+
+    def search(q, n=1):
+        queries.append(q)
+        return [] if "Rain" in q else ["https://img.example/bad.png", "https://img.example/ok.png"]
+
+    def fetch(u):
+        if u != "https://img.example/ok.png":
+            raise ValueError("no")
+        return IS.validate_image(png())
+    IS.search, IS.fetch_image = search, fetch
+
+    def wait(cl):
+        for _ in range(200):
+            st = cl.get("/api/media/fill-missing").json()
+            if st["status"] != "running":
+                return st
+            time.sleep(0.05)
+    with TestClient(create_app(cfg)) as cl:
+        assert cl.get("/api/media/fill-missing").json()["missing"] == 2
+        assert cl.post("/api/media/fill-missing").status_code == 200
+        st = wait(cl)
+        assert st["status"] == "done" and st["missing"] == 1 and st["tasks"][0]["done"] == 2, st
+        rows = {r[1]: r for r in cl.get("/api/library?part=owned").json()["games"]["rows"]}
+        snow = next(v for k, v in rows.items() if "Snow" in k)
+        kinds = {k["kind"]: k for k in cl.get(f"/api/game/{snow[0]}/media").json()["kinds"]}
+        assert all(kinds[k]["custom"] for k in ("cover", "fanart", "screenshot")), kinds
+        assert not kinds["wheel"]["custom"], "solo copertina e sfondi"
+        assert cl.get(f"/api/game/{snow[0]}").json().get("description") in (None, ""), "metadati non toccati"
+        # seconda volta: solo il gioco ancora senza copertina, e un motore bloccato ferma il job
+        queries.clear()
+
+        def blocked(q, n=1):
+            raise IS.SearchError("blocked")
+        IS.search = blocked
+        cl.post("/api/media/fill-missing")
+        st = wait(cl)
+        assert st["status"] == "error" and st["phase"], st
+    print("ok  «Cerca solo le immagini»: copertina, sfondo e schermata per i giochi senza copertina, niente metadati")
+
+
 if __name__ == "__main__":
     test_parsing()
     test_search_fallback()
@@ -177,3 +226,5 @@ if __name__ == "__main__":
     test_limite_e_redirect()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_rotte(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_solo_immagini(Path(t))

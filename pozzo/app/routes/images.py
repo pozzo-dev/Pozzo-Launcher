@@ -211,6 +211,75 @@ def build_router(ctx) -> APIRouter:
             res["ok"] = True
         return {**api_media_list(gid), "results": results}
 
+    # ------------------------------------------------ «Cerca solo le immagini» (tutti i giochi senza copertina)
+    # copertina + sfondi della scheda del gioco; gli altri metadati non si toccano
+    BULK_KINDS = ("cover", "fanart", "screenshot")
+    bulk = {"status": "idle", "phase": "", "tasks": [], "log": []}
+    bulk_stop = threading.Event()
+
+    def _no_cover() -> list[dict]:
+        with lib.lock:
+            games = [g for g in lib.games if g.get("store") != "online"]  # gli store online hanno le loro copertine
+        own = user.media_keys("cover")
+        return [g for g in games if "cover" not in g["media"] and g["key"] not in own]
+
+    def _bulk_run(games: list[dict]):
+        from ... import imagesearch as IS
+        task = {"name": I.tr("s.images.bulk.task"), "total": len(games), "done": 0}
+        bulk.update(tasks=[task], log=[])
+        found = 0
+        try:
+            for g in games:
+                if bulk_stop.is_set():
+                    bulk.update(status="cancelled", phase=I.tr("s.images.bulk.cancelled", n=found))
+                    return
+                bulk["phase"] = I.tr("s.images.bulk.running", title=g["title"])
+                have, got = _media(g), []
+                for kind in (k for k in BULK_KINDS if k not in have):
+                    try:
+                        urls = IS.search(_fill_query(g, kind), FILL_TRIES)
+                    except IS.SearchError as e:
+                        if str(e) in ("blocked", "changed"):  # il motore non risponde piu': inutile continuare
+                            bulk.update(status="error", phase=I.tr(f"s.images.fill.err.{e}"))
+                            return
+                        continue
+                    for u in urls:  # il primo che si scarica ed e' davvero un'immagine
+                        try:
+                            f = IS.fetch_image(u)
+                        except Exception:  # rete, indirizzo privato, non immagine: si prova il prossimo
+                            continue
+                        _save_user(g, kind, f.data, f.ext)
+                        got.append(I.tr(KINDS[kind]))
+                        break
+                if got:
+                    found += 1
+                    lib.touch([g["id"]])
+                    bulk["log"] = (bulk["log"] + [f"{g['title']}: {', '.join(got)}"])[-8:]
+                task["done"] += 1
+            bulk.update(status="done", phase=I.tr("s.images.bulk.done", n=found, of=len(games)))
+        except Exception as e:  # errore inatteso: il job non resta «in corso» per sempre
+            bulk.update(status="error", phase=f"{type(e).__name__}: {e}"[:200])
+
+    @router.get("/api/media/fill-missing")
+    def api_bulk_state():
+        return {**bulk, "missing": len(_no_cover())}
+
+    @router.post("/api/media/fill-missing")
+    def api_bulk_start():
+        with fill_lock:
+            if bulk["status"] == "running":
+                raise HTTPException(409, I.tr("s.images.bulk.already"))
+            games = _no_cover()
+            bulk_stop.clear()
+            bulk.update(status="running", phase="", tasks=[], log=[])
+        threading.Thread(target=_bulk_run, args=(games,), daemon=True).start()
+        return api_bulk_state()
+
+    @router.post("/api/media/fill-missing/cancel")
+    def api_bulk_cancel():
+        bulk_stop.set()
+        return api_bulk_state()
+
     @router.post("/api/game/{gid}/media")
     def api_media_set(gid: int, body: dict = Body(...)):
         """Imposta un'immagine (copertina, sfondo, schermata...) scaricandola da un indirizzo scelto dall'utente."""

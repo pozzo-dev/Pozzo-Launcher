@@ -230,7 +230,7 @@ def disk_kind(path: Path, setting: str = "auto") -> str:
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  f"(Get-Partition -DriveLetter {drive} | Get-Disk | Get-PhysicalDisk | Select-Object -First 1).MediaType"],
-                capture_output=True, text=True, timeout=20)
+                capture_output=True, text=True, timeout=20, creationflags=0x08000000)  # CREATE_NO_WINDOW: niente console a scatti
             if "SSD" in r.stdout.upper():
                 kind = "ssd"
         except (OSError, subprocess.SubprocessError):

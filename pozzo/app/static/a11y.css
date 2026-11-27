@@ -2,7 +2,8 @@
 .skip-link {
   position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;
 }
-.skip-link:focus-visible {
+/* solo dopo un vero Tab: WebView2, tornando alla finestra senza focus, lo sposta sul primo elemento e lo mostrava */
+.kbd-nav .skip-link:focus-visible {
   position: fixed; left: 8px; top: 8px; z-index: 10000; width: auto; height: auto; overflow: visible;
   padding: 8px 12px; background: Canvas; color: CanvasText; outline: 2px solid Highlight;
 }

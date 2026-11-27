@@ -43,6 +43,7 @@ Se copi una ROM in una cartella di console mentre l'app è aperta, compare da so
 - **Verifica il nome del file**: Nomi puliti come `Pokemon - Versione Rubino.gba` o codici scena No-Intro vengono identificati al primo colpo. Nomi con caratteri insoliti o abbreviazioni criptiche possono fallire.
 - **Formati compressi**: I file `.zip` e `.7z` sono supportati per le console classiche. Per Switch sono supportati `.nsp`, `.xci` e `.nsz`.
 - **Riprova la ricerca manuale**: Clicca con il tasto destro sul gioco e seleziona **🖼 Immagini del gioco…**: potrai caricare un'immagine dal PC, sceglierne una da SteamGridDB o incollare l'URL di un'immagine trovata su Internet.
+- **Solo le immagini, per tutti insieme**: in **Impostazioni › Libreria › Immagini dei giochi non trovati**, **🖼 Cerca solo le immagini** cerca sul web copertina, sfondo e schermata di ogni gioco senza copertina, senza toccare gli altri dati. Le immagini si cambiano poi da **🖼 Immagini del gioco…**.
 - **Consulta la vista ? Senza dati**: Nella barra laterale, clicca su **? Senza dati** per vedere tutti i giochi che necessitano di una verifica e avviare **⟳ Cerca dati mancanti** solo per loro.
 
 ![La vista Senza dati: raggruppa tutti i giochi che richiedono attenzione o metadati manuali](images/libreria-senza-dati.jpg)

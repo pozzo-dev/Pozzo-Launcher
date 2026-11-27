@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "C'è già un'installazione di mod in corso per questo gioco",
  "f.phone_touch.started": "Apri Pozzo Launcher sul telefono: lo schermo inferiore compare lì da solo.",
  "b.ext.tutorial": "Come funziona",
- "b.ext.tutorialBtn": "Tutorial"
+ "b.ext.tutorialBtn": "Tutorial",
+ "s.images.bulk.task": "Giochi",
+ "s.images.bulk.running": "Cerco le immagini di {title}",
+ "s.images.bulk.done": "Finito: immagini trovate per {n} giochi su {of}",
+ "s.images.bulk.cancelled": "Interrotta: immagini trovate per {n} giochi",
+ "s.images.bulk.already": "La ricerca delle immagini è già in corso",
+ "k.lib.h.imgs": "Immagini dei giochi non trovati",
+ "k.lib.imgs.p": "Per i giochi senza copertina cerca sul web solo copertina, sfondo e schermata: gli altri dati restano vuoti. Puoi cambiarle dalle «Immagini del gioco» nella scheda.",
+ "k.lib.imgs.btn": "🖼 Cerca solo le immagini",
+ "k.lib.imgs.info": "Giochi senza copertina: {n}"
 }

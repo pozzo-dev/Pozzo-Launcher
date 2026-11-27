@@ -215,6 +215,36 @@ def test_checksum_e_repository(tmp: Path):
     print("ok  SHA-256 della release verificato (file diverso rifiutato) e repository GitLab/GitHub riconosciuti")
 
 
+def test_catalogo_irraggiungibile_niente_loop(tmp: Path):
+    (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = config.load(tmp / "config.toml")
+    c = Cache(cfg.cache)
+    c.kv_set("ports:catalog", {"v": PT.CATALOG_V, "time": 0, "items": [{"slug": "x", "supportedOS": ["windows"]}]})  # scaduto
+    c.close()
+    PT._MEM.clear()
+    old, calls = PT._fetch_catalog, []
+
+    def boom():
+        calls.append(1)
+        raise PT.httpx.ConnectError("offline")
+    PT._fetch_catalog = boom
+    try:
+        with TestClient(create_app(cfg)) as cl:
+            cl.get("/api/ports")  # catalogo scaduto: parte l'aggiornamento in background (puo' finire prima della risposta)
+            for _ in range(200):
+                if calls and not cl.get("/api/ports/refreshing").json()["refreshing"]:
+                    break
+                time.sleep(0.05)
+            # la pagina rilegge il catalogo a fine aggiornamento: non deve ripartire subito (prima si ridisegnava in loop)
+            assert not cl.get("/api/ports").json()["refreshing"]
+            time.sleep(0.2)
+            assert len(calls) == 1, calls
+    finally:
+        PT._fetch_catalog = old
+        PT._MEM.clear()
+    print("ok  catalogo non scaricabile: un solo tentativo in background, niente ridisegno continuo della pagina")
+
+
 def test_aggiorna_da_solo(tmp: Path):
     """«Aggiorna da solo» installa solo le voci con una versione nuova (quelle saltate restano ferme)."""
     (tmp / "roms").mkdir()
@@ -331,6 +361,8 @@ if __name__ == "__main__":
         test_estrazione_7z(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_checksum_e_repository(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_catalogo_irraggiungibile_niente_loop(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_aggiorna_da_solo(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:

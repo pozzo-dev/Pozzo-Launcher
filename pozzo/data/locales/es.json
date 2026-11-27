@@ -4507,5 +4507,14 @@
  "s.mods.jobRunning": "Ya hay una instalación de mods en curso para este juego",
  "f.phone_touch.started": "Abre Pozzo Launcher en el móvil: la pantalla inferior aparece allí sola.",
  "b.ext.tutorial": "Cómo funciona",
- "b.ext.tutorialBtn": "Tutorial"
+ "b.ext.tutorialBtn": "Tutorial",
+ "s.images.bulk.task": "Juegos",
+ "s.images.bulk.running": "Buscando imágenes de {title}",
+ "s.images.bulk.done": "Listo: imágenes encontradas para {n} de {of} juegos",
+ "s.images.bulk.cancelled": "Detenida: imágenes encontradas para {n} juegos",
+ "s.images.bulk.already": "La búsqueda de imágenes ya está en curso",
+ "k.lib.h.imgs": "Imágenes de los juegos no encontrados",
+ "k.lib.imgs.p": "Para los juegos sin portada busca en la web solo la portada, el fondo y una captura: el resto de datos queda vacío. Puedes cambiarlas desde «Imágenes del juego» en la ficha.",
+ "k.lib.imgs.btn": "🖼 Buscar solo imágenes",
+ "k.lib.imgs.info": "Juegos sin portada: {n}"
 }

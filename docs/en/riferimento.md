@@ -62,7 +62,7 @@ Source priority order for an individual field, for example `description = ["scre
 
 | Section | Keys |
 |---|---|
-| `[screenscraper]` | `user`, `password`, `devid`, `devpassword`, `threads` (0 = account maximum), `quota_reserve`, `ko_reserve`, `search_fallback` (`missing`, `true`, `false`), `only_primary`, `media_parallel` |
+| `[screenscraper]` | `user`, `password`, `devid`, `devpassword`, `threads` (default 2, never above the account maximum), `quota_reserve`, `ko_reserve`, `search_fallback` (`missing`, `true`, `false`), `only_primary`, `media_parallel` |
 | `[igdb]` | `client_id`, `client_secret`, `rate` (max 4), `search_fallback` |
 | `[rawg]` | `api_key` |
 | `[thegamesdb]` | `api_key`, `rate`, `quota_reserve` |

@@ -528,6 +528,9 @@ def build_router(ctx) -> APIRouter:
             raise HTTPException(400, I.tr("s.library.notInstalled"))
         launch = g.get("launch") or {}
         icon = launch.get("target") if g.get("store") and launch.get("type") != "uri" else None
+        # Riot, Battle.net, Xbox avviano col proprio client (o explorer.exe): la sua icona non e' quella del gioco
+        if icon and not SC.inside(icon, g.get("install_dir")):
+            icon = None
         if not icon or not Path(icon).is_file():  # icona dalla copertina
             rel = lib.by_id[gid]["media"].get("cover") or lib.by_id[gid]["media"].get("header")
             src = Path(cfg.cache) / rel if rel and not rel.startswith("url:") else None
