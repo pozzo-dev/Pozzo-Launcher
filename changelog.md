@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.21.2 (2026-11-28)
+### Corretto
+
+- **Media**: i film e le serie di Stream4me tornano visibili: i domini dei siti si aggiornano da soli e i titoli salvati seguono il nuovo indirizzo.
+- **Download**: un torrent fermato per disco pieno ricontrolla i file prima di ripartire, così i pezzi mancanti si riscaricano invece di lasciare il file con dei buchi.
+
+### Aggiunto
+
+- **Estensioni**: si aggiornano da sole alla versione più nuova (store ufficiale o estensioni uscite con l'app), senza riavviare; una versione che chiede permessi nuovi aspetta la conferma nello store.
+
 ## 0.21.1 (2026-11-27)
 ### Aggiunto
 
