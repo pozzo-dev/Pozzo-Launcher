@@ -1,7 +1,6 @@
 # Changelog
 
-## Non rilasciato
-
+## 0.21.3 (2026-11-28)
 ### Migliorato
 
 - **Obiettivi sbloccati**: pagina rifatta, con riepilogo in cima (sbloccati, giochi al 100%, il più raro, per store), obiettivi sbloccati di recente e più rari, e giochi con copertina, avanzamento, filtri e ordinamento; un clic apre la scheda del gioco.
