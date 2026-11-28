@@ -33,6 +33,7 @@ import ipaddress
 import json
 import re
 import shutil
+import socket
 import sqlite3
 import subprocess
 import time
@@ -1337,6 +1338,45 @@ def register(gs) -> None:
                 return d
         return None
 
+    def _host_down(e: BaseException) -> bool:
+        """Errore di DNS/connessione (dominio cambiato), non una pagina senza flusso."""
+        while e is not None:
+            if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout, socket.gaierror)) or "getaddrinfo" in str(e):
+                return True
+            e = e.__cause__ or e.__context__
+        return False
+
+    def _rehost_s4me(changed: dict) -> int:
+        """I titoli salvati seguono il nuovo dominio del sito; i flussi in cache (del vecchio host) si rifanno."""
+        n = 0
+        conn = _connect(db_path)
+        try:
+            for old, new in changed.values():
+                for tbl in ("items", "episodes"):
+                    n += conn.execute(
+                        f"UPDATE {tbl} SET url=? || substr(url, ?), stream_url='' WHERE url LIKE ? ESCAPE '\\' OR url=?",  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
+                        (new, len(old) + 1, old.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%", old),
+                    ).rowcount
+            conn.commit()
+        finally:
+            conn.close()
+        return n
+
+    def _refresh_domains(bridge, max_age: float = 6 * 3600) -> bool:
+        """Domini di Stream4me dalla copia pubblicata; True se qualcuno e' cambiato (titoli salvati gia' aggiornati)."""
+        if bridge is None or not hasattr(bridge, "update_stream4me_domains"):
+            return False
+        s4me_dir = _find_s4me_dir(bridge)
+        try:
+            changed = bridge.update_stream4me_domains(s4me_dir, max_age=max_age) if s4me_dir else {}
+        except Exception as e:  # mai bloccare refresh o riproduzione per questo
+            gs.log(f"ricette-web: aggiornamento domini fallito: {e}")
+            return False
+        if changed:
+            n = _rehost_s4me(changed)
+            gs.log("ricette-web: domini aggiornati: " + ", ".join(f"{k} → {v[1]}" for k, v in sorted(changed.items())) + f" ({n} titoli)")
+        return bool(changed)
+
     def resolve_stream(row, table: str, conn) -> str:
         """stream_url assente: scarica la pagina di dettaglio, estrae il flusso e lo salva nel DB."""
         recipe_id = str(row["recipe_id"] or "")
@@ -1367,26 +1407,40 @@ def register(gs) -> None:
                     except Exception as e:
                         gs.log(f"ricette-web: errore run_kodi_addon_directory per {item_url}: {e}")
 
+            def extract(url: str) -> str:
+                target_u = bridge._normalize_provider_host(url) if (bridge and hasattr(bridge, "_normalize_provider_host")) else url
+                found_s = ""
+                if bridge and hasattr(bridge, "resolve_channel_stream"):
+                    found_s = bridge.resolve_channel_stream(target_u)
+                if not found_s:
+                    resp = httpx.get(target_u, headers={"User-Agent": UA}, timeout=15.0, follow_redirects=True)
+                    if resp.status_code == 200:
+                        if bridge and hasattr(bridge, "resolve_channel_stream"):
+                            found_s = bridge.resolve_channel_stream(target_u, html_text=resp.text)
+                        if not found_s and bridge and hasattr(bridge, "extract_stream_urls"):
+                            found = bridge.extract_stream_urls(resp.text, base_url=target_u)
+                            if found:
+                                found_s = found[0]["url"]
+                        if not found_s:
+                            found_fb = _fallback_stream_urls(resp.text, base_url=target_u)
+                            if found_fb:
+                                found_s = found_fb[0]
+                return found_s
+
             if not stream and item_url.startswith(("http://", "https://")):
                 try:
-                    target_u = bridge._normalize_provider_host(item_url) if (bridge and hasattr(bridge, "_normalize_provider_host")) else item_url
-                    if bridge and hasattr(bridge, "resolve_channel_stream"):
-                        stream = bridge.resolve_channel_stream(target_u)
-                    if not stream:
-                        resp = httpx.get(target_u, headers={"User-Agent": UA}, timeout=15.0, follow_redirects=True)
-                        if resp.status_code == 200:
-                            if bridge and hasattr(bridge, "resolve_channel_stream"):
-                                stream = bridge.resolve_channel_stream(target_u, html_text=resp.text)
-                            if not stream and bridge and hasattr(bridge, "extract_stream_urls"):
-                                found = bridge.extract_stream_urls(resp.text, base_url=target_u)
-                                if found:
-                                    stream = found[0]["url"]
-                            if not stream:
-                                found_fb = _fallback_stream_urls(resp.text, base_url=target_u)
-                                if found_fb:
-                                    stream = found_fb[0]
+                    stream = extract(item_url)
                 except Exception as e:
                     gs.log(f"ricette-web: errore estrazione stream per {item_url}: {e}")
+                    # host sparito: il sito ha cambiato dominio. Domini aggiornati (max 1 volta ogni 10 min) e un altro tentativo
+                    if _host_down(e) and _refresh_domains(bridge, max_age=600):
+                        fresh = conn.execute(f"SELECT url FROM {table} WHERE id=?", (row["id"],)).fetchone()  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
+                        new_url = str((fresh[0] if fresh else "") or "")
+                        if new_url and new_url != item_url:
+                            try:
+                                stream = extract(new_url)
+                            except Exception as e2:
+                                gs.log(f"ricette-web: errore estrazione stream per {new_url}: {e2}")
 
             if stream and not is_vix(stream):  # i link VixCloud hanno un token che scade: mai in cache
                 conn.execute(f"UPDATE {table} SET stream_url=?, updated=? WHERE id=?", (stream, time.time(), row["id"]))  # nosec B608 - solo nomi di colonna/tabella fissi, valori via parametri
@@ -2237,6 +2291,7 @@ def register(gs) -> None:
             refresh_state["progress"] = tr("pr.recipes")
             sync_catalog()
             bridge = kodi_bridge_module()
+            _refresh_domains(bridge)  # prima della scansione: con un dominio vecchio ogni sito fallisce
             s4me_dir = _find_s4me_dir(bridge)
             can_browse = bridge is not None and hasattr(bridge, "browse_stream4me_channel")
             ok_tags: list[str] = []

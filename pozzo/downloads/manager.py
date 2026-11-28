@@ -1304,6 +1304,8 @@ class Manager:
                 # dimensione ignota = spazio non stimabile: ripartirebbe a ogni giro, lo riprende l'utente
                 elif t.status == PAUSED and t.options.get("disk_full") and t.size and self._space_gap(t) == 0:
                     del t.options["disk_full"]
+                    if t.type == "torrent":  # le scritture col disco pieno possono mancare: i resume data darebbero per buoni pezzi vuoti
+                        t.options["recheck"] = True
                     t.phase = ""
                     t.log("C'è di nuovo spazio sul disco: riprendo")
                 else:

@@ -396,7 +396,7 @@ export default function (gs) {
         srcBox.innerHTML = d.sources.map((s) => `
           <div class="es-srow">
             <span>
-              ${s.official ? "⭐ <b>Store ufficiale</b>" : "🔗"} 
+              ${s.release ? "📦 <b>Estensioni di questa versione dell'app</b>" : s.official ? "⭐ <b>Store ufficiale</b>" : "🔗"}
               <span class="muted small">${gs.esc(short(s.link))}</span>
               <span class="muted small">· ${s.count} ${s.count === 1 ? "estensione" : "estensioni"}</span>
               ${s.errors.length ? `<div class="status-bad small">${s.errors.map(gs.esc).join("<br>")}</div>` : ""}

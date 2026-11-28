@@ -491,6 +491,13 @@ dell'app più vecchie di `min_app`. Lo sha256 garantisce che i file siano quelli
 affidabile: le estensioni di fonti di terzi eseguono codice sul PC, quindi aggiungi solo fonti di cui ti fidi.
 Un'estensione collegata alla cartella di sviluppo (vedi sotto) non viene mai aggiornata né cancellata dallo store.
 
+**Aggiornamento automatico.** Oltre allo store ufficiale, l'app legge le estensioni uscite con la sua versione
+(`extensions/index.json` al tag `v<versione>` del repository dell'app): lo store è un repository a parte e può restare
+indietro. Tra le due fonti ufficiali vince la versione più nuova. 90 secondi dopo l'avvio, e poi ogni 12 ore, le
+estensioni installate si aggiornano da sole e vengono rimontate senza riavviare. Non si aggiornano da sole se la nuova
+versione chiede permessi nuovi (resta «Aggiorna» nello store), se vengono da una fonte di terzi o se sono la copia di
+sviluppo collegata. Per disattivarlo: `"app": {"extensions_auto_update": false}` in `settings.json`.
+
 Per provare uno store diverso al posto di quello ufficiale, anche da disco prima del push, imposta in `settings.json`:
 `"app": {"extensions_index": "C:/percorso/store/index.json"}`.
 

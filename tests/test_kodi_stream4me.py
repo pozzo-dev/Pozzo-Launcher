@@ -1008,3 +1008,83 @@ def test_conteggio_episodi_registrato_dal_dettaglio(tmp_path, monkeypatch):
     out = gs.get("detail", id="s4me:x:snatch")
     assert out["episode_count"] == 1
     assert gs.get("list")[0].get("episode_count") == 1
+
+
+# ---------------------------------------------------------------- domini dei siti che cambiano
+def _s4me_with_domains(root: Path, direct: dict, age: float = 10 * 86400) -> Path:
+    import os
+    import time as _t
+    d = root / "plugin.video.s4me"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "addon.xml").write_text('<addon id="plugin.video.s4me" name="S4Me" version="1.0"/>', encoding="utf-8")
+    p = d / "channels.json"
+    p.write_text(json.dumps({"direct": direct, "findhost": {"x": "y"}}), encoding="utf-8")
+    old = _t.time() - age
+    os.utime(p, (old, old))
+    return d
+
+
+def test_update_stream4me_domains(tmp_path):
+    import os
+    import time as _t
+    d = _s4me_with_domains(tmp_path, {"streamingcommunity": "https://streamingcommunityz.boo", "cb01anime": "https://cb01new.one"})
+    remote = {"direct": {"streamingcommunity": "https://streamingcommunityz.mov", "cb01anime": "https://cb01new.one"}, "findhost": {}}
+    urls = []
+
+    def fetch(u):
+        urls.append(u)
+        return json.dumps(remote).encode()
+    changed = kb.update_stream4me_domains(d, fetcher=fetch)
+    assert changed == {"streamingcommunity": ("https://streamingcommunityz.boo", "https://streamingcommunityz.mov")}, changed
+    assert urls == ["https://raw.githubusercontent.com/Stream4me/addon/master/channels.json"]
+    assert kb._domain_map(d)["streamingcommunity"] == "https://streamingcommunityz.mov"
+    assert kb.update_stream4me_domains(d, fetcher=fetch) == {} and len(urls) == 1, "appena controllato: niente rete"
+
+    before = (d / "channels.json").read_text(encoding="utf-8")
+    old = _t.time() - 86400
+    for bad in (b"non json", json.dumps({"direct": {"x": "javascript:alert(1)"}}).encode(), json.dumps({"direct": {}}).encode()):
+        os.utime(d / "channels.json", (old, old))
+        assert kb.update_stream4me_domains(d, fetcher=lambda u, b=bad: b) == {}
+        assert (d / "channels.json").read_text(encoding="utf-8") == before, "file remoto non valido: resta quello locale"
+
+    def offline(u):
+        raise kb.httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+    assert kb.update_stream4me_domains(d, fetcher=offline) == {}
+    assert kb.update_stream4me_domains(None) == {} and kb.update_stream4me_domains(tmp_path / "manca") == {}
+
+
+def test_play_dominio_cambiato_si_aggiorna_e_riprova(tmp_path, monkeypatch):
+    gs = make_gs(tmp_path, monkeypatch)
+    _s4me_with_domains(tmp_path / "ricette-web-cache" / "kodi-addons", {"streamingcommunity": "https://streamingcommunityz.boo"})
+    db = tmp_path / "ricette-web-cache" / "ricette.db"
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO items (id, recipe_id, kind, title, url, stream_url, source) VALUES "
+                 "('s4me:streamingcommunity:snatch', 's4me:streamingcommunity', 'film', 'Snatch', "
+                 "'https://streamingcommunityz.boo/it/titles/4831-snatch', '', 'stream4me')")
+    conn.execute("INSERT INTO items (id, recipe_id, kind, title, url, stream_url, source) VALUES "
+                 "('altro', 's4me:x', 'film', 'Altro', 'https://streamingcommunityz.boot/x', 'https://cdn.example/a.mp4', 'stream4me')")
+    conn.commit()
+    conn.close()
+    remote = json.dumps({"direct": {"streamingcommunity": "https://streamingcommunityz.mov"}}).encode()
+    real_get = kb.httpx.get
+
+    def fake_get(url, *a, **k):
+        if url == kb.S4ME_CHANNELS_URL:
+            return SimpleNamespace(content=remote, raise_for_status=lambda: None)
+        return real_get(url, *a, **k)
+    monkeypatch.setattr(kb.httpx, "get", fake_get)
+
+    def resolve(url, html_text=None, **k):
+        if ".boo/" in url:
+            raise kb.httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+        return "https://cdn.example/snatch.m3u8"
+    monkeypatch.setattr(kb, "resolve_channel_stream", resolve)
+
+    target = gs.get("play_target", id="s4me:streamingcommunity:snatch")
+    assert target["url"].endswith("snatch.m3u8") or "snatch.m3u8" in target["url"], target
+    conn = sqlite3.connect(db)
+    rows = dict(conn.execute("SELECT id, url FROM items").fetchall())
+    conn.close()
+    assert rows["s4me:streamingcommunity:snatch"] == "https://streamingcommunityz.mov/it/titles/4831-snatch"
+    assert rows["altro"] == "https://streamingcommunityz.boot/x", "solo il dominio esatto, non uno che ne inizia uguale"
+    assert any("domini aggiornati" in m for m in gs.logs), gs.logs

@@ -65,11 +65,20 @@ def index_link(link: str) -> str:
                      "o l'indirizzo https di un index.json")
 
 
+def release_index() -> str:
+    """Estensioni uscite insieme a questa versione dell'app (extensions/index.json al suo tag)."""
+    from ..updates import REPO
+    return f"https://raw.githubusercontent.com/{REPO}/v{__version__}/extensions/index.json"
+
+
 def sources(cfg) -> list[dict]:
-    """Fonti in ordine: lo store ufficiale (o quello di prova), poi quelle aggiunte dall'utente."""
+    """Fonti in ordine: lo store ufficiale (o quello di prova), le estensioni della release, poi quelle dell'utente."""
     first = cfg.app.get("extensions_index") or OFFICIAL
     out = [{"link": first, "official": True}]
-    out += [{"link": s, "official": False} for s in cfg.app.get("extensions_sources") or [] if s != first]
+    if first == OFFICIAL:  # lo store e' un repository a parte e puo' restare indietro rispetto all'app
+        out.append({"link": release_index(), "official": True, "release": True})
+    links = {s["link"] for s in out}
+    out += [{"link": s, "official": False} for s in cfg.app.get("extensions_sources") or [] if s not in links]
     return out
 
 
@@ -134,15 +143,21 @@ def fetch_source(link: str) -> tuple[list[dict], list[str]]:
 
 def fetch_all(cfg) -> tuple[list[dict], list[dict]]:
     """Estensioni di tutte le fonti (a parita' di id vince la prima fonte, cioe' lo store ufficiale) e stato delle fonti."""
-    items, seen, report = [], set(), []
+    items, seen, report = [], {}, []
     for s in sources(cfg):
         try:
             found, errors = fetch_source(s["link"])
         except Exception as e:
             found, errors = [], [f"{type(e).__name__}: {e}"]
-        new = [e for e in found if e["id"] not in seen]
-        seen |= {e["id"] for e in new}
-        items += [{**e, "source": s["link"], "official": s["official"]} for e in new]
+        for e in found:
+            e = {**e, "source": s["link"], "official": s["official"]}
+            if e["id"] not in seen:
+                seen[e["id"]] = len(items)
+                items.append(e)
+            else:  # tra le fonti ufficiali vince la versione piu' nuova (store o release); una di terzi non scavalca mai
+                prev = items[seen[e["id"]]]
+                if s["official"] and prev["official"] and compatible(e) and _ver(e.get("version")) > _ver(prev.get("version")):
+                    items[seen[e["id"]]] = e
         report.append({**s, "count": len(found), "errors": errors})
     return items, report
 
@@ -239,7 +254,7 @@ def install(cfg, ext_id: str, source: str | None = None) -> dict:
     found, report = (fetch_source(source)[0], []) if source else fetch_all(cfg)
     e = next((x for x in found if x["id"] == ext_id), None)
     # store ufficiale irraggiungibile: una fonte di terzi non deve prendere il posto di un'estensione gia' nota
-    if e and not source and not e.get("official") and any(r["official"] and r["errors"] for r in report)             and any(p["id"] == ext_id for p in X.list_plugins(cfg)):
+    if e and not source and not e.get("official") and any(r["official"] and not r.get("release") and r["errors"] for r in report)             and any(p["id"] == ext_id for p in X.list_plugins(cfg)):
         raise ValueError("store ufficiale non raggiungibile: non installo/aggiorno questa estensione da una fonte di terzi")
     if e is None:
         raise ValueError(f"estensione non trovata nelle fonti: {ext_id}")
@@ -270,6 +285,34 @@ def install(cfg, ext_id: str, source: str | None = None) -> dict:
     tmp.rename(dest)
     shutil.rmtree(old, ignore_errors=True)
     return {"ok": True, "id": ext_id, "version": e.get("version"), "restart": True}
+
+
+def auto_update(cfg, log=print) -> list[str]:
+    """Aggiorna da sole le estensioni installate quando una fonte ufficiale (store o release dell'app) ne ha una
+    versione piu' nuova. Una versione che chiede permessi nuovi aspetta la conferma nello store. Restituisce gli id aggiornati."""
+    if not cfg.app.get("extensions_auto_update", True):
+        return []
+    plugins = X.user_dir(cfg, "plugins")
+    installed = {p["id"]: p for p in X.list_plugins(cfg) if Path(p["dir"]).parent == plugins and not is_linked(Path(p["dir"]))}
+    found, _ = fetch_all(cfg)
+    done = []
+    for e in found:
+        p = installed.get(e["id"])
+        if not p or not e.get("official") or not compatible(e) or _ver(e.get("version")) <= _ver(p["version"]):
+            continue
+        perms = e.get("permissions")
+        new_perms = set(perms if isinstance(perms, list) else []) - set(p["permissions"] or [])
+        if p["permissions_unknown"] or not isinstance(perms, list) or new_perms:
+            log(f"Estensione {e['id']} {e.get('version')}: chiede permessi nuovi, aggiornala dallo store")
+            continue
+        try:
+            install(cfg, e["id"], e["source"])
+        except Exception as err:  # rete, sha256 diverso: si riprova al prossimo giro
+            log(f"Estensione {e['id']}: aggiornamento automatico non riuscito: {err}")
+            continue
+        log(f"Estensione aggiornata da sola: {e['id']} {p['version']} -> {e.get('version')}")
+        done.append(e["id"])
+    return done
 
 
 def remove(cfg, ext_id: str) -> dict:

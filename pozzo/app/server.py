@@ -434,7 +434,20 @@ def create_app(cfg) -> FastAPI:
             if LS.conf(cfg)["internet"]:  # la mappatura UPnP non sopravvive al riavvio
                 LS.open_upnp(phone_hub)
 
+    def _ext_auto():
+        """Estensioni sempre alla versione piu' nuova (store o release dell'app), rimontate senza riavviare."""
+        from . import extstore
+        wait = 90  # dopo l'avvio: prima rete e disco servono alla libreria
+        while not stop.wait(wait):
+            wait = 12 * 3600
+            try:
+                for pid in extstore.auto_update(cfg, log=print):
+                    X.hot_load(app, cfg, events, pid, print, X.ERRORS)
+            except Exception as e:  # fonti irraggiungibili: si riprova al prossimo giro
+                print(f"Aggiornamento automatico delle estensioni non riuscito: {e}")
+
     def _phone_startup():
+        threading.Thread(target=_ext_auto, daemon=True, name="ext-auto-update").start()
         # il server HTTPS serve anche ai PC abbinati per la sincronizzazione in rete
         if phone_hub.conf.get("enabled") or any(d.get("kind") in ("pc", "lib") for d in phone_hub.conf["devices"]):
             threading.Thread(target=_phone_start, daemon=True).start()

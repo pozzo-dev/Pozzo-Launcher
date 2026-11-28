@@ -352,7 +352,7 @@ def test_tracker_paralleli_e_filtro_avvisi(tmp):
     e.handles[tid] = h
     logs = []
     e.logs[tid] = lambda msg, level="info": logs.append((msg, level))
-    assert _wait(lambda: e._pump() or logs, 15)  # l'errore DNS arriva quando arriva: su CI lenta non sono 1,5 s
+    assert _wait(lambda: e._pump() or logs, 60)  # l'errore DNS arriva quando arriva: con la suite in parallelo 15 s non bastavano
     for _ in range(10):  # poi si controlla che l'avviso non si ripeta
         e._pump()
         time.sleep(0.1)

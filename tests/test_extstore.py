@@ -7,6 +7,7 @@ Esegui: python tests/test_extstore.py
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -149,6 +150,8 @@ def main():
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_fonti(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_auto_update(Path(t))
 
     # il backend dello store si carica e registra le sue route
     class GS:
@@ -239,6 +242,60 @@ def test_fonti(t: Path):
     finally:
         S.fetch_source = real_fetch
     print("ok  repository separati: export, store con rimandi, fonti aggiunte da link, priorita' dello store ufficiale")
+
+
+def test_auto_update(t: Path):
+    """Aggiornamento automatico: la versione piu' nuova tra store e release dell'app, solo senza permessi nuovi."""
+    out = t / "out"
+    T.cmd_export(str(out), "utente")
+    one = f"{T.PREFIX}riepilogo-annuale"
+    store, rel = t / "store" / one, t / "rel" / one
+    shutil.copytree(out / one, store)
+    shutil.copytree(out / one, rel)
+
+    def bump(folder: Path, version: str, perms: str | None = None):
+        toml = folder / "plugin.toml"
+        txt = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', toml.read_text(encoding="utf-8"))
+        if perms:
+            txt = re.sub(r"(?m)^permissions = \[.*\]$", f"permissions = {perms}", txt)
+        toml.write_bytes(txt.encode("utf-8"))  # LF come nel repository: su Windows write_text scriverebbe CRLF
+        T.cmd_index(str(folder))
+    cfg = cfg_in(t, store / "index.json")
+    plugins = X.user_dir(cfg, "plugins")
+    S.install(cfg, "riepilogo-annuale")
+    before = next(p for p in X.list_plugins(cfg) if p["id"] == "riepilogo-annuale")["version"]
+    assert S.auto_update(cfg, log=lambda m: None) == [], "gia' all'ultima versione"
+
+    bump(rel, "9.0")
+    real = S.sources
+    S.sources = lambda c: [{"link": str(store / "index.json"), "official": True},
+                           {"link": str(rel / "index.json"), "official": True, "release": True}]
+    try:
+        by = {x["id"]: x for x in S.catalog(cfg)["items"]}
+        assert by["riepilogo-annuale"]["state"] == "update" and by["riepilogo-annuale"]["version"] == "9.0", "vince la release piu' nuova"
+        logs = []
+        assert S.auto_update(cfg, log=logs.append) == ["riepilogo-annuale"], logs
+        assert next(p for p in X.list_plugins(cfg) if p["id"] == "riepilogo-annuale")["version"] == "9.0" != before
+        assert S.auto_update(cfg, log=logs.append) == [], "una volta sola"
+
+        bump(rel, "9.1", '["libreria:lettura", "avvio"]')
+        logs.clear()
+        assert S.auto_update(cfg, log=logs.append) == [] and any("permessi" in m for m in logs), logs
+        assert next(p for p in X.list_plugins(cfg) if p["id"] == "riepilogo-annuale")["version"] == "9.0"
+
+        bump(rel, "9.2")
+        cfg.app["extensions_auto_update"] = False
+        assert S.auto_update(cfg) == []
+        cfg.app["extensions_auto_update"] = True
+        # una fonte di terzi con una versione piu' alta non aggiorna da sola un'estensione ufficiale
+        S.sources = lambda c: [{"link": str(store / "index.json"), "official": True}, {"link": str(rel / "index.json"), "official": False}]
+        assert S.auto_update(cfg) == [] and (plugins / "riepilogo-annuale").is_dir()
+    finally:
+        S.sources = real
+    # con lo store ufficiale vero c'e' anche l'indice della release di questa versione dell'app
+    src = S.sources(C.Config())
+    assert src[1]["release"] and src[1]["link"].endswith(f"/v{S.__version__}/extensions/index.json"), src
+    print("ok  aggiornamento automatico: release piu' nuova dello store, niente permessi nuovi senza conferma")
 
 
 def test_solo_https():

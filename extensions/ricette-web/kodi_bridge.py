@@ -394,6 +394,58 @@ def _domain_map(addon_root: Path) -> dict[str, str]:
     return {str(k): _normalize_provider_host(str(v)) for k, v in direct.items() if isinstance(v, str) and v}
 
 
+# i siti cambiano dominio spesso: in Kodi li aggiorna il repository dell'addon, in Pozzo questo file
+S4ME_CHANNELS_URL = STREAM4ME_DEFAULT_URL.replace("https://github.com/", "https://raw.githubusercontent.com/") + "/master/channels.json"
+MAX_CHANNELS_JSON = 1024 * 1024
+
+
+def _valid_channels(data) -> bool:
+    direct = data.get("direct") if isinstance(data, dict) else None
+    if not isinstance(direct, dict) or not direct:
+        return False
+    for v in direct.values():
+        p = urllib.parse.urlparse(v) if isinstance(v, str) else None
+        if not p or p.scheme not in ("http", "https") or not p.hostname:
+            return False
+    return True
+
+
+def update_stream4me_domains(addon_dir: Path | str | None, fetcher=None, max_age: float = 6 * 3600) -> dict[str, tuple[str, str]]:
+    """Aggiorna `channels.json` dell'addon dalla copia pubblicata (al massimo ogni `max_age` secondi).
+    Restituisce i canali con un host nuovo: {id: (vecchio, nuovo)}. Rete assente o file remoto non valido: {}."""
+    if not addon_dir:
+        return {}
+    local = Path(addon_dir) / "channels.json"
+    try:
+        if time.time() - local.stat().st_mtime < max_age:
+            return {}
+    except OSError:
+        return {}  # addon senza channels.json: non e' di tipo Stream4me
+    try:
+        if fetcher is not None:
+            raw = fetcher(S4ME_CHANNELS_URL)
+        else:
+            r = httpx.get(S4ME_CHANNELS_URL, timeout=10.0, follow_redirects=True)
+            r.raise_for_status()
+            raw = r.content
+        if len(raw) > MAX_CHANNELS_JSON:
+            return {}
+        data = json.loads(raw)
+    except (httpx.HTTPError, OSError, ValueError):
+        return {}
+    old = _domain_map(Path(addon_dir))
+    if not _valid_channels(data):
+        return {}
+    tmp = local.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(local)  # anche se uguale: la data del file dice «controllato adesso»
+    new = _domain_map(Path(addon_dir))
+    changed = {k: (old[k].rstrip("/"), v.rstrip("/")) for k, v in new.items() if old.get(k) and old[k].rstrip("/") != v.rstrip("/")}
+    if changed:
+        _clear_stream4me_caches()
+    return changed
+
+
 def _channel_file_meta(path: Path, hosts: dict[str, str] | None = None) -> dict | None:
     """Canale da un file .json (descrittore) o da un .py senza gemello .json.
 
