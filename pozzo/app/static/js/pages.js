@@ -507,16 +507,66 @@ async function saveProfile(reset = false) {
 }
 
 /* ---- obiettivi sbloccati: totali per store dai giochi gia' aperti (Steam, GOG, Epic) */
+const ACH_F = { show: store.get("achShow", ""), src: "", sort: store.get("achSort", "progress") };
 async function renderAchievements(pv) {
   let d;
   try { d = await api("/api/achievements"); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
   if (S.view.type !== "achievements") return;
-  const names = { steam: "Steam", gog: "GOG", epic: "Epic Games" }, ids = Object.keys(d.stores);
-  const bar = (u, n) => `<div class="ra-bar"><span style="width:${n ? Math.round(u / n * 100) : 0}%"></span></div>`;
-  pv.innerHTML = `<div class="page" data-view="achievements"><div class="page-head"><div><h2>🏆 ${t("h.title.achievements")}</h2>
-    <p class="muted small">${t("h.ach.help")}</p></div></div>
-    ${ids.length ? ids.map((k) => { const s = d.stores[k]; return `<div style="margin-bottom:12px"><b>${names[k] || esc(k)}</b>
-      <span class="muted small">${t("h.ach.store", { u: s.unlocked, n: s.total, g: s.games, p: s.perfect })}</span>${bar(s.unlocked, s.total)}</div>`; }).join("")
-      + `<div class="ra-list" style="max-height:none">${d.games.map((x) => `<div class="ra-a on"><span><b>${esc(x.title)}</b> <span class="muted small">${names[x.source] || ""} · ${x.unlocked}/${x.total}</span>${bar(x.unlocked, x.total)}</span></div>`).join("")}</div>`
-      : `<p class="muted">${t("h.ach.empty")}</p>`}</div>`;
+  const names = { steam: "Steam", gog: "GOG", epic: "Epic Games" }, srcs = Object.keys(d.stores), tot = d.totals || {};
+  const pct = (u, n) => (n ? Math.round((u / n) * 100) : 0);
+  const num = (n) => Number(n || 0).toLocaleString(GSI18n.lang);
+  const day = (s) => new Date(s * 1000).toLocaleDateString(GSI18n.lang, { day: "numeric", month: "short", year: "numeric" });
+  if (!srcs.length) {
+    pv.innerHTML = `<div class="page" data-view="achievements"><p class="muted small">${t("h.ach.help2")}</p><div class="scard ach-empty"><h3>${t("h.ach.emptyTitle")}</h3>
+      <p>${t("h.ach.empty")}</p></div></div>`;
+    return;
+  }
+  // un obiettivo sbloccato: icona, nome, gioco e data (o rarita'); apre la scheda del gioco
+  const row = (a, extra) => `<div class="ach-row"${a.id ? ` data-id="${a.id}" role="button" tabindex="0"` : ""} title="${esc(a.description)}">
+    <span class="ach-ic">${a.icon ? `<img loading="lazy" src="${remoteImg(a.icon)}" alt="" data-onerr="remove">` : "🏆"}</span>
+    <span class="ach-tx"><b>${esc(a.name)}</b><span class="muted small">${esc(a.game)} · ${extra(a)}</span></span></div>`;
+  const rarest = d.rare[0];
+  pv.innerHTML = `<div class="page" data-view="achievements"><p class="muted small">${t("h.ach.help2")}</p>
+    <div class="tiles">
+      <div class="tile-s"><b>${num(tot.unlocked)}</b><span>${t("h.ach.tileUnlocked", { n: num(tot.total), p: pct(tot.unlocked, tot.total) })}</span></div>
+      <div class="tile-s"><b>${num(tot.perfect)}</b><span>${t("h.ach.tilePerfect", { n: num(tot.games) })}</span></div>
+      ${rarest ? `<div class="tile-s"><b>${rarest.rarity_pct.toLocaleString(GSI18n.lang)}%</b><span>${t("h.ach.tileRarest", { name: esc(rarest.name) })}</span></div>` : ""}
+      <div class="tile-s ach-stores"><span>${t("h.ach.tileStores")}</span>${srcs.map((k) => { const s = d.stores[k]; return `<span><b>${pct(s.unlocked, s.total)}%</b> ${names[k] || esc(k)} · ${t("h.ach.tileStore", { u: num(s.unlocked), n: num(s.total) })}</span>`; }).join("")}</div>
+    </div>
+    ${d.recent.length || d.rare.length ? `<div class="scols">
+      ${d.recent.length ? `<div class="scard"><h3>${t("h.ach.recent")}</h3><div class="ach-rows">${d.recent.map((a) => row(a, (x) => day(x.unlocked_at))).join("")}</div></div>` : ""}
+      ${d.rare.length ? `<div class="scard"><h3>${t("h.ach.rare")}</h3><p class="muted small">${t("h.ach.rareHelp")}</p><div class="ach-rows">${d.rare.map((a) => row(a, (x) => t("f.ach.rarity", { p: x.rarity_pct.toLocaleString(GSI18n.lang) }))).join("")}</div></div>` : ""}
+    </div>` : ""}
+    <div class="scard"><div class="scard-h"><h3>${t("h.ach.games")}</h3>
+      <select class="field" id="ach-sort" aria-label="${t("h.ach.sortLabel")}">${[["progress", "h.ach.sortProgress"], ["recent", "h.ach.sortRecent"], ["name", "h.ach.sortName"]]
+        .map(([v, k]) => `<option value="${esc(v)}"${ACH_F.sort === v ? " selected" : ""}>${t(k)}</option>`).join("")}</select></div>
+      <div class="pchips" id="ach-chips"></div>
+      <div class="free-grid" id="ach-grid"></div></div></div>`;
+  const draw = () => {
+    const chip = (k, v, l) => `<button class="pchip${ACH_F[k] === v ? " on" : ""}" data-f="${k}" data-v="${esc(v)}">${l}</button>`;
+    const by = { "": () => true, playing: (x) => x.unlocked && x.unlocked < x.total, done: (x) => x.unlocked === x.total, none: (x) => !x.unlocked };
+    $("#ach-chips", pv).innerHTML = chip("show", "", t("h.ach.all")) + chip("show", "playing", t("h.ach.inProgress"))
+      + chip("show", "done", `✓ ${t("h.ach.completed")}`) + chip("show", "none", t("h.ach.notStarted"))
+      + (srcs.length > 1 ? `<span class="sep"></span>${chip("src", "", t("h.ach.allStores"))}${srcs.map((k) => chip("src", k, names[k] || esc(k))).join("")}` : "");
+    const sorts = { progress: (a, b) => b.unlocked / b.total - a.unlocked / a.total || collator.compare(a.title, b.title),
+      recent: (a, b) => (b.last_at || 0) - (a.last_at || 0) || collator.compare(a.title, b.title), name: (a, b) => collator.compare(a.title, b.title) };
+    const items = d.games.filter((x) => by[ACH_F.show](x) && (!ACH_F.src || x.source === ACH_F.src)).sort(sorts[ACH_F.sort] || sorts.progress);
+    $("#ach-grid", pv).innerHTML = items.length ? items.map((x) => { const p = pct(x.unlocked, x.total); return `<div class="free-card${x.id ? "" : " ach-nolink"}"${x.id ? ` data-id="${x.id}" role="button" tabindex="0"` : ""}>
+      <div class="fc-cover">${x.id ? `<img loading="lazy" src="/img/${x.id}/cover?w=300" alt="" data-onerr="remove">` : ""}
+        <span class="fc-kind">${names[x.source] || esc(x.source)}</span>${p === 100 ? `<span class="fc-owned">✓ 100%</span>` : ""}</div>
+      <div class="fc-info"><b title="${esc(x.title)}">${esc(x.title)}</b>
+        <span class="muted small">${t("h.ach.cardCount", { u: num(x.unlocked), n: num(x.total), p })}</span>
+        <div class="ra-bar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><span style="width:${p}%"></span></div>
+        ${x.last_at ? `<span class="muted small">${t("h.ach.lastAt", { d: day(x.last_at) })}</span>` : ""}</div></div>`; }).join("")
+      : `<p class="muted">${t("h.ach.noneFilter")}</p>`;
+  };
+  draw();
+  $("#ach-sort", pv).onchange = (e) => { ACH_F.sort = e.target.value; store.set("achSort", ACH_F.sort); draw(); };
+  pv.onclick = (e) => {
+    const f = e.target.closest("[data-f]");
+    if (f) { ACH_F[f.dataset.f] = f.dataset.v; if (f.dataset.f === "show") store.set("achShow", f.dataset.v); return draw(); }
+    const g = e.target.closest("[data-id]");
+    if (g) openDetail(+g.dataset.id);
+  };
+  pv.onkeydown = (e) => { const g = e.target.closest("[data-id]"); if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDetail(+g.dataset.id); } };
 }

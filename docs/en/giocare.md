@@ -156,7 +156,7 @@ terminates every process of the game. On macOS and Linux there is no Job Object:
 
 **Pause** freezes the running game (like Nyrna) and frees CPU and GPU even for games without their own pause. Use
 **Ctrl+Shift+P** (configurable in the screenshot settings), **Select + L1** on the controller, or the **Pause** button
-in the game bar, in Big Picture and from the phone. Paused time does not count as playtime, and the game always
+in the game bar, in Big Picture and from the phone. Paused time does not count as playtime (nor does time with the PC asleep), and the game always
 resumes at the end of the session. On macOS and Linux, pause freezes the game's processes with SIGSTOP and resumes them with SIGCONT; the Job Object remains Windows only.
 
 ### Splash Screen on Launch

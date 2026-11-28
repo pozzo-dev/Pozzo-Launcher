@@ -35,10 +35,18 @@ def prossimi(db: sqlite3.Connection, da: date, giorni: int) -> list[dict]:
             "WHERE is_primary=1 AND release_date LIKE '____-__-__' AND COALESCE(store,'') != 'online'"):
         try:
             y, m, d = int(rel[:4]), int(rel[5:7]), int(rel[8:10])
-            quando = date(da.year, m, d)
-            if quando < da:
-                quando = date(da.year + 1, m, d)
-        except ValueError:  # data scritta male, o 29/02 in un anno che non lo ha
+        except ValueError:  # data scritta male
+            continue
+        quando = None
+        for anno in (da.year, da.year + 1):  # il 29/02 manca negli anni non bisestili: si prova l'anno dopo
+            try:
+                quando = date(anno, m, d)
+            except ValueError:
+                continue
+            if quando >= da:
+                break
+            quando = None
+        if quando is None:
             continue
         anni = quando.year - y
         if (quando - da).days < giorni and anni > 0:

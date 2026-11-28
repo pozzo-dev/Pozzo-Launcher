@@ -383,14 +383,9 @@ def _mb(n: int) -> str:
     return f"{n / (1 << 20):.1f} MB" if n >= 1 << 20 else f"{max(1, n // 1024)} KB"
 
 
-def _inside(base: Path, dest: Path) -> bool:
-    b, d = base.resolve(), dest.resolve()
-    return d == b or b in d.parents
-
-
 def _write_file(base: Path, dest: Path, data: bytes | None = None, src: Path | None = None) -> bool:
     """Scrive (o copia) un file di salvataggio dentro base: mai fuori, mai a meta' (tmp + replace)."""
-    if not _inside(base, dest):
+    if not C.is_inside(base, dest):
         return False
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -411,7 +406,7 @@ def _read_published(base: Path, rel: str) -> bytes | None:
         return None
     f = base / rel
     try:
-        if not _inside(base, f) or not f.is_file() or f.stat().st_size > SAVE_FILE_MAX:
+        if not C.is_inside(base, f) or not f.is_file() or f.stat().st_size > SAVE_FILE_MAX:
             return None
         return f.read_bytes()
     except OSError:
@@ -662,7 +657,7 @@ class Sync:
                     if not copied:
                         SV.backup(self.cfg, key, title, list(local.values()), reason="sync")
                         copied = True
-                    root, dest = next((d for d in dirs if _inside(d, lp)), lp.parent), lp
+                    root, dest = next((d for d in dirs if C.is_inside(d, lp)), lp.parent), lp
                 else:
                     spot = self._saves_dest(local, dirs, rel)
                     if spot is None:

@@ -160,5 +160,38 @@ def test_pulizia_symlink_escaping_roots(tmp_path):
     assert (outside / "copia.sfc").exists()
 
 
+def test_pulizia_file_dentro_un_gioco_a_cartella(tmp_path):
+    """Due giochi a cartella con la stessa DLL: «elimina» la rifiuta (romperebbe il gioco), «collega» la unisce."""
+    t = Path(tmp_path)
+    roms = t / "roms"
+    dll = os.urandom(2 << 20)
+    for name in ("Gioco A", "Gioco B"):
+        d = roms / "windows" / name
+        d.mkdir(parents=True)
+        (d / "UnityPlayer.dll").write_bytes(dll)
+        (d / "game.exe").write_bytes(os.urandom(2 << 20))  # diverso per gioco
+    cfg = C.Config(roms=roms, cache=t / "cache")
+    cfg.config_path, cfg.app = t / "config.toml", {}
+    (t / "cache").mkdir()
+    db = sqlite3.connect(t / "cache" / "library.db")
+    db.execute("CREATE TABLE games(id INTEGER PRIMARY KEY, title TEXT, files TEXT, store TEXT)")
+    for i, name in enumerate(("Gioco A", "Gioco B"), 1):
+        db.execute("INSERT INTO games VALUES(?,?,?,NULL)", (i, name, json.dumps([str(roms / "windows" / name)])))
+    db.commit()
+    db.close()
+    mod = _load_backend()
+    gs = FakeGS(cfg)
+    mod.register(gs)
+    g = gs.routes["dup-files"]()["groups"][0]
+    assert {Path(f["path"]).name for f in g["files"]} == {"UnityPlayer.dll"} and not any(f["whole"] for f in g["files"])
+    keep = g["files"][g["keep"]]["path"]
+    target = next(f["path"] for f in g["files"] if f["path"] != keep)
+    res = gs.routes["dup-apply"](body={"hash": g["hash"], "keep": keep, "action": "delete"})
+    assert not res["results"][0]["ok"] and "cartella di un gioco" in res["results"][0]["error"], res
+    assert Path(target).exists(), "cancellato un file di cui il gioco ha bisogno"
+    res = gs.routes["dup-apply"](body={"hash": g["hash"], "keep": keep, "action": "hardlink"})
+    assert res["results"][0]["ok"] and os.path.samefile(keep, target), res
+
+
 if __name__ == "__main__":
     test_pulizia_dupfiles()

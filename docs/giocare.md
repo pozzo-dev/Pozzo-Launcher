@@ -158,7 +158,7 @@ rilanciano un altro, e **Chiudi gioco** termina tutti i processi del gioco. Su m
 
 La **Pausa** congela il gioco in corso (come Nyrna) e libera CPU e GPU anche nei giochi senza pausa propria. Si attiva
 con **Ctrl+Shift+P** (cambiabile nelle impostazioni delle schermate), con **Select + L1** sul controller o dal pulsante
-**Pausa** nella barra del gioco, in Big Picture e dal telefono. Il tempo in pausa non conta nel tempo di gioco e a
+**Pausa** nella barra del gioco, in Big Picture e dal telefono. Il tempo in pausa non conta nel tempo di gioco (nemmeno quello con il PC in sospensione) e a
 fine sessione il gioco riprende sempre. Su macOS e Linux la pausa ferma i processi del gioco con SIGSTOP e li riprende con SIGCONT; il Job Object resta solo su Windows.
 
 ### Splash all'avvio

@@ -89,6 +89,13 @@ def register(gs):
         except Exception:  # un avviso perso non deve mai fermare niente
             pass
 
+    def launcher_of() -> dict | None:
+        launcher = getattr(getattr(getattr(gs, "app", None), "state", None), "launcher", None)
+        try:
+            return launcher.running() if launcher else None
+        except Exception:  # stato non leggibile: si usa l'ora d'inizio
+            return None
+
     def chiudi_gioco():
         launcher = getattr(getattr(getattr(gs, "app", None), "state", None), "launcher", None)
         try:
@@ -106,7 +113,9 @@ def register(gs):
             try:
                 u = db()
                 try:
-                    oggi, sett = usato(u, time.time(), t0)
+                    now = time.time()
+                    played = (launcher_of() or {}).get("played")  # senza pause ne' PC sospeso, se il launcher lo sa
+                    oggi, sett = usato(u, now, now - played if played is not None else t0)
                 finally:
                     u.close()
             except sqlite3.Error:  # database occupato un attimo: si riprova al giro dopo

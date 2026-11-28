@@ -180,6 +180,14 @@ def test_anniversari(t):
     p = gs.routes["prossimi"](giorni=90, da="2026-12-01")  # Hollow Knight il 24/02/2027: 10 anni
     assert [(d["data"], d["giochi"][0]["anni"]) for d in p["giorni"]] == [("2027-02-24", 10)], p
     assert gs.routes["prossimi"](giorni=0, da="2026-11-21")["giorni"][0]["giochi"][0]["titolo"] == "Zelda Ocarina of Time"
+    # 29/02: dal dicembre di un anno non bisestile compare il 29/02 dell'anno dopo (prima si perdeva)
+    lib = sqlite3.connect(cfg.cache / "library.db")
+    lib.execute("INSERT INTO games(id, key, platform, title, sort_title, release_date, genres, grp, is_primary, store, found) "
+                "VALUES(5, 'leap', 'snes', 'Leap Game', 'leap game', '2004-02-29', '', 'leap', 1, NULL, 1)")
+    lib.commit()
+    lib.close()
+    p = gs.routes["prossimi"](giorni=90, da="2027-12-15")
+    assert [(d["data"], d["giochi"][0]["titolo"]) for d in p["giorni"]] == [("2028-02-24", "Hollow Knight"), ("2028-02-29", "Leap Game")], p
     try:
         gs.routes["prossimi"](da="ieri")
     except HTTPException as e:

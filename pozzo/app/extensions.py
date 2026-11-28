@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse
 from starlette.routing import Route
 
 from .. import config as C
+from ..config import is_inside  # noqa: F401 - usato qui e da routes/steamexport
 
 BUILTIN_THEMES = Path(__file__).parent / "themes"
 BUILTIN_EXPERIENCES = Path(__file__).parent / "static" / "experiences"
@@ -267,14 +268,6 @@ def experience_file(experience_id: str, rel: str) -> Path | None:
 
 
 _SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
-
-
-def is_inside(root: Path, path: Path) -> bool:
-    """True se `path` (risolto) sta dentro `root` (risolta): argine al path traversal."""
-    try:
-        return Path(path).resolve().is_relative_to(Path(root).resolve())
-    except (OSError, ValueError):
-        return False
 
 
 def _safe_dirname(name: str) -> bool:

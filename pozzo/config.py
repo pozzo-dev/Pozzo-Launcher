@@ -194,6 +194,14 @@ def read_json_bak(p: Path, quarantine: bool = False) -> dict:
         return data
 
 
+def is_inside(root: Path, path: Path) -> bool:
+    """True se `path` (risolto) sta dentro `root` (risolta) o e' `root`: argine al path traversal."""
+    try:
+        return Path(path).resolve().is_relative_to(Path(root).resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def write_json_atomic(p: Path, data: dict):
     """Scrive p con flush+fsync prima della sostituzione (un blackout non lascia un file a meta') e tiene in
     <nome>.bak l'ultima versione precedente."""

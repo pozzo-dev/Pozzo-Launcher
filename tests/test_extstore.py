@@ -6,6 +6,7 @@ Esegui: python tests/test_extstore.py
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -188,6 +189,9 @@ def test_fonti(t: Path):
     ids = sorted(d.name for d in T.extension_dirs(T.EXT))
     assert [r["repo"] for r in store["repos"]] == [f"utente/{T.PREFIX}{i}" for i in ids]
     assert all(r["ref"].startswith("v") for r in store["repos"])
+    for r in store["repos"]:  # lo store fissa il contenuto dell'indice di ogni repository, non solo il tag
+        sub = out / r["repo"].split("/")[1] / "index.json"
+        assert r["sha256"] == hashlib.sha256(sub.read_bytes()).hexdigest(), r
     one = out / f"{T.PREFIX}riepilogo-annuale"
     idx = json.loads((one / "index.json").read_text(encoding="utf-8"))["extensions"]
     assert len(idx) == 1 and idx[0]["id"] == "riepilogo-annuale" and idx[0]["base"] == "./"
@@ -210,6 +214,16 @@ def test_fonti(t: Path):
     assert src["official"] and src["count"] == 2 and len(src["errors"]) == 2      # un repository irraggiungibile non toglie gli altri
     S.install(cfg, "anniversari")
     assert (plugins / "anniversari" / "frontend.js").is_file() and not (plugins / "anniversari" / "README.md").exists()
+    # sha256 nella voce dello store: con quello giusto la voce e' "pinned" (puo' aggiornarsi da sola), con uno sbagliato
+    # (tag spostato, url che ora serve altro) l'indice e' rifiutato; senza, si installa ma non e' pinned
+    sub = out / f"{T.PREFIX}anniversari" / "index.json"
+    good = hashlib.sha256(sub.read_bytes()).hexdigest()
+    assert [e["pinned"] for e in S.fetch_source(str(t / "store.json"))[0]] == [False, False]
+    (t / "pin.json").write_text(json.dumps({"repos": [{"url": str(sub), "sha256": good}]}), encoding="utf-8")
+    assert [e["pinned"] for e in S.fetch_source(str(t / "pin.json"))[0]] == [True]
+    (t / "pin.json").write_text(json.dumps({"repos": [{"url": str(sub), "sha256": "0" * 64}]}), encoding="utf-8")
+    found, errors = S.fetch_source(str(t / "pin.json"))
+    assert found == [] and "approvato" in errors[0], errors
 
     # seconda fonte (un altro store, letto da disco perche' l'utente non puo' aggiungere percorsi locali): stessa estensione
     # in entrambe -> vince lo store ufficiale; una nuova -> compare con la sua fonte
@@ -290,6 +304,12 @@ def test_auto_update(t: Path):
         # una fonte di terzi con una versione piu' alta non aggiorna da sola un'estensione ufficiale
         S.sources = lambda c: [{"link": str(store / "index.json"), "official": True}, {"link": str(rel / "index.json"), "official": False}]
         assert S.auto_update(cfg) == [] and (plugins / "riepilogo-annuale").is_dir()
+        # store ufficiale che rimanda a un repository senza sha256: l'autore puo' cambiarlo quando vuole -> niente da solo
+        (t / "unpinned.json").write_text(json.dumps({"repos": [{"url": str(rel / "index.json")}]}), encoding="utf-8")
+        S.sources = lambda c: [{"link": str(t / "unpinned.json"), "official": True}]
+        logs.clear()
+        assert S.auto_update(cfg, log=logs.append) == [], logs
+        assert next(p for p in X.list_plugins(cfg) if p["id"] == "riepilogo-annuale")["version"] == "9.0"
     finally:
         S.sources = real
     # con lo store ufficiale vero c'e' anche l'indice della release di questa versione dell'app

@@ -106,11 +106,12 @@ def _join(base: str, rel: str) -> str:
     return str(b / rel) + ("/" if rel.endswith("/") else "")
 
 
-def _entries(data: dict, url: str) -> list[dict]:
+def _entries(data: dict, url: str, pinned: bool = True) -> list[dict]:
+    """pinned: gli sha256 dei file sono fissati dalla fonte stessa (non da un indice che il suo autore puo' cambiare)."""
     out = []
     for e in data.get("extensions") or []:
         if isinstance(e, dict) and _ID.match(str(e.get("id", ""))) and e["id"] != STORE_ID and isinstance(e.get("files"), dict):
-            out.append({**e, "base": _join(url, str(e.get("base") or e["id"] + "/"))})
+            out.append({**e, "base": _join(url, str(e.get("base") or e["id"] + "/")), "pinned": pinned})
     return out
 
 
@@ -135,7 +136,12 @@ def fetch_source(link: str) -> tuple[list[dict], list[str]]:
                 sub = raw_index(r["repo"], r.get("ref") or "HEAD")
             else:
                 raise ValueError("voce senza repo o url")
-            out += _entries(json.loads(_get(sub)), sub)
+            raw = _get(sub)
+            # lo store fissa l'indice del repository col suo sha256: un tag spostato o un url cambiato non passa
+            pin = str(r.get("sha256") or "").lower()
+            if pin and hashlib.sha256(raw).hexdigest() != pin:
+                raise ValueError("index.json diverso da quello approvato dallo store (sha256)")
+            out += _entries(json.loads(raw), sub, pinned=bool(pin))
         except Exception as e:
             errors.append(f"{r.get('repo') or r.get('url') if isinstance(r, dict) else r}: {e}")
     return out, errors
@@ -289,7 +295,9 @@ def install(cfg, ext_id: str, source: str | None = None) -> dict:
 
 def auto_update(cfg, log=print) -> list[str]:
     """Aggiorna da sole le estensioni installate quando una fonte ufficiale (store o release dell'app) ne ha una
-    versione piu' nuova. Una versione che chiede permessi nuovi aspetta la conferma nello store. Restituisce gli id aggiornati."""
+    versione piu' nuova. Una versione che chiede permessi nuovi aspetta la conferma nello store. Solo voci "pinned": codice
+    che gira senza che nessuno lo guardi deve essere quello approvato dallo store, non l'ultimo pubblicato dall'autore.
+    Restituisce gli id aggiornati."""
     if not cfg.app.get("extensions_auto_update", True):
         return []
     plugins = X.user_dir(cfg, "plugins")
@@ -298,7 +306,7 @@ def auto_update(cfg, log=print) -> list[str]:
     done = []
     for e in found:
         p = installed.get(e["id"])
-        if not p or not e.get("official") or not compatible(e) or _ver(e.get("version")) <= _ver(p["version"]):
+        if not p or not e.get("official") or not e.get("pinned") or not compatible(e) or _ver(e.get("version")) <= _ver(p["version"]):
             continue
         perms = e.get("permissions")
         new_perms = set(perms if isinstance(perms, list) else []) - set(p["permissions"] or [])

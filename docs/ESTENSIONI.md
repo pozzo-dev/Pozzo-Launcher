@@ -495,8 +495,8 @@ Un'estensione collegata alla cartella di sviluppo (vedi sotto) non viene mai agg
 (`extensions/index.json` al tag `v<versione>` del repository dell'app): lo store è un repository a parte e può restare
 indietro. Tra le due fonti ufficiali vince la versione più nuova. 90 secondi dopo l'avvio, e poi ogni 12 ore, le
 estensioni installate si aggiornano da sole e vengono rimontate senza riavviare. Non si aggiornano da sole se la nuova
-versione chiede permessi nuovi (resta «Aggiorna» nello store), se vengono da una fonte di terzi o se sono la copia di
-sviluppo collegata. Per disattivarlo: `"app": {"extensions_auto_update": false}` in `settings.json`.
+versione chiede permessi nuovi (resta «Aggiorna» nello store), se vengono da una fonte di terzi, se lo store non ne fissa l'indice con `sha256` (vedi sotto) o se
+sono la copia di sviluppo collegata. Per disattivarlo: `"app": {"extensions_auto_update": false}` in `settings.json`.
 
 Per provare uno store diverso al posto di quello ufficiale, anche da disco prima del push, imposta in `settings.json`:
 `"app": {"extensions_index": "C:/percorso/store/index.json"}`.
@@ -535,8 +535,9 @@ e confronta gli sha256 con l'indice.
 cima `plugin.toml`, i file (niente sottocartelle) e un `index.json` con `"base": "./"`, generato da
 `python <Pozzo Launcher>/tools/extensions.py index .`. Gli utenti aggiungono il link del repository come fonte (vedi
 sopra) e ricevono gli aggiornamenti a ogni push. Un indice può anche elencare altri repository, ognuno a un tag:
-`{"version": 1, "repos": [{"repo": "utente/pozzo-ext-diario", "ref": "v1.0"}]}` (oppure `"url"` per un indice
-fuori da GitHub). `python tools/extensions.py export <cartella> <utente>` crea questi repository separati, uno per
+`{"version": 1, "repos": [{"repo": "utente/pozzo-ext-diario", "ref": "v1.0", "sha256": "…"}]}` (oppure `"url"`
+per un indice fuori da GitHub). `sha256` è l'impronta dell'`index.json` del repository: se il tag viene spostato o
+l'indirizzo cambia contenuto, l'app lo rifiuta; senza `sha256` l'estensione si installa ma non si aggiorna da sola. `python tools/extensions.py export <cartella> <utente>` crea questi repository separati, uno per
 estensione, e l'indice che li elenca.
 
 Per provare un'estensione nell'app, `python tools/extensions.py install [<cartella>]` la **copia** nella tua cartella

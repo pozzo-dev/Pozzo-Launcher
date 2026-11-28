@@ -160,17 +160,18 @@ Elenco delle estensioni che [Pozzo Launcher](https://github.com/erpaffo/Pozzo-La
 Ogni estensione vive nel proprio repository; qui c'è solo `index.json`, con il repository e la versione approvata:
 
 ```json
-{"repos": [{"repo": "utente/pozzo-ext-esempio", "ref": "v1.0"}]}
+{"repos": [{"repo": "utente/pozzo-ext-esempio", "ref": "v1.0", "sha256": "<sha256 dell'index.json al tag>"}]}
 ```
 
-L'app legge l'`index.json` di ogni repository a quel tag e installa solo file con lo sha256 indicato lì.
+L'app legge l'`index.json` di ogni repository a quel tag, lo scarta se il suo sha256 non è quello scritto qui e installa
+solo file con lo sha256 indicato lì. Senza `sha256` l'estensione si installa ma non si aggiorna da sola.
 
 ## Aggiungere o aggiornare un'estensione
 
 1. Il repository dell'estensione ha in cima `plugin.toml`, i suoi file e `index.json`
    (generato con `python tools/extensions.py index .` dal repository di Pozzo Launcher).
 2. Pubblica un tag `v<versione>`.
-3. Apri una pull request qui che aggiunge la voce o ne cambia `ref`.
+3. Apri una pull request qui che aggiunge la voce o ne cambia `ref` e `sha256`.
 
 Chi usa l'app può anche aggiungere un'estensione o un altro store da un link, senza passare da qui.
 """
@@ -188,12 +189,14 @@ def cmd_export(out: str, owner: str = "erpaffo"):
         for f in files_of(d):
             shutil.copy2(f, r / f.name)
         e = {**entry(d, "./"), "id": d.name}
-        write(r / "index.json", render({"version": 1, "extensions": [e]}))
+        text = render({"version": 1, "extensions": [e]})
+        write(r / "index.json", text)
         write(r / "README.md", ext_readme(e, f"{owner}/{repo}"))
         write(r / ".gitattributes", GITATTRIBUTES)
         if lic:
             write(r / "LICENSE", lic)
-        repos.append({"repo": f"{owner}/{repo}", "ref": f"v{e['version']}"})
+        # sha256 dell'indice al tag: lo store approva quel contenuto, non il tag (che l'autore puo' spostare)
+        repos.append({"repo": f"{owner}/{repo}", "ref": f"v{e['version']}", "sha256": hashlib.sha256(text.encode()).hexdigest()})
         print(f"{repo}: {e['version']} ({len(e['files'])} file)")
     s = dest / STORE
     s.mkdir(exist_ok=True)

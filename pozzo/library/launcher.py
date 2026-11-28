@@ -526,6 +526,28 @@ def _extract(cfg, target: Path, ident: str, on_status) -> Path:
     return out
 
 
+def _awake_clock():
+    """Orologio che si ferma quando il PC dorme: la sospensione con il gioco aperto non e' tempo di gioco.
+    Windows: QueryUnbiasedInterruptTime (time.monotonic li' e' GetTickCount64, che conta anche il sonno);
+    Linux e macOS: time.monotonic, che la sospensione la esclude gia'."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            q, v = ctypes.windll.kernel32.QueryUnbiasedInterruptTime, ctypes.c_ulonglong()
+
+            def unbiased() -> float:
+                q(ctypes.byref(v))
+                return v.value / 1e7  # unita' da 100 ns
+            unbiased()
+            return unbiased
+        except (AttributeError, OSError):
+            pass
+    return time.monotonic
+
+
+awake = _awake_clock()
+
+
 def _xinput_reader(get, clock=time.monotonic):
     """Maschera dei pulsanti dei 4 slot. get(i) -> pulsanti, o None se lo slot non risponde.
     Leggere uno slot vuoto e' lento: dopo un «non collegato» lo si riprova solo ogni 1,5 s."""
@@ -1180,7 +1202,7 @@ class Launcher:
         done = [p for p in pids if _suspend(p, True)]
         if not done:
             return False
-        self._frozen, self._pause_t0 = done, time.time()
+        self._frozen, self._pause_t0 = done, awake()
         self._set(paused=True)
         return True
 
@@ -1190,7 +1212,7 @@ class Launcher:
         for p in pids:
             _suspend(p, False)
         if self._pause_t0 is not None:
-            self._paused_total += time.time() - self._pause_t0
+            self._paused_total += awake() - self._pause_t0
             self._pause_t0 = None
         if pids and self.state.get("paused"):
             self._set(paused=False)
@@ -1206,9 +1228,9 @@ class Launcher:
         return self.resume() if self._frozen else self.pause()
 
     def played_since(self, t0: float) -> float:
-        """Secondi di gioco da t0 a ora, senza gli intervalli in pausa."""
+        """Secondi di gioco da t0 (letto con awake()) a ora, senza gli intervalli in pausa ne' il PC sospeso."""
         self._unfreeze()
-        return max(0.0, time.time() - t0 - self._paused_total)
+        return max(0.0, awake() - t0 - self._paused_total)
 
     def _record(self, key: str, played: float):
         with self.lock:  # una volta per partita: la chiusura dell'app e la fine del gioco possono arrivare insieme
@@ -1234,8 +1256,11 @@ class Launcher:
 
     def running(self) -> dict:
         t0 = self._pause_t0
-        return {**self.state, "paused": bool(self._frozen),  # paused_total: secondi in pausa, compresa quella in corso
-                "paused_total": self._paused_total + (time.time() - t0 if t0 is not None else 0.0)}
+        paused = self._paused_total + (awake() - t0 if t0 is not None else 0.0)
+        out = {**self.state, "paused": bool(self._frozen), "paused_total": paused}  # paused_total: compresa la pausa in corso
+        if out.get("status") == "running" and self._t0:  # tempo di gioco finora: senza pause ne' PC sospeso
+            out["played"] = max(0.0, awake() - self._t0 - paused)
+        return out
 
     def launch(self, key: str, title: str, platform: P.Platform, path: Path, fast: bool = False, fallback: str | None = None,
                phone_touch: bool = False):
@@ -1492,7 +1517,7 @@ class Launcher:
         self.on_event("game_launching", dict(self.state))  # sincrono: la copia dei salvataggi finisce prima del gioco
         try:
             target, args = launch["target"], launch.get("args") or []
-            t0 = time.time()
+            t0 = awake()
             is_uri = launch.get("type") == "uri"
             if not is_uri and not Path(target).exists() and Path(target).name.lower() not in self.LAUNCHER_EXES:
                 raise LaunchError(f"Eseguibile non trovato: {target}")
@@ -1552,7 +1577,7 @@ class Launcher:
                 if lname and self._game_procs(track) and (self.cfg.app.get("launch") or {}).get("hide_launcher", True):
                     threading.Thread(target=hide_launcher_windows, args=(lname, 15), daemon=True).start()  # il gioco passa avanti
                 seen = bool(self._game_procs(track))  # launcher piantato (login, aggiornamento): il gioco non e' mai partito, nessuna partita
-                t0 = self._t0 = time.time() if seen else t0
+                t0 = self._t0 = awake() if seen else t0
                 while self._game_procs(track) and not self._stop_evt.is_set():
                     self._stop_evt.wait(3)
             played = self.played_since(t0) if (not via_launcher or track) else 0
@@ -1586,7 +1611,7 @@ class Launcher:
             self.state.update(kw)
             st = dict(self.state)
         if kw.get("status") == "running" and prev != "running":
-            self._t0, self._recorded = time.time(), False
+            self._t0, self._recorded = awake(), False
             try:
                 self.user.mark_started(st["key"])
             except Exception:  # i dati utente non devono impedire di giocare
@@ -1670,7 +1695,7 @@ class Launcher:
             cmd = [pl["exe"], *(FULLSCREEN_ARGS.get(pl["emulator"], []) if full else []), *self.prelaunch(dict(self.state)), *self.next_args, *args]
             self.next_args = []  # valgono solo per questo avvio
             self.on_event("game_launching", dict(self.state))
-            t0 = time.time()
+            t0 = awake()
             import tempfile  # stderr su file temporaneo (non in memoria): serve per l'ultimo log in caso di crash
             with tempfile.TemporaryFile() as errf:  # chiuso anche se Popen o l'attesa falliscono
                 proc = subprocess.Popen(cmd, cwd=str(Path(pl["exe"]).parent), stderr=errf,
@@ -1713,7 +1738,7 @@ class Launcher:
                     self._set(message=f"Crash all'avvio: riprovo con {fb['label']}")
                     self._set(emulator=alt["emulator"], emulator_id=alt["emulator"], exe=alt["exe"])
                     alt["trial"] = True
-                    self._t0, self._recorded = time.time(), False  # il ritentativo e' una partita nuova
+                    self._t0, self._recorded = awake(), False  # il ritentativo e' una partita nuova
                     return self._run_emu(key, platform, path, alt, src, fc, retry=True)  # il tentativo fallito non si registra
                 self._record(key, played)
                 self._fast_done(fc)  # dopo la scelta: il ritentativo qui sopra riusa la copia veloce

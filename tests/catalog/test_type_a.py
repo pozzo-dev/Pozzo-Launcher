@@ -175,3 +175,17 @@ if __name__ == "__main__":
         test_fetch_type_a_shrink(Path(t))
     print("TUTTI I TEST OK")
 
+
+
+def test_parse_size_separatori():
+    """Migliaia con la virgola o col punto; un solo separatore + 3 cifre e' migliaia solo per B/KB/MB."""
+    from pozzo.catalog import parse_size
+    MB, GB = 1024**2, 1024**3
+    assert parse_size("1,234.5 MB") == int(1234.5 * MB)
+    assert parse_size("1.234,5 MB") == int(1234.5 * MB)
+    assert parse_size("1,234 MB") == 1234 * MB
+    assert parse_size("12.345.678 B") == 12345678
+    assert parse_size("1,5 GB") == parse_size("1.5 GB") == int(1.5 * GB)
+    assert parse_size("1.500 GB") == int(1.5 * GB)
+    assert parse_size("Size: 4.20 GB") == int(4.2 * GB)
+    assert parse_size("niente") is None

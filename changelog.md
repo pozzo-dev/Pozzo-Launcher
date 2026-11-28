@@ -1,5 +1,23 @@
 # Changelog
 
+## Non rilasciato
+
+### Migliorato
+
+- **Obiettivi sbloccati**: pagina rifatta, con riepilogo in cima (sbloccati, giochi al 100%, il più raro, per store), obiettivi sbloccati di recente e più rari, e giochi con copertina, avanzamento, filtri e ordinamento; un clic apre la scheda del gioco.
+
+### Corretto
+
+- **Tempo di gioco**: le ore con il PC in sospensione e il gioco aperto non contano più (anche nell'overlay e nel limite di tempo).
+- **Sincronizzazione**: giocare su un PC non annulla più lo stato scelto sull'altro (es. «Abbandonato» che tornava «Finito»).
+- **Dimensioni dei giochi**: lette giuste anche con il separatore delle migliaia («1,234.5 MB» non è più 234,5 MB).
+- **Pulizia libreria**: «Elimina» non cancella più un file che sta dentro la cartella di un gioco (es. la stessa DLL in due giochi); si può solo collegare.
+- **Anniversari**: i giochi usciti il 29 febbraio compaiono tra i prossimi anche guardando da un anno non bisestile.
+
+### Cambiato
+
+- **Estensioni**: si aggiornano da sole solo se lo store ne fissa l'indice con lo sha256 (`tools/extensions.py export` lo scrive); un tag spostato o un link cambiato non installa più codice nuovo.
+
 ## 0.21.2 (2026-11-28)
 ### Corretto
 

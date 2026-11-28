@@ -142,16 +142,27 @@ class UserData:
     def mark_started(self, key: str):
         """Partita appena avviata (dal PC, dal telefono o da Moonlight): subito in «Giocati di recente» e «In corso»,
         senza aspettare la fine della sessione (tempo e avvii si contano in record_play)."""
-        self._exec("INSERT INTO user_games(key, last_played, status) VALUES(?, ?, 'playing') "
-                   "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
-                   "status=CASE WHEN status IS NULL OR status='' OR status='backlog' THEN 'playing' ELSE status END",
-                   (key, time.time()))
-        self._stamp("game", key, "last_played", "status")
+        with self.lock:
+            moved = self._becomes_playing(key)
+            self.db.execute("INSERT INTO user_games(key, last_played, status) VALUES(?, ?, 'playing') "
+                            "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
+                            "status=CASE WHEN status IS NULL OR status='' OR status='backlog' THEN 'playing' ELSE status END",
+                            (key, time.time()))
+            self.db.commit()
+            self.rev += 1
+        self._stamp("game", key, "last_played", *(("status",) if moved else ()))
+
+    def _becomes_playing(self, key: str) -> bool:
+        """(sotto il lock) Lo stato passa a «In corso» solo da vuoto o «da giocare». Solo allora va segnato come modifica:
+        un timbro su uno stato rimasto uguale («Finito») scavalcherebbe nella sincronizzazione la scelta fatta sull'altro PC."""
+        r = self.db.execute("SELECT status FROM user_games WHERE key=?", (key,)).fetchone()
+        return not r or r[0] in (None, "", "backlog")
 
     def record_play(self, key: str, seconds: float):
         now = time.time()
         sec = max(0.0, seconds)
         with self.lock:  # una sola transazione: un crash a meta' non lascia sessione senza contatori
+            moved = self._becomes_playing(key)
             self.db.execute("INSERT INTO play_sessions VALUES(?, ?, ?)", (key, now - sec, sec))
             # un gioco avviato senza stato (o "da giocare") diventa "in corso"
             self.db.execute("INSERT INTO user_games(key, last_played, play_count, playtime, status) VALUES(?, ?, 1, ?, 'playing') "
@@ -161,7 +172,7 @@ class UserData:
                             (key, now, sec))
             self.db.commit()
             self.rev += 1
-        self._stamp("game", key, "last_played", "status")
+        self._stamp("game", key, "last_played", *(("status",) if moved else ()))
 
     def sessions(self, since: float = 0) -> list[tuple[str, float, float]]:
         return self._q("SELECT key, start, seconds FROM play_sessions WHERE start >= ?", (since,))

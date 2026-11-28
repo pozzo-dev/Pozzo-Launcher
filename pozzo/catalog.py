@@ -30,7 +30,8 @@ except ImportError:  # pragma: no cover - installazione senza la dipendenza opzi
     BeautifulSoup = None  # type: ignore[assignment]
 
 _A = re.compile(r'<a\b[^>]*?href\s*=\s*(["\'])(.*?)\1[^>]*>(.*?)</a>', re.I | re.S)
-_SIZE = re.compile(r'(?<![\w.])(\d+(?:[.,]\d+)?)\s*(B|bytes|KB|KiB|K|MB|MiB|M|GB|GiB|G|TB|TiB|T)(?![\w])', re.I)
+# migliaia con separatore ("1,234.5 MB", "1.234,5 MB") prima del numero semplice: senza, si leggeva solo "234.5"
+_SIZE = re.compile(r'(?<![\w.,])(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(B|bytes|KB|KiB|K|MB|MiB|M|GB|GiB|G|TB|TiB|T)(?![\w])', re.I)
 _MAGNET = re.compile(r'magnet:\?[^\'"\s<>]+', re.I)
 _TAG = re.compile(r"<[^>]+>")
 UNITS = {"b": 1, "bytes": 1, "k": 1024, "kb": 1024, "kib": 1024, "m": 1024**2, "mb": 1024**2, "mib": 1024**2,
@@ -58,7 +59,20 @@ def parse_size(text: str) -> int | None:
     m = _SIZE.search(text or "")
     if not m:
         return None
-    return int(float(m.group(1).replace(",", ".")) * UNITS[m.group(2).lower()])
+    unit = UNITS[m.group(2).lower()]
+    return int(_number(m.group(1), unit < 1024**3) * unit)
+
+
+def _number(t: str, small_unit: bool) -> float:
+    """"1,234.5" / "1.234,5" / "1,5" / "1.234" -> float. Con due separatori il decimale e' l'ultimo; con uno solo seguito
+    da tre cifre sono migliaia solo per B/KB/MB ("1,234 MB"): "1.500 GB" e' 1,5 GB, non 1500."""
+    seps = [c for c in t if c in ".,"]
+    if len(set(seps)) == 2:
+        dec = t[max(t.rfind("."), t.rfind(","))]
+        return float(t.replace("," if dec == "." else ".", "").replace(",", "."))
+    if seps and (len(seps) > 1 or (small_unit and len(t.rsplit(seps[0], 1)[1]) == 3)):
+        return float(t.replace(seps[0], ""))
+    return float(t.replace(",", "."))
 
 
 def parse_listing(page: str, base_url: str, exts: set[str] | None = None) -> list[dict]:

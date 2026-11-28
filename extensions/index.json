@@ -4,16 +4,16 @@
     {
       "id": "anniversari",
       "name": "Anniversari retro",
-      "version": "2.1",
+      "version": "2.2",
       "author": "Pozzo Launcher",
       "description": "I giochi della tua libreria che compiono gli anni oggi e nei prossimi giorni: badge sulle copertine, uno scaffale in home e una pagina giorno per giorno.",
       "min_app": "0.20.2",
       "base": "anniversari/",
       "files": {
-        "backend.py": "65a599bf75dd2d11c6909a461ac4b3e8d3aa2d8bf91da80678510d33f9a9faa9",
+        "backend.py": "9931de88bffc474801213025254d765eabf9c4cde63f234b08480ea8179cc149",
         "frontend.js": "7465012553827f496aa4c6b41007ae768605b33eebba26b2adf66f00ebae6815",
         "locales.json": "19a906139fac9d47e1184d3790231fc2baaed492b627647b629155aad5445c62",
-        "plugin.toml": "0dbaaa87d5b4f2ced740680c8acfa0a880d3c56309e2f6753db475427d969b86",
+        "plugin.toml": "15faff2c977f07f9534c75bddbf7df4f8cee2a07d6e50be2afc888cb5fc735af",
         "screenshot.png": "9c70f7976905490ff21af56e87ff1fa56bbd52f1cfa38d4087bdc45048c06516",
         "style.css": "7dfd97a59b6b56fd7a27e3db712300eede15cd9a245633530837590775a26aef"
       },
@@ -322,16 +322,16 @@
     {
       "id": "limite-tempo",
       "name": "Limite di tempo",
-      "version": "2.1",
+      "version": "2.2",
       "author": "Pozzo Launcher",
       "description": "Quanto hai giocato oggi e in settimana, con un limite al giorno o alla settimana: avviso 10 minuti prima e, se vuoi, il gioco si chiude da solo.",
       "min_app": "0.20.2",
       "base": "limite-tempo/",
       "files": {
-        "backend.py": "946ec6e15f90543983e959d76f27fbdc9bec245258b9379ad5055a0c3d7103f7",
+        "backend.py": "2675250c79e6d0d6e25dbd729528402a0436da2bc486b0d309d9e2c492de0dce",
         "frontend.js": "a1e8574421469211106da2c4c9036e0ee6c048331c837ad1bb8e482bec376fc5",
         "locales.json": "73a60e98f933e2a4a06d1d4fbdb3bb476381f74e2c1339db4798cce75cfd65e0",
-        "plugin.toml": "aca4b88c5169659f714de0902605f2c2455fe30d351fdf402dbe70c86dd30ab6",
+        "plugin.toml": "50b6c4d8d817a54fd2f90c935e03a0607e4e1d9daa4e6958efb66697c5541cae",
         "screenshot.png": "238bce65cd31d3a3513795e11278305e1be40c2ce5ae9500a028a2dd807c7dd1",
         "style.css": "521994ac3e6e9005a3f266fe6db8cc314cda47ccb1f51112afce32f3973274fd"
       },
@@ -1233,17 +1233,17 @@
     {
       "id": "pulizia",
       "name": "Pulizia libreria",
-      "version": "2.0",
+      "version": "2.1",
       "author": "Pozzo Launcher",
       "description": "Quanto c'è da sistemare in un colpo d'occhio: doppioni, giochi mai avviati o fermi da anni, dati mancanti e file identici su disco, con azioni su più giochi insieme.",
       "min_app": "0.20.2",
       "base": "pulizia/",
       "files": {
-        "backend.py": "fb0af5b9c503ab68a5e8e6c09d5ded8b90973ebec6cd25f7b4a01ff835fbec93",
+        "backend.py": "88ab78b1160eaa24a71f6fd2835407c0a544a2cc0ef32658a1c6516b747f66cf",
         "frontend.js": "90f94608f2b1d199c5b5d6bea19989e1a3c8cfc527ae8c8ffc3709f210530f53",
-        "locales.json": "1199328e9d4a0449ea0709ef6efe3c100e25cd98c18c6de92fc878a029d48d32",
+        "locales.json": "ff3601500a01e653fa6eba8b8305cc35c90f8496dfb054eb802d947843a06de1",
         "logica.js": "37ae908e0cb694d4f7a6b4661852eff1e59fd52e653386bb6eb90fda24f18ac7",
-        "plugin.toml": "eab63fe0e2e96f3ebed5cf8ae64f40811c57f116ca21cc23ee88df3612b657ad",
+        "plugin.toml": "390b13d9469724854786e9aa9c63f9a7bd2d9aaa96a6279a32dc35225b62ba6b",
         "screenshot.png": "d4ddda29e550fc78794a80b0a68fee25deee932e4d56157d3a92d1634eea3f94",
         "style.css": "06f94a1488d65f94ddbaff72474e32324b01b86e2c82b07be543ff1caf737113"
       },

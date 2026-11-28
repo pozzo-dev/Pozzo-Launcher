@@ -71,12 +71,33 @@ def test_pause_resume_via_launcher_with_job():
 def test_paused_interval_excluded_from_playtime(monkeypatch):
     ln = _launcher()
     now = [1000.0]
-    monkeypatch.setattr(L.time, "time", lambda: now[0])
+    monkeypatch.setattr(L, "awake", lambda: now[0])
     now[0] += 10  # 10 s di gioco
     ln._frozen, ln._pause_t0 = [], now[0]  # pausa
     now[0] += 30  # 30 s in pausa
     now[0] += 20  # la sessione finisce ancora in pausa: _unfreeze chiude l'intervallo
     assert ln.played_since(1000.0) == pytest.approx(10)
+
+
+def test_sleeping_pc_not_counted(monkeypatch):
+    """PC sospeso con il gioco aperto: l'orologio delle partite si ferma, l'ora del muro no."""
+    ln = _launcher()
+    wall, up = [1000.0], [50.0]
+    monkeypatch.setattr(L.time, "time", lambda: wall[0])
+    monkeypatch.setattr(L, "awake", lambda: up[0])
+    t0 = L.awake()
+    wall[0] += 600; up[0] += 600              # 10 minuti di gioco
+    wall[0] += 10 * 3600                       # coperchio chiuso tutta la notte: awake() non avanza
+    wall[0] += 300; up[0] += 300               # 5 minuti dopo il risveglio
+    ln.state, ln._t0 = {"status": "running"}, t0
+    assert ln.running()["played"] == pytest.approx(900)  # overlay e limite di tempo leggono questo
+    assert ln.played_since(t0) == pytest.approx(900)
+
+
+def test_awake_clock_advances():
+    a = L.awake()
+    time.sleep(0.05)
+    assert 0.03 < L.awake() - a < 2
 
 
 def test_api_running_can_pause(monkeypatch):

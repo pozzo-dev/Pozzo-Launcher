@@ -51,8 +51,9 @@ def _inside(p: str, roots: list[str]) -> str | None:
     return None
 
 
-def _library_files(cfg, roots: list[str]) -> list[tuple[str, str, os.stat_result]]:
-    """(path, titolo, stat) dei file dei giochi posseduti, dentro le cartelle ROM, >= MIN_SIZE, senza doppioni."""
+def _library_files(cfg, roots: list[str]) -> list[tuple[str, str, os.stat_result, bool]]:
+    """(path, titolo, stat, intero) dei file dei giochi posseduti, dentro le cartelle ROM, >= MIN_SIZE, senza doppioni.
+    intero = il file e' il gioco (elencato nei suoi file); False = trovato dentro la cartella di un gioco, che ne ha bisogno."""
     db_path = Path(cfg.cache) / "library.db"
     if not db_path.exists():
         return []
@@ -62,9 +63,9 @@ def _library_files(cfg, roots: list[str]) -> list[tuple[str, str, os.stat_result
                           "AND COALESCE(store,'') != 'online'").fetchall()
     finally:
         db.close()
-    seen: dict[str, tuple[str, str, os.stat_result]] = {}
+    seen: dict[str, tuple[str, str, os.stat_result, bool]] = {}
 
-    def add(p: str, title: str):
+    def add(p: str, title: str, whole: bool):
         key = os.path.normcase(os.path.realpath(p))
         if key in seen or _inside(p, roots) is None:
             return
@@ -73,16 +74,16 @@ def _library_files(cfg, roots: list[str]) -> list[tuple[str, str, os.stat_result
         except OSError:
             return
         if os.path.isfile(p) and st.st_size >= MIN_SIZE:
-            seen[key] = (p, title or "", st)
+            seen[key] = (p, title or "", st, whole)
 
     for title, files in rows:
         for p in json.loads(files or "[]"):
             if os.path.isdir(p):
                 for dp, _, fns in os.walk(p):
                     for fn in fns:
-                        add(os.path.join(dp, fn), title)
+                        add(os.path.join(dp, fn), title, False)
             else:
-                add(p, title)
+                add(p, title, True)
     return list(seen.values())
 
 
@@ -147,15 +148,15 @@ def _report(cfg) -> dict:
     groups, freeable = [], 0
     for h, size, items in _scan(cfg):
         items = sorted(items, key=lambda it: it[0])
-        keep_path = pick_region([{"region": _region(p, prefs), "text": p} for p, _, _ in items], prefs)
+        keep_path = pick_region([{"region": _region(p, prefs), "text": p} for p, *_ in items], prefs)
         keep_i = next(i for i, it in enumerate(items) if it[0] == keep_path)
         keep_st, first_st = items[keep_i][2], items[0][2]
-        files = [{"path": p, "game": t, "region": _region(p, prefs), "dev": st.st_dev,
+        files = [{"path": p, "game": t, "region": _region(p, prefs), "dev": st.st_dev, "whole": whole,
                   "same_volume_as_first": st.st_dev == first_st.st_dev,
                   "is_hardlink": i != keep_i and _same_file(st, keep_st)}
-                 for i, (p, t, st) in enumerate(items)]
+                 for i, (p, t, st, whole) in enumerate(items)]
         # ogni inode distinto recupera una copia: gli hardlink gia' fatti non contano
-        inodes = {(st.st_dev, st.st_ino) if st.st_ino else (p,) for p, _, st in items}
+        inodes = {(st.st_dev, st.st_ino) if st.st_ino else (p,) for p, _, st, _ in items}
         freeable += size * (len(inodes) - 1)
         groups.append({"hash": h, "size": size, "files": files, "keep": keep_i,
                        "_free": size * (len(inodes) - 1)})
@@ -207,13 +208,14 @@ def register(gs):
                 raise HTTPException(404, gs.t("err.group"))
             _, size, items = group
             keep_real = _inside(keep, roots)
-            member = {os.path.normcase(os.path.realpath(p)): p for p, _, _ in items}
+            member = {os.path.normcase(os.path.realpath(p)): p for p, *_ in items}
+            whole = {os.path.normcase(os.path.realpath(p)): w for p, _, _, w in items}
             if keep_real is None or keep_real not in member:
                 raise HTTPException(400, gs.t("err.keep"))
             if not os.path.isfile(keep_real) or _digest(keep_real) != h:
                 raise HTTPException(409, gs.t("err.changed"))
             kst = os.stat(keep_real)
-            targets = [p for p, _, _ in items if os.path.normcase(os.path.realpath(p)) != keep_real]
+            targets = [p for p, *_ in items if os.path.normcase(os.path.realpath(p)) != keep_real]
             if only is not None:
                 wanted = {os.path.normcase(os.path.realpath(p)) for p in only}
                 targets = [p for p in targets if os.path.normcase(os.path.realpath(p)) in wanted]
@@ -237,6 +239,9 @@ def register(gs):
                         res["error"] = "identita' del file non verificabile su questo disco"
                     elif not _unchanged(keep_real, kst):
                         res["error"] = "il file da tenere e' cambiato o sparito: operazione interrotta"
+                    elif action == "delete" and not whole.get(real, False):
+                        # file dentro la cartella di un gioco (es. la stessa DLL in due giochi): cancellarlo rompe quel gioco
+                        res["error"] = gs.t("err.part")
                     elif action == "hardlink":
                         if st.st_dev != kst.st_dev:
                             res["error"] = "volumi diversi"

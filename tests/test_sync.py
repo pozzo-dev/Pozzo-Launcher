@@ -338,11 +338,37 @@ def test_profile_metadata_not_synced():
         print("ok  metadati del profilo: il PIN non esce dal PC, il pacchetto ha solo id e nome")
 
 
+def test_giocare_non_scavalca_lo_stato():
+    """Una partita su un PC non annulla lo stato scelto sull'altro: si segna «In corso» solo se lo stato cambia davvero."""
+    from pozzo.library.userdata import UserData
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        a, b = UserData(Path(t) / "a.db"), UserData(Path(t) / "b.db")
+        pcinfo, prof = {"pc_id": "p", "pc_name": "p"}, {"id": "default", "name": "x"}
+        a.set_flag("snes/x", "status", "done")
+        sync.merge(b, sync.export(a, prof, pcinfo))
+        time.sleep(0.01)
+        a.set_flag("snes/x", "status", "dropped")   # scelta esplicita sul portatile
+        time.sleep(0.01)
+        b.mark_started("snes/x")                    # sul fisso si gioca: lo stato resta «Finito»
+        b.record_play("snes/x", 60)
+        assert b.games()["snes/x"]["status"] == "done"
+        sync.merge(a, sync.export(b, prof, pcinfo))
+        assert a.games()["snes/x"]["status"] == "dropped", a.games()["snes/x"]
+        assert a.games()["snes/x"]["last_played"] == b.games()["snes/x"]["last_played"]   # l'ultima partita arriva lo stesso
+        b.record_play("n64/y", 30)                  # gioco nuovo: «In corso» e' una modifica vera e si sincronizza
+        sync.merge(a, sync.export(b, prof, pcinfo))
+        assert a.games()["n64/y"]["status"] == "playing"
+        a.db.close()
+        b.db.close()
+        print("ok  giocare su un PC non annulla lo stato scelto sull'altro")
+
+
 if __name__ == "__main__":
     test_folder_sync_and_profiles()
     test_profilo_rinominato_e_cartella_dei_salvataggi()
     test_server_profiles_and_lan_gate()
     test_profile_lifecycle()
     test_profile_metadata_not_synced()
+    test_giocare_non_scavalca_lo_stato()
     test_lan_end_to_end()
     print("TUTTI I TEST OK")

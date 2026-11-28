@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath
 import httpx
 
 from . import __version__
+from .config import is_inside as _inside
 
 log = logging.getLogger(__name__)
 
@@ -283,10 +284,6 @@ def _verified(path: Path, item: dict, root: Path | None = None) -> bool:
         return len(data) == item["size"] and hashlib.sha256(data).hexdigest() == item["sha256"]
     except (OSError, UnicodeError):
         return False
-
-
-def _inside(root: Path, path: Path) -> bool:
-    return path.resolve().is_relative_to(root.resolve())
 
 
 def _remove(path: Path):

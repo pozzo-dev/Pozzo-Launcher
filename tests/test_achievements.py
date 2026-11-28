@@ -90,3 +90,30 @@ def test_epic():
     assert two["name"] == "Hidden" and two["description"] == ""  # segreto non sbloccato: niente spoiler
     with pytest.raises(A.AchError, match="Epic: boom"):
         A.epic(client(lambda r: httpx.Response(200, json={"errors": [{"message": "boom"}]})), "T", "acc", "ns", "item")
+
+
+def test_api_pagina_obiettivi(tmp_path):
+    """/api/achievements: totali, recenti (per data), piu' rari (per percentuale) e ultimo sblocco per gioco."""
+    from fastapi.testclient import TestClient
+
+    from pozzo import config as C
+    from pozzo.app.server import create_app
+    from pozzo.cache import Cache
+    (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = C.load(tmp_path / "config.toml")
+    it = lambda n, at=None, pct=None: {"id": n, "name": n, "description": "", "icon": None,  # noqa: E731
+                                        "unlocked": at is not None, "unlocked_at": at, "rarity_pct": pct}
+    c = Cache(cfg.cache)
+    c.kv_set("ach:steam:1", {"source": "steam", "game_id": "1", "title": "Uno", "total": 3, "unlocked": 2,
+                             "items": [it("a", 100, 50.0), it("b", 300, 2.5), it("c")]})
+    c.kv_set("ach:gog:2", {"source": "gog", "game_id": "2", "title": "Due", "total": 1, "unlocked": 1, "items": [it("d", 200, 9.0)]})
+    c.kv_set("ach:epic:3", {"source": "epic", "game_id": "3", "title": "Vuoto", "total": 0, "unlocked": 0, "items": []})
+    c.close()
+    with TestClient(create_app(cfg)) as cl:
+        d = cl.get("/api/achievements").json()
+    assert d["totals"] == {"games": 2, "total": 4, "unlocked": 3, "perfect": 1}, d["totals"]
+    assert [a["name"] for a in d["recent"]] == ["b", "d", "a"] and d["recent"][0]["game"] == "Uno"
+    assert [a["name"] for a in d["rare"]] == ["b", "d", "a"]  # i piu' rari prima
+    by = {g["title"]: g for g in d["games"]}
+    assert set(by) == {"Uno", "Due"} and by["Uno"]["last_at"] == 300 and by["Due"]["unlocked"] == 1
+    assert all(g["id"] is None for g in d["games"])  # nessun gioco in libreria: niente copertina ne' link

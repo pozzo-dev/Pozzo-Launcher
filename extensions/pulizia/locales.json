@@ -81,7 +81,8 @@
   "tut.2.t": "Seleziona",
   "tut.2.x": "Clicca le copertine per sceglierle; la freccia apre il gioco.",
   "tut.3.t": "Agisci su tutti insieme",
-  "tut.3.x": "Nascondi o cambia lo stato di tutti i giochi selezionati con un clic. I file non vengono toccati."
+  "tut.3.x": "Nascondi o cambia lo stato di tutti i giochi selezionati con un clic. I file non vengono toccati.",
+  "err.part": "Fa parte della cartella di un gioco: cancellarlo lo romperebbe. Usa «Collega le altre copie»"
  },
  "en": {
   "plugin.name": "Library cleanup",
@@ -165,7 +166,8 @@
   "tut.2.t": "Select",
   "tut.2.x": "Click covers to pick them; the arrow opens the game.",
   "tut.3.t": "Act on all at once",
-  "tut.3.x": "Hide or change the status of all selected games in one click. Files are not touched."
+  "tut.3.x": "Hide or change the status of all selected games in one click. Files are not touched.",
+  "err.part": "Part of a game's folder: deleting it would break that game. Use «Link the other copies»"
  },
  "de": {
   "plugin.name": "Bibliothek aufräumen",
@@ -249,7 +251,8 @@
   "tut.2.t": "Auswählen",
   "tut.2.x": "Klicke die Cover an, um sie auszuwählen; der Pfeil öffnet das Spiel.",
   "tut.3.t": "Alle auf einmal",
-  "tut.3.x": "Blende alle ausgewählten Spiele aus oder ändere ihren Status mit einem Klick. Dateien werden nicht angefasst."
+  "tut.3.x": "Blende alle ausgewählten Spiele aus oder ändere ihren Status mit einem Klick. Dateien werden nicht angefasst.",
+  "err.part": "Teil des Ordners eines Spiels: Löschen würde es beschädigen. Nutze «Andere Kopien verknüpfen»"
  },
  "es": {
   "plugin.name": "Limpieza de biblioteca",
@@ -333,7 +336,8 @@
   "tut.2.t": "Selecciona",
   "tut.2.x": "Haz clic en las portadas para elegirlas; la flecha abre el juego.",
   "tut.3.t": "Actúa sobre todos a la vez",
-  "tut.3.x": "Oculta o cambia el estado de todos los juegos seleccionados con un clic. Los archivos no se tocan."
+  "tut.3.x": "Oculta o cambia el estado de todos los juegos seleccionados con un clic. Los archivos no se tocan.",
+  "err.part": "Forma parte de la carpeta de un juego: borrarlo lo rompería. Usa «Enlazar las demás copias»"
  },
  "fr": {
   "plugin.name": "Nettoyage de la bibliothèque",
@@ -417,7 +421,8 @@
   "tut.2.t": "Sélectionne",
   "tut.2.x": "Clique sur les jaquettes pour les choisir ; la flèche ouvre le jeu.",
   "tut.3.t": "Agis sur tous à la fois",
-  "tut.3.x": "Masque ou change le statut de tous les jeux sélectionnés en un clic. Les fichiers ne sont pas touchés."
+  "tut.3.x": "Masque ou change le statut de tous les jeux sélectionnés en un clic. Les fichiers ne sont pas touchés.",
+  "err.part": "Fait partie du dossier d'un jeu : le supprimer le casserait. Utilise « Lier les autres copies »"
  },
  "pt-BR": {
   "plugin.name": "Limpeza da biblioteca",
@@ -501,6 +506,7 @@
   "tut.2.t": "Selecione",
   "tut.2.x": "Clique nas capas para escolhê-las; a seta abre o jogo.",
   "tut.3.t": "Aja em todos de uma vez",
-  "tut.3.x": "Oculte ou mude o status de todos os jogos selecionados com um clique. Os arquivos não são tocados."
+  "tut.3.x": "Oculte ou mude o status de todos os jogos selecionados com um clique. Os arquivos não são tocados.",
+  "err.part": "Faz parte da pasta de um jogo: apagá-lo quebraria o jogo. Use «Vincular as outras cópias»"
  }
 }

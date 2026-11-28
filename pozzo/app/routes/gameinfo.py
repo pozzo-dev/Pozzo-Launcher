@@ -352,8 +352,11 @@ def build_router(ctx) -> APIRouter:
             rows = cache.db.execute("SELECT v FROM kv WHERE k LIKE 'ach:%'").fetchall()
         finally:
             cache.close()
+        # "ach:steam:123" -> gioco della libreria (copertina e link alla scheda)
+        with lib.lock:
+            ids = {(g.get("key") or "").partition("/")[2]: g["id"] for g in lib.games}
         stores: dict[str, dict] = {}
-        games = []
+        games, unlocked_items = [], []
         for (v,) in rows:
             d = json.loads(v)
             if not d.get("total"):
@@ -363,9 +366,18 @@ def build_router(ctx) -> APIRouter:
             s["total"] += d["total"]
             s["unlocked"] += d["unlocked"]
             s["perfect"] += d["unlocked"] == d["total"]
-            games.append({"source": d["source"], "title": d.get("title") or d["game_id"], "total": d["total"], "unlocked": d["unlocked"]})
+            gid, title = ids.get(f"{d['source']}:{d['game_id']}"), d.get("title") or d["game_id"]
+            done = [i for i in d.get("items") or [] if i.get("unlocked")]
+            games.append({"source": d["source"], "title": title, "total": d["total"], "unlocked": d["unlocked"], "id": gid,
+                          "last_at": max((i.get("unlocked_at") or 0 for i in done), default=0) or None})
+            unlocked_items += [{"name": i.get("name") or "", "description": i.get("description") or "", "icon": i.get("icon"),
+                                "rarity_pct": i.get("rarity_pct"), "unlocked_at": i.get("unlocked_at"),
+                                "game": title, "id": gid, "source": d["source"]} for i in done]
         games.sort(key=lambda x: (-x["unlocked"] / x["total"], x["title"].lower()))
-        return {"stores": stores, "games": games}
+        totals = {k: sum(s[k] for s in stores.values()) for k in ("games", "total", "unlocked", "perfect")}
+        recent = sorted((i for i in unlocked_items if i["unlocked_at"]), key=lambda i: -i["unlocked_at"])[:8]
+        rare = sorted((i for i in unlocked_items if i["rarity_pct"] is not None), key=lambda i: i["rarity_pct"])[:8]
+        return {"stores": stores, "totals": totals, "games": games, "recent": recent, "rare": rare}
 
     # ------------------------------------------------------------ esportazione per altri frontend (ES-DE, Pegasus)
     export_state = {"running": False}

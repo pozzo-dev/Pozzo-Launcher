@@ -18,7 +18,9 @@ def _timing(run: dict) -> dict:
     started = run.get("started")
     paused = bool(run.get("paused", False))
     paused_total = float(run.get("paused_total") or 0.0)
-    if started:
+    if run.get("played") is not None:  # dal launcher: senza il tempo a PC sospeso
+        elapsed = float(run["played"])
+    elif started:
         elapsed = max(0.0, time.time() - float(started) - paused_total)
     else:
         elapsed = 0.0
